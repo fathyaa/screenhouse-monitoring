@@ -1,0 +1,43 @@
+services:
+
+  postgres:
+    image: postgres:16
+    container_name: screenhouse-postgres
+
+    restart: always
+
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: screenhouse_monitoring
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    container_name: screenhouse-redis
+
+    restart: always
+
+    ports:
+      - "6379:6379"
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: screenhouse-mqtt
+
+    restart: always
+
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+
+    volumes:
+      - ./docker/mosquitto/config:/mosquitto/config
+
+volumes:
+  postgres_data:
