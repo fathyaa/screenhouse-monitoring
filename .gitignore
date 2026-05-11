@@ -1,0 +1,34 @@
+# dependencies
+node_modules/
+
+# env
+.env
+
+# logs
+logs
+*.log
+npm-debug.log*
+
+# macOS
+.DS_Store
+
+# build
+dist/
+build/
+
+# vite
+.vite/
+
+# coverage
+coverage/
+
+# database
+*.sqlite
+
+# editor
+.vscode/
+.idea/
+
+# misc
+tmp/
+temp/
