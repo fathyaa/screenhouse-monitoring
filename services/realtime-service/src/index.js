@@ -27,10 +27,6 @@ app.get("/", (req, res) => {
 io.on("connection", (socket) => {
     console.log("Frontend connected:", socket.id);
 
-    socket.emit("test-event", {
-        message: "HALO FRONTEND",
-    });
-
     socket.on("disconnect", () => {
         console.log("Frontend disconnected:", socket.id);
     });

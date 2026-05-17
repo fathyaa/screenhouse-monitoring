@@ -130,8 +130,82 @@ async function approveUser(
   }
 }
 
+async function getPendingUsers(
+  req,
+  res
+) {
+  try {
+
+    const result =
+      await pool.query(
+        `
+        SELECT
+          id,
+          name,
+          phone_number,
+          created_at,
+          status
+        FROM users
+        WHERE status = 'pending'
+        ORDER BY created_at DESC
+        `
+      );
+
+    res.json(result.rows);
+
+  } catch (err) {
+
+    console.log(err);
+
+    res.status(500).json({
+      message:
+        "Internal server error",
+    });
+
+  }
+}
+
+async function getApprovedUsers(
+  req,
+  res
+) {
+  try {
+
+    const result =
+      await pool.query(
+        `
+        SELECT
+          id,
+          name,
+          phone_number,
+          created_at,
+          status
+        FROM users
+        WHERE status = 'approved'
+        AND role = 'petani'
+        ORDER BY created_at DESC
+        `
+      );
+
+    res.json(result.rows);
+
+  } catch (err) {
+
+    console.log(err);
+
+    res.status(500).json({
+      message:
+        "Internal server error",
+    });
+
+  }
+}
+
+
 module.exports = {
     register,
     login,
     approveUser,
+    getPendingUsers,
+    getApprovedUsers
 };

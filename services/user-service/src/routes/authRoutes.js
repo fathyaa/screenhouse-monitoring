@@ -6,6 +6,8 @@ const {
   register,
   login,
   approveUser,
+  getPendingUsers,
+  getApprovedUsers
 } = require("../controllers/authController");
 
 const router = express.Router();
@@ -18,6 +20,26 @@ router.patch(
     "super_admin",
   ]),
   approveUser
+);
+
+router.get(
+  "/users/pending",
+  authMiddleware,
+  roleMiddleware([
+    "admin",
+    "operator",
+  ]),
+  getPendingUsers
+);
+
+router.get(
+  "/users/approved",
+  authMiddleware,
+  roleMiddleware([
+    "admin",
+    "operator",
+  ]),
+  getApprovedUsers
 );
 
 router.post("/register", register);
