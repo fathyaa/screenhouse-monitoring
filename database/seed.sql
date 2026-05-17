@@ -155,7 +155,7 @@ VALUES
 INSERT INTO sensors (
     id,
     screenhouse_id,
-    sensor_code,
+    name,
     status
 )
 VALUES
