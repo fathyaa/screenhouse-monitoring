@@ -1,8 +1,22 @@
-import { io }
-from "socket.io-client";
+import { io } from "socket.io-client";
 
-const socket = io(
-  "http://localhost:3002"
-);
+let socket = null;
 
-export default socket;
+export function getSocket() {
+  if (!socket) {
+    socket = io("http://localhost:3002", {
+      transports: ["websocket"],
+      autoConnect: true,
+    });
+  }
+  return socket;
+}
+
+export function disconnectSocket() {
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+  }
+}
+
+export default getSocket();

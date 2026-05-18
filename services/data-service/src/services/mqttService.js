@@ -44,9 +44,9 @@ function connectMQTT() {
           `,
           [
             screenhouseId,
-            data.npk.nitrogen,
-            data.npk.phosphorus,
-            data.npk.potassium,
+            data.nitrogen,
+            data.phosphorus,
+            data.potassium,
             data.moisture,
           ]
         );

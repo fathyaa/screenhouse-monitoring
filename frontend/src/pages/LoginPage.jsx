@@ -11,7 +11,7 @@ function LoginPage() {
     const handleLogin = async () => {
         try {
             const response = await fetch(
-                "http://localhost:3004/auth/login",
+                "http://localhost:8000/auth/login",
                 {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -115,21 +115,6 @@ function LoginPage() {
                         className="w-full h-10 rounded-lg bg-[#1e4d2b] hover:bg-[#2d6e3e] text-white text-sm font-medium transition">
                         Masuk
                     </button>
-                </div>
-
-                {/* Demo */}
-                <div className="flex items-center gap-3 my-5">
-                    <div className="flex-1 h-px bg-gray-100" />
-                    <span className="text-xs text-gray-400 whitespace-nowrap">Demo — masuk cepat sebagai</span>
-                    <div className="flex-1 h-px bg-gray-100" />
-                </div>
-
-                <div className="grid grid-cols-3 gap-2">
-                    {["Petani", "Operator", "Admin"].map((role) => (
-                        <button key={role} className="h-9 rounded-lg border border-gray-200 text-xs font-medium text-gray-500 hover:bg-gray-50 transition">
-                            {role}
-                        </button>
-                    ))}
                 </div>
 
                 <div className="text-center mt-6 text-xs text-gray-400">

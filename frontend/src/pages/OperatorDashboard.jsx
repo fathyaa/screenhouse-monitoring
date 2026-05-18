@@ -23,7 +23,7 @@ function OperatorDashboard() {
       localStorage.getItem("token");
 
     fetch(
-      "http://localhost:3003/screenhouses",
+      "http://localhost:8000/screenhouses",
       {
         headers: {
           Authorization:
@@ -71,7 +71,7 @@ function OperatorDashboard() {
   const fetchLatestSensorData = async (screenhouseId) => {
     try {
       const response = await fetch(
-        `http://localhost:3001/sensor-data/latest/${screenhouseId}`
+        `http://localhost:8000/sensor-data/latest/${screenhouseId}`
       );
 
       const data = await response.json();

@@ -13,7 +13,7 @@ const {
 const router = express.Router();
 
 router.patch(
-  "/users/:id/approve",
+  "/:id/approve",
   authMiddleware,
   roleMiddleware([
     "operator",
@@ -23,7 +23,7 @@ router.patch(
 );
 
 router.get(
-  "/users/pending",
+  "/pending",
   authMiddleware,
   roleMiddleware([
     "admin",
@@ -33,7 +33,7 @@ router.get(
 );
 
 router.get(
-  "/users/approved",
+  "/approved",
   authMiddleware,
   roleMiddleware([
     "admin",

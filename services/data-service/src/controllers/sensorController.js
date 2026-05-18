@@ -55,7 +55,46 @@ async function getLatestSensorData(
   }
 }
 
+async function getLatestAllSensorData(
+  req,
+  res
+) {
+
+  try {
+
+    const result =
+      await pool.query(
+        `
+        SELECT DISTINCT ON (
+          screenhouse_id
+        )
+          *
+        FROM sensor_data
+        ORDER BY
+          screenhouse_id,
+          created_at DESC
+        `
+      );
+
+    res.json(
+      result.rows
+    );
+
+  } catch (err) {
+
+    console.log(err);
+
+    res.status(500).json({
+      message:
+        "Internal server error",
+    });
+
+  }
+
+}
+
 module.exports = {
   getLatestSensorData,
   getSensorData,
+  getLatestAllSensorData,
 };
