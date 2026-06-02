@@ -291,9 +291,15 @@ psql -U postgres -d screenhouse_monitoring -f database/schema.sql
 
 ## Import Seed Data
 
+**Langkah 2** dari setup database. Isi: user demo, 3 screenhouse inti, histori sensor 24 jam.
+
 ```bash
-psql -U postgres -d screenhouse_monitoring -f database/seed.sql
+psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring -f database/seed.sql
 ```
+
+Lalu import wilayah + screenhouse peta — lihat [`database/README.md`](database/README.md).
+
+Password demo: `123456`
 
 ---
 
@@ -366,14 +372,22 @@ http://localhost:5173
 ```bash
 mosquitto_pub \
 -h localhost \
--t screenhouse/1/sensor \
+-t screenhouse/1/node/SH01-N01/sensor \
 -m '{
-  "npk":{
-    "nitrogen":10,
-    "phosphorus":15,
-    "potassium":18
-  },
-  "moisture":40
+  "node_code": "SH01-N01",
+  "nitrogen": 24,
+  "phosphorus": 15,
+  "potassium": 18,
+  "soil_moisture": 68,
+  "soil_temperature": 26.5,
+  "soil_ph": 6.2,
+  "conductivity": 450,
+  "air_temperature": 28,
+  "air_humidity": 65,
+  "light_intensity": 12000,
+  "fan_status": false,
+  "irrigation_status": true,
+  "lamp_status": false
 }'
 ```
 

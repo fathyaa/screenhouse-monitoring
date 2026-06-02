@@ -1,0 +1,14 @@
+{
+  "name": "screenhouse-wilayah-import",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "import": "node import-wilayah-idn.js",
+    "import:prune": "node import-wilayah-idn.js --prune-legacy"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "idn-area-data": "^4.0.1",
+    "pg": "^8.20.0"
+  }
+}

@@ -31,6 +31,30 @@ app.use(
   )
 );
 
+app.use(
+  "/admin/users",
+  proxy(
+    "http://localhost:3004",
+    {
+      proxyReqPathResolver:
+        (req) =>
+          `/admin/users${req.url}`,
+    }
+  )
+);
+
+app.use(
+  "/admin",
+  proxy(
+    "http://localhost:3003",
+    {
+      proxyReqPathResolver:
+        (req) =>
+          `/admin${req.url}`,
+    }
+  )
+);
+
 /* SCREENHOUSE SERVICE */
 
 app.use(
@@ -41,6 +65,30 @@ app.use(
       proxyReqPathResolver:
         (req) =>
           `/screenhouses${req.url}`,
+    }
+  )
+);
+
+app.use(
+  "/wilayah",
+  proxy(
+    "http://localhost:3003",
+    {
+      proxyReqPathResolver:
+        (req) =>
+          `/wilayah${req.url}`,
+    }
+  )
+);
+
+app.use(
+  "/thresholds",
+  proxy(
+    "http://localhost:3003",
+    {
+      proxyReqPathResolver:
+        (req) =>
+          `/thresholds${req.url}`,
     }
   )
 );

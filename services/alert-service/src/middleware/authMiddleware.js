@@ -3,10 +3,14 @@ const jwt = require("jsonwebtoken");
 function authMiddleware(req, res, next) {
   try {
     const authHeader = req.headers.authorization
-    // console.log("Auth header:", authHeader) // ← debug sementara
 
     if (!authHeader) {
       return res.status(401).json({ message: "Token tidak ditemukan" })
+    }
+
+    if (!process.env.JWT_SECRET) {
+      console.error("[auth] JWT_SECRET belum diset di alert-service")
+      return res.status(500).json({ message: "Konfigurasi server tidak lengkap (JWT_SECRET)" })
     }
 
     const token   = authHeader.split(" ")[1]

@@ -9,42 +9,56 @@ function LoginPage() {
     const [password, setPassword] = useState("");
 
     const handleLogin = async () => {
+        const trimmedPhone = phone_number.trim();
+
         try {
-            const response = await fetch(
-                "http://localhost:8000/auth/login",
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        phone_number,
-                        password,
-                    }),
-                }
-            );
+            const response = await fetch("http://localhost:8000/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    phone_number: trimmedPhone,
+                    password,
+                }),
+            });
 
-            const data = await response.json();
+            let data = {};
+            try {
+                data = await response.json();
+            } catch {
+                console.error("[login] Respons bukan JSON", { status: response.status });
+            }
 
-            if (!response.ok) { alert(data.message); return; }
+            if (!response.ok) {
+                console.error("[login] Gagal", {
+                    status: response.status,
+                    message: data.message,
+                    phone_number: trimmedPhone,
+                });
+                alert(data.message || `Login gagal (HTTP ${response.status})`);
+                return;
+            }
 
             localStorage.setItem("token", data.token);
             localStorage.setItem("role", data.user.role);
             localStorage.setItem("user", JSON.stringify(data.user));
+            window.dispatchEvent(new Event("auth-changed"));
 
-            if (data.user.role === "petani") {
-                navigate("/petani");
+            const routes = {
+                petani: "/petani",
+                operator: "/operator",
+                super_admin: "/admin/kelola-user",
+            };
+
+            const path = routes[data.user.role];
+            if (path) {
+                navigate(path);
+            } else {
+                console.warn("[login] Role tidak dikenali:", data.user.role);
+                alert(`Role "${data.user.role}" belum memiliki halaman dashboard`);
             }
-
-            if (data.user.role === "operator") {
-                navigate("/operator");
-            }
-
-            if (data.user.role === "admin") {
-                navigate("/admin/approval");
-            }
-
         } catch (err) {
-            console.log(err);
-            alert("Login gagal");
+            console.error("[login] Network error", err);
+            alert("Tidak dapat terhubung ke server. Pastikan API gateway (port 8000) berjalan.");
         }
     };
 

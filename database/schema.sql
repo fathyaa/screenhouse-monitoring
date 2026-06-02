@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict vgC4bikqflRgkpWfrlYp1Xbno9BHjxto3z1xhV5VLoLRU7vVk1GYgbpEwkKRiN2
+\restrict fFVuKyBHVfjd0JgpkepWqTyzRsT0fi5oB50ahZTrRygUERyVYFiyJ8MWhboVxm4
 
 -- Dumped from database version 18.3 (Debian 18.3-1.pgdg13+1)
 -- Dumped by pg_dump version 18.3 (Debian 18.3-1.pgdg13+1)
@@ -32,8 +32,9 @@ CREATE TABLE public.alerts (
     screenhouse_id integer NOT NULL,
     message text NOT NULL,
     status character varying(50) DEFAULT 'active'::character varying,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    sensor_data_id integer
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    sensor_data_id integer,
+    sensor_node_id integer
 );
 
 
@@ -68,7 +69,8 @@ ALTER SEQUENCE public.alerts_id_seq OWNED BY public.alerts.id;
 CREATE TABLE public.districts (
     id integer NOT NULL,
     regency_id integer NOT NULL,
-    name character varying(255) NOT NULL
+    name character varying(255) NOT NULL,
+    kode character varying(8)
 );
 
 
@@ -102,7 +104,8 @@ ALTER SEQUENCE public.districts_id_seq OWNED BY public.districts.id;
 
 CREATE TABLE public.provinces (
     id integer NOT NULL,
-    name character varying(255) NOT NULL
+    name character varying(255) NOT NULL,
+    kode character varying(2)
 );
 
 
@@ -137,7 +140,8 @@ ALTER SEQUENCE public.provinces_id_seq OWNED BY public.provinces.id;
 CREATE TABLE public.regencies (
     id integer NOT NULL,
     province_id integer NOT NULL,
-    name character varying(255) NOT NULL
+    name character varying(255) NOT NULL,
+    kode character varying(5)
 );
 
 
@@ -179,7 +183,7 @@ CREATE TABLE public.screenhouses (
     latitude double precision,
     longitude double precision,
     status character varying(50) DEFAULT 'active'::character varying,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
     address_detail text,
     owner_user_id integer
 );
@@ -215,12 +219,21 @@ ALTER SEQUENCE public.screenhouses_id_seq OWNED BY public.screenhouses.id;
 
 CREATE TABLE public.sensor_data (
     id integer NOT NULL,
-    screenhouse_id integer NOT NULL,
     nitrogen integer,
     phosphorus integer,
     potassium integer,
-    moisture integer,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    sensor_node_id integer,
+    soil_temperature numeric(5,2),
+    soil_moisture numeric(5,2),
+    soil_ph numeric(4,2),
+    conductivity numeric(10,2),
+    air_temperature numeric(5,2),
+    air_humidity numeric(5,2),
+    light_intensity numeric(10,2),
+    fan_status boolean DEFAULT false,
+    irrigation_status boolean DEFAULT false,
+    lamp_status boolean DEFAULT false
 );
 
 
@@ -249,26 +262,28 @@ ALTER SEQUENCE public.sensor_data_id_seq OWNED BY public.sensor_data.id;
 
 
 --
--- Name: sensors; Type: TABLE; Schema: public; Owner: postgres
+-- Name: sensor_nodes; Type: TABLE; Schema: public; Owner: postgres
 --
 
-CREATE TABLE public.sensors (
+CREATE TABLE public.sensor_nodes (
     id integer NOT NULL,
-    screenhouse_id integer NOT NULL,
-    name character varying(100) NOT NULL,
-    location_label character varying(100),
-    status character varying(50) DEFAULT 'active'::character varying,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+    screenhouse_id integer,
+    node_code character varying(50) NOT NULL,
+    node_name character varying(100),
+    location character varying(255),
+    send_interval_seconds integer DEFAULT 60,
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP
 );
 
 
-ALTER TABLE public.sensors OWNER TO postgres;
+ALTER TABLE public.sensor_nodes OWNER TO postgres;
 
 --
--- Name: sensors_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: sensor_nodes_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
-CREATE SEQUENCE public.sensors_id_seq
+CREATE SEQUENCE public.sensor_nodes_id_seq
     AS integer
     START WITH 1
     INCREMENT BY 1
@@ -277,13 +292,13 @@ CREATE SEQUENCE public.sensors_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.sensors_id_seq OWNER TO postgres;
+ALTER SEQUENCE public.sensor_nodes_id_seq OWNER TO postgres;
 
 --
--- Name: sensors_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: sensor_nodes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
 --
 
-ALTER SEQUENCE public.sensors_id_seq OWNED BY public.sensors.id;
+ALTER SEQUENCE public.sensor_nodes_id_seq OWNED BY public.sensor_nodes.id;
 
 
 --
@@ -294,8 +309,26 @@ CREATE TABLE public.thresholds (
     id integer NOT NULL,
     screenhouse_id integer NOT NULL,
     min_nitrogen integer,
-    min_moisture integer,
-    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+    min_soil_moisture integer,
+    created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    max_nitrogen integer,
+    min_phosphorus integer,
+    max_phosphorus integer,
+    min_potassium integer,
+    max_potassium integer,
+    max_soil_moisture integer,
+    min_soil_temperature numeric(5,2),
+    max_soil_temperature numeric(5,2),
+    min_soil_ph numeric(4,2),
+    max_soil_ph numeric(4,2),
+    min_conductivity numeric(10,2),
+    max_conductivity numeric(10,2),
+    min_air_temperature numeric(5,2),
+    max_air_temperature numeric(5,2),
+    min_air_humidity numeric(5,2),
+    max_air_humidity numeric(5,2),
+    min_light_intensity numeric(10,2),
+    max_light_intensity numeric(10,2)
 );
 
 
@@ -369,7 +402,8 @@ ALTER SEQUENCE public.users_id_seq OWNED BY public.users.id;
 CREATE TABLE public.villages (
     id integer NOT NULL,
     district_id integer NOT NULL,
-    name character varying(255) NOT NULL
+    name character varying(255) NOT NULL,
+    kode character varying(13)
 );
 
 
@@ -440,10 +474,10 @@ ALTER TABLE ONLY public.sensor_data ALTER COLUMN id SET DEFAULT nextval('public.
 
 
 --
--- Name: sensors id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: sensor_nodes id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
-ALTER TABLE ONLY public.sensors ALTER COLUMN id SET DEFAULT nextval('public.sensors_id_seq'::regclass);
+ALTER TABLE ONLY public.sensor_nodes ALTER COLUMN id SET DEFAULT nextval('public.sensor_nodes_id_seq'::regclass);
 
 
 --
@@ -483,6 +517,10 @@ ALTER TABLE ONLY public.districts
     ADD CONSTRAINT districts_pkey PRIMARY KEY (id);
 
 
+ALTER TABLE ONLY public.districts
+    ADD CONSTRAINT districts_kode_key UNIQUE (kode);
+
+
 --
 -- Name: provinces provinces_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
@@ -491,12 +529,20 @@ ALTER TABLE ONLY public.provinces
     ADD CONSTRAINT provinces_pkey PRIMARY KEY (id);
 
 
+ALTER TABLE ONLY public.provinces
+    ADD CONSTRAINT provinces_kode_key UNIQUE (kode);
+
+
 --
 -- Name: regencies regencies_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.regencies
     ADD CONSTRAINT regencies_pkey PRIMARY KEY (id);
+
+
+ALTER TABLE ONLY public.regencies
+    ADD CONSTRAINT regencies_kode_key UNIQUE (kode);
 
 
 --
@@ -516,11 +562,19 @@ ALTER TABLE ONLY public.sensor_data
 
 
 --
--- Name: sensors sensors_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: sensor_nodes sensor_nodes_node_code_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
-ALTER TABLE ONLY public.sensors
-    ADD CONSTRAINT sensors_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.sensor_nodes
+    ADD CONSTRAINT sensor_nodes_node_code_key UNIQUE (node_code);
+
+
+--
+-- Name: sensor_nodes sensor_nodes_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.sensor_nodes
+    ADD CONSTRAINT sensor_nodes_pkey PRIMARY KEY (id);
 
 
 --
@@ -563,6 +617,17 @@ ALTER TABLE ONLY public.villages
     ADD CONSTRAINT villages_pkey PRIMARY KEY (id);
 
 
+ALTER TABLE ONLY public.villages
+    ADD CONSTRAINT villages_kode_key UNIQUE (kode);
+
+
+--
+-- Name: idx_sensor_data_node_created; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_sensor_data_node_created ON public.sensor_data USING btree (sensor_node_id, created_at DESC);
+
+
 --
 -- Name: alerts fk_alert_screenhouse; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
@@ -577,6 +642,14 @@ ALTER TABLE ONLY public.alerts
 
 ALTER TABLE ONLY public.alerts
     ADD CONSTRAINT fk_alert_sensor_data FOREIGN KEY (sensor_data_id) REFERENCES public.sensor_data(id);
+
+
+--
+-- Name: alerts fk_alert_sensor_node; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.alerts
+    ADD CONSTRAINT fk_alert_sensor_node FOREIGN KEY (sensor_node_id) REFERENCES public.sensor_nodes(id);
 
 
 --
@@ -636,11 +709,11 @@ ALTER TABLE ONLY public.screenhouses
 
 
 --
--- Name: sensors fk_sensor_screenhouse; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: sensor_data fk_sensor_node; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
-ALTER TABLE ONLY public.sensors
-    ADD CONSTRAINT fk_sensor_screenhouse FOREIGN KEY (screenhouse_id) REFERENCES public.screenhouses(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.sensor_data
+    ADD CONSTRAINT fk_sensor_node FOREIGN KEY (sensor_node_id) REFERENCES public.sensor_nodes(id);
 
 
 --
@@ -660,8 +733,16 @@ ALTER TABLE ONLY public.villages
 
 
 --
+-- Name: sensor_nodes sensor_nodes_screenhouse_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.sensor_nodes
+    ADD CONSTRAINT sensor_nodes_screenhouse_id_fkey FOREIGN KEY (screenhouse_id) REFERENCES public.screenhouses(id);
+
+
+--
 -- PostgreSQL database dump complete
 --
 
-\unrestrict vgC4bikqflRgkpWfrlYp1Xbno9BHjxto3z1xhV5VLoLRU7vVk1GYgbpEwkKRiN2
+\unrestrict fFVuKyBHVfjd0JgpkepWqTyzRsT0fi5oB50ahZTrRygUERyVYFiyJ8MWhboVxm4
 

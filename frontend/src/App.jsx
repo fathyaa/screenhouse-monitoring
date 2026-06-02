@@ -4,21 +4,29 @@ import { AlertProvider } from "./context/AlertContext";
 import "./App.css";
 
 import OperatorDashboard from "./pages/OperatorDashboard";
+import ScreenhouseDetailPage from "./pages/ScreenhouseDetailPage";
 import PetaniDashboard from "./pages/PetaniDashboard";
 import NotifikasiPage from "./pages/NotifikasiPage";
 import ApprovalPage from "./pages/ApprovalPage";
+import FarmerScreenhousesPage from "./pages/FarmerScreenhousesPage";
 import ThresholdPage from "./pages/ThresholdPage";
+import KelolaUserPage from "./pages/KelolaUserPage";
+import KelolaScreenhousePage from "./pages/KelolaScreenhousePage";
+import KonfigurasiPage from "./pages/KonfigurasiPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
-// import KelolaUserPage from "./pages/KelolaUserPage";
-// import KonfigurasiPage from "./pages/KonfigurasiPage";
+import RegisterScreenhousePage from "./pages/RegisterScreenhousePage";
 
-function PrivateRoute({ children, allowedRole }) {
+function PrivateRoute({ children, allowedRole, allowedRoles }) {
   const token = localStorage.getItem("token");
   const role = localStorage.getItem("role");
-  if (!token || role !== allowedRole) return <Navigate to="/login" replace />;
+  const roles = allowedRoles || (allowedRole ? [allowedRole] : []);
+  if (!token || !roles.includes(role)) return <Navigate to="/login" replace />;
   return children;
 }
+
+const SUPER_ADMIN = ["super_admin"];
+const OPERATOR = ["operator", "super_admin"];
 
 function AppRoutes() {
   return (
@@ -27,19 +35,24 @@ function AppRoutes() {
       <Route path="/" element={<LoginPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/register/screenhouse" element={<RegisterScreenhousePage />} />
 
       {/* PETANI */}
       <Route path="/petani" element={<PrivateRoute allowedRole="petani"><PetaniDashboard /></PrivateRoute>} />
+      <Route path="/petani/screenhouse/:id" element={<PrivateRoute allowedRole="petani"><ScreenhouseDetailPage basePath="/petani" /></PrivateRoute>} />
       <Route path="/petani/notifikasi" element={<PrivateRoute allowedRole="petani"><NotifikasiPage /></PrivateRoute>} />
 
-      {/* OPERATOR */}
-      <Route path="/operator" element={<PrivateRoute allowedRole="operator"><OperatorDashboard /></PrivateRoute>} />
-      <Route path="/operator/approval" element={<PrivateRoute allowedRole="operator"><ApprovalPage /></PrivateRoute>} />
+      {/* OPERATOR (+ super_admin) */}
+      <Route path="/operator" element={<PrivateRoute allowedRoles={OPERATOR}><OperatorDashboard /></PrivateRoute>} />
+      <Route path="/operator/screenhouse/:id" element={<PrivateRoute allowedRoles={OPERATOR}><ScreenhouseDetailPage basePath="/operator" /></PrivateRoute>} />
+      <Route path="/operator/approval" element={<PrivateRoute allowedRoles={OPERATOR}><ApprovalPage /></PrivateRoute>} />
+      <Route path="/operator/approval/petani/:userId" element={<PrivateRoute allowedRoles={OPERATOR}><FarmerScreenhousesPage /></PrivateRoute>} />
 
-      {/* ADMIN */}
-      {/* <Route path="/admin/kelola-user" element={<PrivateRoute allowedRole="admin"><KelolaUserPage /></PrivateRoute>} /> */}
-      <Route path="/admin/kelola-threshold" element={<PrivateRoute allowedRole="admin"><ThresholdPage /></PrivateRoute>} />
-      {/* <Route path="/admin/konfigurasi" element={<PrivateRoute allowedRole="admin"><KonfigurasiPage /></PrivateRoute>} /> */}
+      {/* SUPER ADMIN */}
+      <Route path="/admin/kelola-user" element={<PrivateRoute allowedRoles={SUPER_ADMIN}><KelolaUserPage /></PrivateRoute>} />
+      <Route path="/admin/kelola-screenhouse" element={<PrivateRoute allowedRoles={SUPER_ADMIN}><KelolaScreenhousePage /></PrivateRoute>} />
+      <Route path="/admin/kelola-threshold" element={<PrivateRoute allowedRoles={SUPER_ADMIN}><ThresholdPage /></PrivateRoute>} />
+      <Route path="/admin/konfigurasi" element={<PrivateRoute allowedRoles={SUPER_ADMIN}><KonfigurasiPage /></PrivateRoute>} />
 
       {/* FALLBACK */}
       <Route path="*" element={<Navigate to="/login" replace />} />
@@ -48,17 +61,12 @@ function AppRoutes() {
 }
 
 function App() {
-  const token = localStorage.getItem("token");
   return (
     <>
       <Toaster />
-      {token ? (
-        <AlertProvider>
-          <AppRoutes />
-        </AlertProvider>
-      ) : (
+      <AlertProvider>
         <AppRoutes />
-      )}
+      </AlertProvider>
     </>
   );
 }

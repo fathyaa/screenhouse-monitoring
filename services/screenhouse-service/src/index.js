@@ -6,6 +6,9 @@ const cors = require("cors");
 require("./db");
 
 const screenhouseRoutes = require("./routes/screenhouseRoutes");
+const wilayahRoutes = require("./routes/wilayahRoutes");
+const thresholdRoutes = require("./routes/thresholdRoutes");
+const adminRoutes = require("./routes/adminRoutes");
 
 const app = express();
 
@@ -23,6 +26,9 @@ app.use((req, res, next) => {
 });
 
 app.use("/screenhouses", screenhouseRoutes);
+app.use("/wilayah", wilayahRoutes);
+app.use("/thresholds", thresholdRoutes);
+app.use("/admin", adminRoutes);
 
 const PORT = process.env.PORT || 3003;
 

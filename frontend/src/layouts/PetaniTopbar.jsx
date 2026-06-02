@@ -25,19 +25,33 @@ export default function PetaniTopbar({ onToggleSidebar, title, subtitle, activeA
         return audioRef.current;
     }
 
+    function unlockAudioPlayback(audio) {
+        const prevVolume = audio.volume;
+        audio.volume = 0;
+        return audio
+            .play()
+            .then(() => {
+                audio.pause();
+                audio.currentTime = 0;
+                audio.volume = prevVolume;
+            })
+            .catch(() => {
+                audio.volume = prevVolume;
+            });
+    }
+
     function toggleSound() {
         const audio = getAudio();
         if (!soundEnabled) {
-            audio.play().then(() => {
-                audio.pause();
-                audio.currentTime = 0;
+            // Buka izin autoplay browser tanpa memutar suara notifikasi
+            unlockAudioPlayback(audio).finally(() => {
                 setSoundEnabled(true);
                 sessionStorage.setItem("sound_enabled", "true");
                 window.__playAlertSound = () => {
                     audio.currentTime = 0;
                     audio.play().catch(() => { });
                 };
-            }).catch(() => { });
+            });
         } else {
             setSoundEnabled(false);
             sessionStorage.setItem("sound_enabled", "false");

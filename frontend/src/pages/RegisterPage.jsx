@@ -12,8 +12,6 @@ function RegisterPage() {
         password: "",
     });
 
-    const [loading, setLoading] = useState(false);
-
     const handleChange = (e) => {
         setForm({
             ...form,
@@ -21,45 +19,24 @@ function RegisterPage() {
         });
     };
 
-    const handleRegister = async () => {
-
-        try {
-
-            setLoading(true);
-
-            const response = await fetch(
-                "http://localhost:8000/auth/register",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify(form),
-                }
-            );
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                alert(data.message);
-                return;
-            }
-
-            alert("Pendaftaran berhasil");
-
-            navigate("/login");
-
-        } catch (err) {
-
-            console.log(err);
-
-            alert("Register gagal");
-
-        } finally {
-
-            setLoading(false);
-
+    const handleContinue = () => {
+        if (!form.name.trim() || !form.phone_number.trim() || !form.password) {
+            alert("Lengkapi semua data akun terlebih dahulu");
+            return;
         }
+
+        if (form.password.length < 6) {
+            alert("Password minimal 6 karakter");
+            return;
+        }
+
+        sessionStorage.setItem("pendingRegister", JSON.stringify({
+            name: form.name.trim(),
+            phone_number: form.phone_number.trim(),
+            password: form.password,
+        }));
+
+        navigate("/register/screenhouse");
     };
 
     return (
@@ -164,15 +141,14 @@ function RegisterPage() {
                 </div>
 
                 <button
-                    onClick={handleRegister}
-                    disabled={loading}
-                    className="w-full h-10 rounded-lg bg-[#1e4d2b] hover:bg-[#2d6e3e] text-white text-sm font-medium transition mt-5 mb-3 disabled:opacity-50"
+                    onClick={handleContinue}
+                    className="w-full h-10 rounded-lg bg-[#1e4d2b] hover:bg-[#2d6e3e] text-white text-sm font-medium transition mt-5 mb-3"
                 >
-                    {loading ? "Mendaftarkan..." : "Daftar sekarang"}
+                    Daftar sekarang → isi screenhouse
                 </button>
 
                 <p className="text-center text-xs text-gray-400 mb-4 leading-relaxed">
-                    Pendaftaran akan diverifikasi oleh Operator UPTD Mektan sebelum akun aktif
+                    Setelah data akun, lanjut isi lokasi screenhouse. Keduanya dikirim ke server di langkah terakhir.
                 </p>
 
                 <div className="text-center text-xs text-gray-400">

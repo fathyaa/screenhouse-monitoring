@@ -6,39 +6,65 @@ const {
   register,
   login,
   approveUser,
+  rejectUser,
+  getApprovalStats,
   getPendingUsers,
-  getApprovedUsers
+  getFarmers,
+  getFarmerScreenhouses,
+  getApprovedUsers,
 } = require("../controllers/authController");
 
 const router = express.Router();
 
+const approvalRoles = ["admin", "operator", "super_admin"];
+const approveRoles = ["operator", "super_admin"];
+
 router.patch(
   "/:id/approve",
   authMiddleware,
-  roleMiddleware([
-    "operator",
-    "super_admin",
-  ]),
+  roleMiddleware(approveRoles),
   approveUser
+);
+
+router.patch(
+  "/:id/reject",
+  authMiddleware,
+  roleMiddleware(approveRoles),
+  rejectUser
+);
+
+router.get(
+  "/stats",
+  authMiddleware,
+  roleMiddleware(approvalRoles),
+  getApprovalStats
 );
 
 router.get(
   "/pending",
   authMiddleware,
-  roleMiddleware([
-    "admin",
-    "operator",
-  ]),
+  roleMiddleware(approvalRoles),
   getPendingUsers
+);
+
+router.get(
+  "/farmers",
+  authMiddleware,
+  roleMiddleware(approvalRoles),
+  getFarmers
+);
+
+router.get(
+  "/farmers/:id/screenhouses",
+  authMiddleware,
+  roleMiddleware(approvalRoles),
+  getFarmerScreenhouses
 );
 
 router.get(
   "/approved",
   authMiddleware,
-  roleMiddleware([
-    "admin",
-    "operator",
-  ]),
+  roleMiddleware(approvalRoles),
   getApprovedUsers
 );
 

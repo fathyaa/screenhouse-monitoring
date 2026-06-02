@@ -1,9 +1,12 @@
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import { useEffect, useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { Menu } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
+import { POPUP_SENSOR_FIELDS, formatSensorValue } from "../constants/sensorMetrics";
 
 function OperatorDashboard() {
+  const navigate = useNavigate();
   const [screenhouses, setScreenhouses] = useState([]);
   const [time, setTime] = useState(new Date());
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -174,9 +177,16 @@ function OperatorDashboard() {
                 >
                   <Popup>
                     <div className="min-w-[220px]">
-                      <h3 className="text-base font-bold text-emerald-700">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/operator/screenhouse/${sh.id}`)}
+                        className="text-base font-bold text-emerald-700 hover:text-emerald-900 hover:underline text-left w-full"
+                      >
                         {sh.name}
-                      </h3>
+                      </button>
+                      <p className="text-[10px] text-emerald-600 mt-0.5">
+                        Klik nama untuk dashboard detail →
+                      </p>
 
                       {sh.owner_name && (
                         <p className="text-xs text-slate-500 mt-1">
@@ -203,46 +213,20 @@ function OperatorDashboard() {
                         {latestSensorData[sh.id] && (
                           <>
                             <div className="grid grid-cols-2 gap-2">
-                              <div className="bg-slate-50 rounded-lg p-2">
-                                <p className="text-[10px] text-slate-400 uppercase">
-                                  Nitrogen
-                                </p>
-
-                                <p className="text-sm font-bold text-slate-700">
-                                  {latestSensorData[sh.id].nitrogen}
-                                </p>
-                              </div>
-
-                              <div className="bg-slate-50 rounded-lg p-2">
-                                <p className="text-[10px] text-slate-400 uppercase">
-                                  Moisture
-                                </p>
-
-                                <p className="text-sm font-bold text-slate-700">
-                                  {latestSensorData[sh.id].moisture}%
-                                </p>
-                              </div>
-
-                              <div className="bg-slate-50 rounded-lg p-2">
-                                <p className="text-[10px] text-slate-400 uppercase">
-                                  Phosphorus
-                                </p>
-
-                                <p className="text-sm font-bold text-slate-700">
-                                  {latestSensorData[sh.id].phosphorus}
-                                </p>
-                              </div>
-
-                              <div className="bg-slate-50 rounded-lg p-2">
-                                <p className="text-[10px] text-slate-400 uppercase">
-                                  Potassium
-                                </p>
-
-                                <p className="text-sm font-bold text-slate-700">
-                                  {latestSensorData[sh.id].potassium}
-                                </p>
-                              </div>
+                              {POPUP_SENSOR_FIELDS.map(({ key, label, unit }) => (
+                                <div key={key} className="bg-slate-50 rounded-lg p-2">
+                                  <p className="text-[10px] text-slate-400 uppercase">{label}</p>
+                                  <p className="text-sm font-bold text-slate-700">
+                                    {formatSensorValue(latestSensorData[sh.id][key], unit)}
+                                  </p>
+                                </div>
+                              ))}
                             </div>
+                            {latestSensorData[sh.id].node_name && (
+                              <p className="text-[10px] text-slate-400 mt-1">
+                                Node: {latestSensorData[sh.id].node_name}
+                              </p>
+                            )}
 
                             <div
                               className="mt-3 bg-emerald-50 text-emerald-700 rounded-lg py-2 text-center text-xs font-medium"

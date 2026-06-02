@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Bell, TriangleAlert, CheckCircle2, Filter, Menu } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
 import { useAlerts, getAlertDetail } from "../context/AlertContext";
@@ -8,7 +8,11 @@ function NotifikasiPage() {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [filter, setFilter] = useState("semua");
     const user = JSON.parse(localStorage.getItem("user"));
-    const { alerts, activeCount, resolveAlert } = useAlerts();
+    const { alerts, activeCount, alertsLoading, resolveAlert, refetchAlerts } = useAlerts();
+
+    useEffect(() => {
+        refetchAlerts();
+    }, [refetchAlerts]);
 
     const filtered = filter === "semua" ? alerts : alerts.filter((a) => a.status === filter);
     const totalAktif = alerts.filter((a) => a.status === "active").length;
@@ -70,7 +74,12 @@ function NotifikasiPage() {
 
                     {/* ALERT LIST */}
                     <div className="space-y-3">
-                        {filtered.length === 0 && (
+                        {alertsLoading && (
+                            <div className="text-center py-12 text-gray-400">
+                                <div className="text-sm">Memuat notifikasi...</div>
+                            </div>
+                        )}
+                        {!alertsLoading && filtered.length === 0 && (
                             <div className="text-center py-12 text-gray-400">
                                 <CheckCircle2 size={32} className="mx-auto mb-3 text-gray-200" />
                                 <div className="text-sm">Tidak ada alert</div>
@@ -131,22 +140,10 @@ function AlertValueDetail({ alert }) {
     const detail = getAlertDetail(alert)
     if (!detail || detail.actual === undefined || detail.actual === null) return null
 
-    const PARAM_LABELS = {
-        nitrogen: "Nitrogen",
-        phosphorus: "Phosphorus",
-        potassium: "Potassium",
-        moisture: "Kelembapan",
-    }
-
-    const PARAM_UNITS = {
-        nitrogen: "mg/kg",
-        phosphorus: "mg/kg",
-        potassium: "mg/kg",
-        moisture: "%",
-    }
-
-    const unit = PARAM_UNITS[detail.param] ?? ""
-    const label = PARAM_LABELS[detail.param] ?? detail.param
+    const unit = detail.unit ?? ""
+    const label = detail.label
+      ? detail.label.charAt(0).toUpperCase() + detail.label.slice(1)
+      : detail.param
 
     return (
         <div className="mt-2 flex items-center gap-3 flex-wrap">

@@ -1,165 +1,229 @@
-import { useState } from "react";
-import { SlidersHorizontal, RotateCcw, Save, Menu } from "lucide-react";
-import Sidebar from "../layouts/Sidebar";
+import { useCallback, useEffect, useState } from "react";
+import toast from "react-hot-toast";
+import { RotateCcw, Save, Search, SlidersHorizontal } from "lucide-react";
+import AdminPageShell from "../components/AdminPageShell";
+import WilayahFilter, { buildWilayahQuery } from "../components/WilayahFilter";
+import { THRESHOLD_METRICS, DEFAULT_THRESHOLD } from "../constants/thresholdMetrics";
 
-const DEFAULT_THRESHOLDS = [
-    { label: "Nitrogen (N)", unit: "mg/kg", min: 20, max: 45, progress: 78 },
-    { label: "Phosphorus (P)", unit: "mg/kg", min: 10, max: 30, progress: 84 },
-    { label: "Potassium (K)", unit: "mg/kg", min: 15, max: 50, progress: 86 },
-    { label: "Kelembaban tanah", unit: "%", min: 50, max: 80, progress: 68 },
-    { label: "pH Tanah", unit: "pH", min: 5, max: 7, progress: 55 },
-    { label: "Suhu", unit: "°C", min: 24, max: 32, progress: 72 },
-];
+const API = "http://localhost:8000";
 
-function ThresholdPage() {
-    const [sidebarOpen, setSidebarOpen] = useState(true);
-    const [thresholds, setThresholds] = useState(DEFAULT_THRESHOLDS);
-    const user = { name: "Admin MCtan", role: "admin" };
-
-    const updateValue = (index, field, value) => {
-        const updated = [...thresholds];
-        updated[index][field] = Number(value);
-        setThresholds(updated);
-    };
-
-    const handleReset = () => setThresholds(DEFAULT_THRESHOLDS);
-
-    const getBarStyle = (min, max, unit) => {
-        // Tentukan range maksimal yang wajar per parameter
-        const ranges = {
-            "mg/kg": { absMin: 0, absMax: 100 },
-            "%": { absMin: 0, absMax: 100 },
-            "pH": { absMin: 0, absMax: 14 },
-            "°C": { absMin: 0, absMax: 50 },
-        };
-
-        const { absMin, absMax } = ranges[unit] ?? { absMin: 0, absMax: 100 };
-        const totalRange = absMax - absMin;
-        const chosenRange = max - min;
-
-        // Seberapa lebar rentang dibanding maksimal yang wajar (0–1)
-        const ratio = Math.min(chosenRange / totalRange, 1);
-
-        // Bar tumbuh dari tengah ke kiri-kanan
-        const widthPct = Math.round(ratio * 100);
-
-        // Warna: semakin jauh → semakin hijau pekat
-        // ratio 0   → #d1fae5 (hijau pucat)
-        // ratio 0.5 → #34d399
-        // ratio 1   → #065f46 (hijau pekat)
-        const r = Math.round(6 + (1 - ratio) * (209 - 6));
-        const g = Math.round(95 + (1 - ratio) * (250 - 95));
-        const b = Math.round(70 + (1 - ratio) * (229 - 70));
-        const color = `rgb(${r},${g},${b})`;
-
-        return { widthPct, color, ratio };
-    };
-
-    return (
-        <div className="fixed inset-0 flex bg-slate-100 overflow-hidden">
-            <Sidebar isOpen={sidebarOpen} screenhouses={[]} role={user.role} user={user} />
-
-            <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-
-                {/* TOPBAR */}
-                <header className="h-14 shrink-0 bg-white border-b border-gray-200 flex items-center justify-between px-5 z-10">
-                    <div className="flex items-center gap-3">
-                        <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-1.5 rounded-lg hover:bg-gray-100 transition">
-                            <Menu size={20} className="text-gray-500" />
-                        </button>
-                        <div>
-                            <div className="text-sm font-semibold text-gray-800">Pengaturan threshold sensor</div>
-                            <div className="text-xs text-gray-400">Atur batas min/maks — alert dikirim jika nilai melewati batas</div>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2 bg-green-50 text-green-800 text-xs font-medium px-3 py-1.5 rounded-full">
-                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                        Online
-                    </div>
-                </header>
-
-                <div className="flex-1 overflow-y-auto p-5 space-y-2">
-
-                    {/* THRESHOLD LIST */}
-                    {thresholds.map((item, index) => (
-                        <div key={item.label} className="bg-white rounded-2xl border border-gray-200 p-4 flex items-center gap-4">
-
-                            {/* LABEL + BAR */}
-                            <div className="flex-1 min-w-0">
-                                <div className="text-sm font-semibold text-gray-800">{item.label}</div>
-                                <div className="text-xs text-gray-400 mt-0.5">Satuan: {item.unit}</div>
-
-                                {/* Bar tumbuh dari tengah */}
-                                <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden relative">
-                                    {(() => {
-                                        const { widthPct, color } = getBarStyle(item.min, item.max, item.unit);
-                                        return (
-                                            <div
-                                                className="absolute top-0 h-full rounded-full transition-all duration-500"
-                                                style={{
-                                                    width: `${widthPct}%`,
-                                                    left: `${(100 - widthPct) / 2}%`,
-                                                    background: color,
-                                                }}
-                                            />
-                                        );
-                                    })()}
-                                </div>
-
-                                {/* Label rentang */}
-                                <div className="flex justify-between mt-1">
-                                    <span className="text-[10px] text-gray-300">{item.min} {item.unit}</span>
-                                    <span className="text-[10px] text-gray-400 font-medium">
-                                        rentang: {item.max - item.min} {item.unit}
-                                    </span>
-                                    <span className="text-[10px] text-gray-300">{item.max} {item.unit}</span>
-                                </div>
-                            </div>
-
-                            {/* INPUTS */}
-                            <div className="flex items-center gap-2 shrink-0">
-                                <div className="flex flex-col gap-1">
-                                    <div className="text-[10px] uppercase tracking-wide text-gray-400">Min</div>
-                                    <input
-                                        type="number"
-                                        value={item.min}
-                                        onChange={(e) => updateValue(index, "min", e.target.value)}
-                                        className="w-16 h-8 rounded-lg border border-gray-200 bg-gray-50 px-2 text-sm font-semibold text-gray-800 outline-none focus:ring-1 focus:ring-green-300 text-center"
-                                    />
-                                </div>
-                                <div className="text-gray-300 text-sm mt-4">—</div>
-                                <div className="flex flex-col gap-1">
-                                    <div className="text-[10px] uppercase tracking-wide text-gray-400">Maks</div>
-                                    <input
-                                        type="number"
-                                        value={item.max}
-                                        onChange={(e) => updateValue(index, "max", e.target.value)}
-                                        className="w-16 h-8 rounded-lg border border-gray-200 bg-gray-50 px-2 text-sm font-semibold text-gray-800 outline-none focus:ring-1 focus:ring-green-300 text-center"
-                                    />
-                                </div>
-                                <div className="text-xs text-gray-400 mt-4">{item.unit}</div>
-                            </div>
-
-                        </div>
-                    ))}
-
-                    {/* ACTIONS */}
-                    <div className="flex justify-end gap-2 pt-2">
-                        <button
-                            onClick={handleReset}
-                            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 text-sm font-medium transition"
-                        >
-                            <RotateCcw size={15} />Reset default
-                        </button>
-                        <button className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1e4d2b] hover:bg-[#2d6e3e] text-white text-sm font-medium transition">
-                            <Save size={15} />Simpan perubahan
-                        </button>
-                    </div>
-
-                </div>
-            </div>
-        </div>
-    );
+function rowToForm(row) {
+  const form = {};
+  THRESHOLD_METRICS.forEach((m) => {
+    form[m.minCol] = row?.[m.minCol] ?? DEFAULT_THRESHOLD[m.minCol];
+    form[m.maxCol] = row?.[m.maxCol] ?? DEFAULT_THRESHOLD[m.maxCol];
+  });
+  return form;
 }
 
-export default ThresholdPage;
+export default function ThresholdPage() {
+  const token = localStorage.getItem("token");
+  const authHeaders = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+
+  const [wilayah, setWilayah] = useState({ regency_id: "", district_id: "", village_id: "" });
+  const [search, setSearch] = useState("");
+  const [list, setList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedId, setSelectedId] = useState(null);
+  const [form, setForm] = useState(rowToForm(null));
+  const [saving, setSaving] = useState(false);
+
+  const selected = list.find((r) => r.screenhouse_id === selectedId);
+
+  const loadList = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams(buildWilayahQuery(wilayah));
+      if (search.trim()) params.set("search", search.trim());
+
+      const res = await fetch(`${API}/thresholds?${params}`, { headers: authHeaders });
+      const data = res.ok ? await res.json() : [];
+      const rows = Array.isArray(data) ? data : [];
+      setList(rows);
+
+      if (rows.length === 0) {
+        setSelectedId(null);
+        setForm(rowToForm(null));
+      } else if (!rows.some((r) => r.screenhouse_id === selectedId)) {
+        setSelectedId(rows[0].screenhouse_id);
+        setForm(rowToForm(rows[0]));
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Gagal memuat daftar screenhouse");
+    } finally {
+      setLoading(false);
+    }
+  }, [wilayah, search, token]);
+
+  useEffect(() => {
+    loadList();
+  }, [loadList]);
+
+  useEffect(() => {
+    const row = list.find((r) => r.screenhouse_id === selectedId);
+    if (row) setForm(rowToForm(row));
+  }, [selectedId, list]);
+
+  const updateField = (col, value) => {
+    setForm((prev) => ({ ...prev, [col]: value === "" ? "" : Number(value) }));
+  };
+
+  const handleSelect = (row) => {
+    setSelectedId(row.screenhouse_id);
+    setForm(rowToForm(row));
+  };
+
+  const handleReset = () => setForm(rowToForm(null));
+
+  const handleSave = async () => {
+    if (!selectedId) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`${API}/thresholds/${selectedId}`, {
+        method: "PUT",
+        headers: authHeaders,
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.message || "Gagal menyimpan threshold");
+        return;
+      }
+      toast.success("Threshold berhasil disimpan");
+      loadList();
+    } catch (err) {
+      console.error(err);
+      toast.error("Gagal menyimpan threshold");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <AdminPageShell
+      title="Kelola Threshold"
+      subtitle="Atur batas min/maks per screenhouse — alert dikirim jika nilai melewati batas"
+    >
+      <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
+        <WilayahFilter value={wilayah} onChange={setWilayah} />
+        <div className="flex items-center gap-2">
+          <Search size={16} className="text-gray-400 shrink-0" />
+          <input
+            type="text"
+            placeholder="Cari nama screenhouse atau pemilik..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="flex-1 h-9 px-3 rounded-lg border border-gray-200 bg-gray-50 text-sm outline-none focus:ring-1 focus:ring-green-300"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 min-h-0">
+        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden flex flex-col max-h-[calc(100vh-220px)]">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2 shrink-0">
+            <SlidersHorizontal size={16} className="text-green-700" />
+            <span className="text-sm font-semibold text-gray-800">Pilih Screenhouse</span>
+            <span className="text-xs text-gray-400 ml-auto">{list.length}</span>
+          </div>
+          <div className="overflow-y-auto flex-1">
+            {loading ? (
+              <div className="p-6 text-center text-sm text-gray-400">Memuat...</div>
+            ) : list.length === 0 ? (
+              <div className="p-6 text-center text-sm text-gray-400">Tidak ada screenhouse aktif</div>
+            ) : (
+              list.map((row) => {
+                const active = row.screenhouse_id === selectedId;
+                const hasThreshold = Boolean(row.threshold_id);
+                return (
+                  <button
+                    key={row.screenhouse_id}
+                    onClick={() => handleSelect(row)}
+                    className={`w-full text-left px-4 py-3 border-b border-gray-50 transition ${active ? "bg-green-50" : "hover:bg-gray-50"}`}
+                  >
+                    <div className="text-sm font-medium text-gray-800">{row.screenhouse_name}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">{row.owner_name}</div>
+                    <div className="text-[10px] text-gray-400 mt-1">
+                      {[row.village, row.district, row.regency].filter(Boolean).join(", ")}
+                    </div>
+                    {!hasThreshold && (
+                      <span className="inline-block mt-1 text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">
+                        Belum diset
+                      </span>
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-3 min-w-0">
+          {selected ? (
+            <>
+              <div className="bg-white rounded-2xl border border-gray-200 px-4 py-3 text-left">
+                <div className="text-sm font-semibold text-gray-800">{selected.screenhouse_name}</div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  {selected.owner_name} · {[selected.village, selected.district, selected.regency].filter(Boolean).join(", ")}
+                </div>
+              </div>
+
+              {THRESHOLD_METRICS.map((m) => (
+                <div key={m.key} className="bg-white rounded-2xl border border-gray-200 p-4 flex items-center gap-4">
+                  <div className="flex-1 min-w-0 text-left">
+                    <div className="text-sm font-semibold text-gray-800">{m.label}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">Satuan: {m.unit}</div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex flex-col gap-1">
+                      <div className="text-[10px] uppercase tracking-wide text-gray-400">Min</div>
+                      <input
+                        type="number"
+                        step="any"
+                        value={form[m.minCol]}
+                        onChange={(e) => updateField(m.minCol, e.target.value)}
+                        className="w-20 h-8 rounded-lg border border-gray-200 bg-gray-50 px-2 text-sm font-semibold text-gray-800 outline-none focus:ring-1 focus:ring-green-300 text-center"
+                      />
+                    </div>
+                    <div className="text-gray-300 text-sm mt-4">—</div>
+                    <div className="flex flex-col gap-1">
+                      <div className="text-[10px] uppercase tracking-wide text-gray-400">Maks</div>
+                      <input
+                        type="number"
+                        step="any"
+                        value={form[m.maxCol]}
+                        onChange={(e) => updateField(m.maxCol, e.target.value)}
+                        className="w-20 h-8 rounded-lg border border-gray-200 bg-gray-50 px-2 text-sm font-semibold text-gray-800 outline-none focus:ring-1 focus:ring-green-300 text-center"
+                      />
+                    </div>
+                    <div className="text-xs text-gray-400 mt-4">{m.unit}</div>
+                  </div>
+                </div>
+              ))}
+
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  onClick={handleReset}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 text-sm font-medium transition"
+                >
+                  <RotateCcw size={15} />Reset default
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1e4d2b] hover:bg-[#2d6e3e] text-white text-sm font-medium transition disabled:opacity-50"
+                >
+                  <Save size={15} />{saving ? "Menyimpan..." : "Simpan perubahan"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center text-sm text-gray-400">
+              Pilih screenhouse dari daftar di sebelah kiri
+            </div>
+          )}
+        </div>
+      </div>
+    </AdminPageShell>
+  );
+}

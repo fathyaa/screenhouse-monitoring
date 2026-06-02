@@ -6,6 +6,9 @@ const {
   createScreenhouse,
   getScreenhouses,
   getMyScreenhouses,
+  getOperatorStats,
+  getMyDashboardStats,
+  getScreenhouseById,
 } = require("../controllers/screenhouseController");
 
 const router = express.Router();
@@ -16,6 +19,20 @@ router.get(
   getMyScreenhouses
 );
 
+router.get(
+  "/my-stats",
+  authMiddleware,
+  roleMiddleware(["petani"]),
+  getMyDashboardStats
+);
+
+router.get(
+  "/operator-stats",
+  authMiddleware,
+  roleMiddleware(["operator", "super_admin"]),
+  getOperatorStats
+);
+
 router.post(
   "/",
   authMiddleware,
@@ -24,6 +41,13 @@ router.post(
     "super_admin",
   ]),
   createScreenhouse
+);
+
+router.get(
+  "/:id",
+  authMiddleware,
+  roleMiddleware(["operator", "super_admin", "petani"]),
+  getScreenhouseById
 );
 
 router.get(
