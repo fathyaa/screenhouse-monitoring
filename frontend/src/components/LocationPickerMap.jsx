@@ -8,7 +8,7 @@ import {
 } from "react-leaflet";
 import { Search } from "lucide-react";
 
-const API = "http://localhost:8000";
+import { API_URL } from "../config/api";
 const DEFAULT_CENTER = [-6.9175, 106.9287];
 
 function MapClickHandler({ onPick }) {
@@ -49,7 +49,7 @@ export default function LocationPickerMap({
     setSearching(true);
     try {
       const res = await fetch(
-        `${API}/wilayah/search?q=${encodeURIComponent(query.trim())}`
+        `${API_URL}/wilayah/search?q=${encodeURIComponent(query.trim())}`
       );
       const data = await res.json();
       setResults(Array.isArray(data) ? data : []);

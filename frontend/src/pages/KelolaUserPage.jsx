@@ -3,7 +3,7 @@ import toast from "react-hot-toast";
 import { Search, Pencil, KeyRound, Users } from "lucide-react";
 import AdminPageShell from "../components/AdminPageShell";
 
-const API = "http://localhost:8000";
+import { API_URL } from "../config/api";
 
 const ROLE_OPTIONS = [
   { value: "petani", label: "Petani" },
@@ -68,7 +68,7 @@ export default function KelolaUserPage() {
       if (filters.status) params.set("status", filters.status);
       if (filters.search.trim()) params.set("search", filters.search.trim());
 
-      const res = await fetch(`${API}/admin/users?${params}`, { headers: authHeaders });
+      const res = await fetch(`${API_URL}/admin/users?${params}`, { headers: authHeaders });
       const data = res.ok ? await res.json() : [];
       setUsers(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -87,7 +87,7 @@ export default function KelolaUserPage() {
     if (!editUser) return;
     setSaving(true);
     try {
-      const res = await fetch(`${API}/admin/users/${editUser.id}`, {
+      const res = await fetch(`${API_URL}/admin/users/${editUser.id}`, {
         method: "PATCH",
         headers: authHeaders,
         body: JSON.stringify({
@@ -119,7 +119,7 @@ export default function KelolaUserPage() {
     }
     setSaving(true);
     try {
-      const res = await fetch(`${API}/admin/users/${resetUser.id}/password`, {
+      const res = await fetch(`${API_URL}/admin/users/${resetUser.id}/password`, {
         method: "PATCH",
         headers: authHeaders,
         body: JSON.stringify({ password: newPassword }),

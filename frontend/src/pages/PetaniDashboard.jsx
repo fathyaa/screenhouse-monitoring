@@ -26,7 +26,7 @@ import {
 } from "../constants/chartGuide";
 import { Leaf, Radio, Bell, Droplets, Activity, Thermometer, Gauge } from "lucide-react";
 
-const API = "http://localhost:8000";
+import { API_URL } from "../config/api";
 
 function PetaniDashboard() {
   const [screenhouses, setScreenhouses] = useState([]);
@@ -50,7 +50,7 @@ function PetaniDashboard() {
   const headers = { Authorization: `Bearer ${token}` };
 
   useEffect(() => {
-    fetch(`${API}/screenhouses/my-screenhouses`, { headers })
+    fetch(`${API_URL}/screenhouses/my-screenhouses`, { headers })
       .then((res) => res.json())
       .then((data) => setScreenhouses(Array.isArray(data) ? data : []))
       .catch(console.error);
@@ -58,7 +58,7 @@ function PetaniDashboard() {
 
   useEffect(() => {
     if (!token) return;
-    fetch(`${API}/screenhouses/my-stats`, { headers })
+    fetch(`${API_URL}/screenhouses/my-stats`, { headers })
       .then((res) => res.json())
       .then((data) => {
         if (data?.screenhouse_count != null) {
@@ -71,7 +71,7 @@ function PetaniDashboard() {
   }, [token]);
 
   useEffect(() => {
-    fetch(`${API}/sensor-data/latest`, { headers })
+    fetch(`${API_URL}/sensor-data/latest`, { headers })
       .then((res) => res.json())
       .then((data) => {
         if (!Array.isArray(data)) return;
@@ -100,10 +100,10 @@ function PetaniDashboard() {
     Promise.all(
       screenhouses.map((sh) =>
         Promise.all([
-          fetch(`${API}/sensor-data/screenhouse/${sh.id}/dashboard`, { headers }).then(
+          fetch(`${API_URL}/sensor-data/screenhouse/${sh.id}/dashboard`, { headers }).then(
             (r) => r.json()
           ),
-          fetch(`${API}/sensor-data/screenhouse/${sh.id}/history?hours=24`, {
+          fetch(`${API_URL}/sensor-data/screenhouse/${sh.id}/history?hours=24`, {
             headers,
           }).then((r) => r.json()),
         ]).then(([dashboard, history]) => ({

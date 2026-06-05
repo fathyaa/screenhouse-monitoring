@@ -15,7 +15,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAlerts } from "../context/AlertContext";
 import { disconnectSocket } from "../lib/socket";
 
-const API = "http://localhost:8000";
+import { API_URL } from "../config/api";
 
 function Sidebar({ isOpen, screenhouses = [], role = "operator", user }) {
   const navigate = useNavigate();
@@ -52,7 +52,7 @@ function Sidebar({ isOpen, screenhouses = [], role = "operator", user }) {
     if (!token) return;
 
     if (role === "operator" || role === "super_admin") {
-      fetch(`${API}/screenhouses/operator-stats`, {
+      fetch(`${API_URL}/screenhouses/operator-stats`, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((res) => (res.ok ? res.json() : null))
@@ -69,7 +69,7 @@ function Sidebar({ isOpen, screenhouses = [], role = "operator", user }) {
     }
 
     if (role === "petani") {
-      fetch(`${API}/screenhouses/my-stats`, {
+      fetch(`${API_URL}/screenhouses/my-stats`, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((res) => (res.ok ? res.json() : null))

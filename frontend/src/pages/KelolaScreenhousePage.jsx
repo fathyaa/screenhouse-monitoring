@@ -5,7 +5,7 @@ import { Search, Leaf, ExternalLink } from "lucide-react";
 import AdminPageShell from "../components/AdminPageShell";
 import WilayahFilter, { buildWilayahQuery } from "../components/WilayahFilter";
 
-const API = "http://localhost:8000";
+import { API_URL } from "../config/api";
 
 const STATUS_OPTIONS = [
   { value: "", label: "Semua status" },
@@ -51,7 +51,7 @@ export default function KelolaScreenhousePage() {
       if (status) params.set("status", status);
       if (search.trim()) params.set("search", search.trim());
 
-      const res = await fetch(`${API}/admin/screenhouses?${params}`, { headers: authHeaders });
+      const res = await fetch(`${API_URL}/admin/screenhouses?${params}`, { headers: authHeaders });
       const data = res.ok ? await res.json() : [];
       setItems(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -69,7 +69,7 @@ export default function KelolaScreenhousePage() {
   const handleStatusChange = async (id, newStatus) => {
     setUpdatingId(id);
     try {
-      const res = await fetch(`${API}/admin/screenhouses/${id}/status`, {
+      const res = await fetch(`${API_URL}/admin/screenhouses/${id}/status`, {
         method: "PATCH",
         headers: authHeaders,
         body: JSON.stringify({ status: newStatus }),

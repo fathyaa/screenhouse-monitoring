@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-const API = "http://localhost:8000";
+import { API_URL } from "../config/api";
 
 export default function WilayahFilter({ value, onChange, showRegency = true }) {
   const [regencies, setRegencies] = useState([]);
@@ -8,7 +8,7 @@ export default function WilayahFilter({ value, onChange, showRegency = true }) {
   const [villages, setVillages] = useState([]);
 
   useEffect(() => {
-    fetch(`${API}/wilayah/regencies?province_id=1`)
+    fetch(`${API_URL}/wilayah/regencies?province_id=1`)
       .then((r) => r.json())
       .then((data) => setRegencies(Array.isArray(data) ? data : []))
       .catch(console.error);
@@ -20,7 +20,7 @@ export default function WilayahFilter({ value, onChange, showRegency = true }) {
       setVillages([]);
       return;
     }
-    fetch(`${API}/wilayah/districts?regency_id=${value.regency_id}`)
+    fetch(`${API_URL}/wilayah/districts?regency_id=${value.regency_id}`)
       .then((r) => r.json())
       .then((data) => setDistricts(Array.isArray(data) ? data : []))
       .catch(console.error);
@@ -31,7 +31,7 @@ export default function WilayahFilter({ value, onChange, showRegency = true }) {
       setVillages([]);
       return;
     }
-    fetch(`${API}/wilayah/villages?district_id=${value.district_id}`)
+    fetch(`${API_URL}/wilayah/villages?district_id=${value.district_id}`)
       .then((r) => r.json())
       .then((data) => setVillages(Array.isArray(data) ? data : []))
       .catch(console.error);

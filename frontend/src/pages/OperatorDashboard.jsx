@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Menu } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
 import { POPUP_SENSOR_FIELDS, formatSensorValue } from "../constants/sensorMetrics";
+import { API_URL } from "../config/api";
 
 function OperatorDashboard() {
   const navigate = useNavigate();
@@ -25,9 +26,7 @@ function OperatorDashboard() {
     const token =
       localStorage.getItem("token");
 
-    fetch(
-      "http://localhost:8000/screenhouses",
-      {
+    fetch(`${API_URL}/screenhouses`, {
         headers: {
           Authorization:
             `Bearer ${token}`,
@@ -74,7 +73,7 @@ function OperatorDashboard() {
   const fetchLatestSensorData = async (screenhouseId) => {
     try {
       const response = await fetch(
-        `http://localhost:8000/sensor-data/latest/${screenhouseId}`
+        `${API_URL}/sensor-data/latest/${screenhouseId}`
       );
 
       const data = await response.json();

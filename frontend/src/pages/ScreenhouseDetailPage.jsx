@@ -27,7 +27,7 @@ import {
 } from "recharts";
 import Sidebar from "../layouts/Sidebar";
 
-const API = "http://localhost:8000";
+import { API_URL } from "../config/api";
 
 const CHART_GUIDE = [
   {
@@ -241,8 +241,8 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
   useEffect(() => {
     const listUrl =
       user.role === "petani"
-        ? `${API}/screenhouses/my-screenhouses`
-        : `${API}/screenhouses`;
+        ? `${API_URL}/screenhouses/my-screenhouses`
+        : `${API_URL}/screenhouses`;
 
     fetch(listUrl, { headers })
       .then((res) => res.json())
@@ -256,14 +256,14 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
     setLoading(true);
 
     Promise.all([
-      fetch(`${API}/screenhouses/${id}`, { headers }).then((r) => r.json()),
-      fetch(`${API}/sensor-data/screenhouse/${id}/sensor-nodes`, { headers }).then(
+      fetch(`${API_URL}/screenhouses/${id}`, { headers }).then((r) => r.json()),
+      fetch(`${API_URL}/sensor-data/screenhouse/${id}/sensor-nodes`, { headers }).then(
         (r) => r.json()
       ),
-      fetch(`${API}/sensor-data/screenhouse/${id}/dashboard`, { headers }).then(
+      fetch(`${API_URL}/sensor-data/screenhouse/${id}/dashboard`, { headers }).then(
         (r) => r.json()
       ),
-      fetch(`${API}/sensor-data/screenhouse/${id}/history?hours=24`, {
+      fetch(`${API_URL}/sensor-data/screenhouse/${id}/history?hours=24`, {
         headers,
       }).then((r) => r.json()),
     ])

@@ -5,7 +5,7 @@ import AdminPageShell from "../components/AdminPageShell";
 import WilayahFilter, { buildWilayahQuery } from "../components/WilayahFilter";
 import { THRESHOLD_METRICS, DEFAULT_THRESHOLD } from "../constants/thresholdMetrics";
 
-const API = "http://localhost:8000";
+import { API_URL } from "../config/api";
 
 function rowToForm(row) {
   const form = {};
@@ -36,7 +36,7 @@ export default function ThresholdPage() {
       const params = new URLSearchParams(buildWilayahQuery(wilayah));
       if (search.trim()) params.set("search", search.trim());
 
-      const res = await fetch(`${API}/thresholds?${params}`, { headers: authHeaders });
+      const res = await fetch(`${API_URL}/thresholds?${params}`, { headers: authHeaders });
       const data = res.ok ? await res.json() : [];
       const rows = Array.isArray(data) ? data : [];
       setList(rows);
@@ -80,7 +80,7 @@ export default function ThresholdPage() {
     if (!selectedId) return;
     setSaving(true);
     try {
-      const res = await fetch(`${API}/thresholds/${selectedId}`, {
+      const res = await fetch(`${API_URL}/thresholds/${selectedId}`, {
         method: "PUT",
         headers: authHeaders,
         body: JSON.stringify(form),

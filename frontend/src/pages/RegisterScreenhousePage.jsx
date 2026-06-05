@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Leaf, MapPin, ArrowLeft } from "lucide-react";
 import LocationPickerMap from "../components/LocationPickerMap";
 
-const API = "http://localhost:8000";
+import { API_URL } from "../config/api";
 const PENDING_KEY = "pendingRegister";
 
 function RegisterScreenhousePage() {
@@ -40,7 +40,7 @@ function RegisterScreenhousePage() {
     setWilayahError("");
     try {
       const res = await fetch(
-        `${API}/wilayah/resolve?latitude=${lat}&longitude=${lng}`
+        `${API_URL}/wilayah/resolve?latitude=${lat}&longitude=${lng}`
       );
       const data = await res.json();
       if (!res.ok) {
@@ -84,7 +84,7 @@ function RegisterScreenhousePage() {
     try {
       setLoading(true);
 
-      const response = await fetch(`${API}/auth/register`, {
+      const response = await fetch(`${API_URL}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

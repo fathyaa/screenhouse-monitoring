@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Leaf, Phone, Lock, Eye, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { API_URL } from "../config/api";
 
 function LoginPage() {
     const [showPassword, setShowPassword] = useState(false);
@@ -12,7 +13,7 @@ function LoginPage() {
         const trimmedPhone = phone_number.trim();
 
         try {
-            const response = await fetch("http://localhost:8000/auth/login", {
+            const response = await fetch(`${API_URL}/auth/login`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -58,7 +59,7 @@ function LoginPage() {
             }
         } catch (err) {
             console.error("[login] Network error", err);
-            alert("Tidak dapat terhubung ke server. Pastikan API gateway (port 8000) berjalan.");
+            alert("Tidak dapat terhubung ke server. Pastikan app-service (VITE_API_URL) berjalan.");
         }
     };
 

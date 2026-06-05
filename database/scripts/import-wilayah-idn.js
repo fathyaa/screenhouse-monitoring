@@ -1,7 +1,7 @@
 /**
  * Import wilayah Indonesia lengkap dari idn-area-data ke PostgreSQL.
  *
- * Prasyarat: schema.sql + seed.sql sudah dijalankan
+ * Prasyarat: database/app/schema.sql + database/app/seed.sql sudah dijalankan (App DB)
  *
  * Jalankan:
  *   cd database/scripts && npm run import
@@ -18,7 +18,7 @@ import pg from "pg";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "../..");
 
-dotenv.config({ path: path.join(ROOT, "services/screenhouse-service/.env") });
+dotenv.config({ path: path.join(ROOT, "services/app-service/.env") });
 
 const { Pool } = pg;
 const BATCH_SIZE = 1000;

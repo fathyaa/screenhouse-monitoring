@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ChevronRight, Leaf, MapPin, Menu, Phone, User } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
 
-const API = "http://localhost:8000";
+import { API_URL } from "../config/api";
 
 function FarmerScreenhousesPage() {
   const { userId } = useParams();
@@ -16,7 +16,7 @@ function FarmerScreenhousesPage() {
   const token = localStorage.getItem("token");
 
   useEffect(() => {
-    fetch(`${API}/auth/farmers/${userId}/screenhouses`, {
+    fetch(`${API_URL}/auth/farmers/${userId}/screenhouses`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))

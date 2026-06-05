@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ClipboardCheck, Phone, UserCheck, UserX, Menu, Leaf, MapPin } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
 
-const API = "http://localhost:8000";
+import { API_URL } from "../config/api";
 
 function formatWilayah(farmer) {
     return [farmer.village, farmer.district, farmer.regency, farmer.province]
@@ -70,9 +70,9 @@ function ApprovalPage() {
     const loadData = useCallback(async () => {
         try {
             const [pendingRes, farmersRes, statsRes] = await Promise.all([
-                fetch(`${API}/auth/pending`, { headers: authHeaders }),
-                fetch(`${API}/auth/farmers`, { headers: authHeaders }),
-                fetch(`${API}/auth/stats`, { headers: authHeaders }),
+                fetch(`${API_URL}/auth/pending`, { headers: authHeaders }),
+                fetch(`${API_URL}/auth/farmers`, { headers: authHeaders }),
+                fetch(`${API_URL}/auth/stats`, { headers: authHeaders }),
             ]);
 
             const pendingData = pendingRes.ok ? await pendingRes.json() : [];
@@ -105,7 +105,7 @@ function ApprovalPage() {
 
         setActionId(farmer.id);
         try {
-            const response = await fetch(`${API}/auth/${farmer.id}/approve`, {
+            const response = await fetch(`${API_URL}/auth/${farmer.id}/approve`, {
                 method: "PATCH",
                 headers: authHeaders,
             });
@@ -130,7 +130,7 @@ function ApprovalPage() {
 
         setActionId(farmer.id);
         try {
-            const response = await fetch(`${API}/auth/${farmer.id}/reject`, {
+            const response = await fetch(`${API_URL}/auth/${farmer.id}/reject`, {
                 method: "PATCH",
                 headers: authHeaders,
             });

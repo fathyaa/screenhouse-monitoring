@@ -3,6 +3,7 @@ import socket, { authenticateSocket } from "../lib/socket";
 import toast from "react-hot-toast";
 import { TriangleAlert } from "lucide-react";
 import { ALERT_PARAM_MAP } from "../constants/sensorMetrics";
+import { API_URL } from "../config/api";
 
 const AlertContext = createContext(null);
 const TOAST_ID = "alert-notif";
@@ -51,7 +52,7 @@ export function AlertProvider({ children }) {
 
     setAlertsLoading(true);
 
-    fetch("http://localhost:8000/alerts", {
+    fetch(`${API_URL}/alerts`, {
       headers: { Authorization: `Bearer ${authToken}` },
     })
       .then(async (res) => {
@@ -151,7 +152,7 @@ export function AlertProvider({ children }) {
 
   const resolveAlert = async (alertId) => {
     try {
-      await fetch(`http://localhost:8000/alerts/${alertId}/resolve`, {
+      await fetch(`${API_URL}/alerts/${alertId}/resolve`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });

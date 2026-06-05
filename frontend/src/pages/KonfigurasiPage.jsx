@@ -1,6 +1,7 @@
 import { Settings, Database, Radio, Shield } from "lucide-react";
 import AdminPageShell from "../components/AdminPageShell";
 import { THRESHOLD_METRICS, DEFAULT_THRESHOLD } from "../constants/thresholdMetrics";
+import { API_URL, MONITORING_URL } from "../config/api";
 
 export default function KonfigurasiPage() {
   return (
@@ -20,8 +21,12 @@ export default function KonfigurasiPage() {
               <dd className="font-medium text-gray-800 text-right">Screenhouse Monitoring UPTD Mektan</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-gray-500">API Gateway</dt>
-              <dd className="font-mono text-xs text-gray-700">http://localhost:8000</dd>
+              <dt className="text-gray-500">App Service (REST)</dt>
+              <dd className="font-mono text-xs text-gray-700">{API_URL}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-gray-500">Monitoring (WebSocket)</dt>
+              <dd className="font-mono text-xs text-gray-700">{MONITORING_URL}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-gray-500">Realtime</dt>

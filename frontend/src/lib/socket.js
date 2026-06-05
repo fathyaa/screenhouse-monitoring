@@ -1,10 +1,11 @@
 import { io } from "socket.io-client";
+import { MONITORING_URL } from "../config/api";
 
 let socket = null;
 
 export function getSocket() {
   if (!socket) {
-    socket = io("http://localhost:3002", {
+    socket = io(MONITORING_URL, {
       transports: ["websocket"],
       autoConnect: true,
     });
