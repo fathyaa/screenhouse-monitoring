@@ -1,4 +1,22 @@
 const pool = require("../../../config/db");
+const monitoringPool = require("../../../config/monitoringDb");
+const { monitoringGet } = require("../../../shared/monitoringClient");
+
+async function countActiveDevices() {
+  if (monitoringPool) {
+    try {
+      const result = await monitoringPool.query(
+        `SELECT COUNT(*)::int AS device_count FROM sensor_nodes WHERE is_active = true`
+      );
+      return result.rows[0]?.device_count ?? 0;
+    } catch (err) {
+      console.error("[operator-stats] monitoring DB:", err.message);
+    }
+  }
+
+  const stats = await monitoringGet("/stats/operator");
+  return stats?.device_count ?? 0;
+}
 
 async function createScreenhouse(req, res) {
   try {
@@ -220,68 +238,43 @@ async function getScreenhouseById(req, res) {
 
 async function getOperatorStats(req, res) {
   try {
-    const result = await pool.query(
-      `
-      SELECT
-        COUNT(DISTINCT s.id)::int AS screenhouse_count,
-        COUNT(sn.id) FILTER (WHERE sn.is_active = true)::int AS device_count
-      FROM screenhouses s
-      LEFT JOIN sensor_nodes sn ON sn.screenhouse_id = s.id
-      WHERE s.status = 'active'
-      `
+    const shResult = await pool.query(
+      `SELECT COUNT(*)::int AS screenhouse_count FROM screenhouses WHERE status = 'active'`
     );
 
-    const row = result.rows[0] || {};
+    const deviceCount = await countActiveDevices();
+
     res.json({
-      screenhouse_count: row.screenhouse_count ?? 0,
-      device_count: row.device_count ?? 0,
+      screenhouse_count: shResult.rows[0]?.screenhouse_count ?? 0,
+      device_count: deviceCount,
     });
   } catch (err) {
-    console.log(err);
+    console.error("[operator-stats]", err);
     res.status(500).json({ message: "Internal server error" });
   }
 }
 
 async function getMyDashboardStats(req, res) {
   try {
-    const userId = req.user.id;
-
-    const result = await pool.query(
+    const shResult = await pool.query(
       `
-      SELECT
-        COUNT(DISTINCT s.id)::int AS screenhouse_count,
-        COUNT(sn.id) FILTER (WHERE sn.is_active = true)::int AS active_nodes,
-        COUNT(DISTINCT sn.id) FILTER (
-          WHERE sn.is_active = true
-            AND EXISTS (
-              SELECT 1
-              FROM sensor_data sd
-              WHERE sd.sensor_node_id = sn.id
-                AND sd.created_at >= NOW() - INTERVAL '24 hours'
-            )
-        )::int AS active_sensors,
-        (
-          SELECT COUNT(*)::int
-          FROM alerts a
-          JOIN screenhouses sh2 ON sh2.id = a.screenhouse_id
-          WHERE sh2.owner_user_id = $1 AND a.status = 'active'
-        ) AS active_alerts
-      FROM screenhouses s
-      LEFT JOIN sensor_nodes sn ON sn.screenhouse_id = s.id
-      WHERE s.owner_user_id = $1
+      SELECT COUNT(*)::int AS screenhouse_count
+      FROM screenhouses
+      WHERE owner_user_id = $1 AND status = 'active'
       `,
-      [userId]
+      [req.user.id]
     );
 
-    const row = result.rows[0] || {};
+    const stats = await monitoringGet(`/stats/owner/${req.user.id}`);
+
     res.json({
-      screenhouse_count: row.screenhouse_count ?? 0,
-      active_nodes: row.active_nodes ?? 0,
-      active_sensors: row.active_sensors ?? 0,
-      active_alerts: row.active_alerts ?? 0,
+      screenhouse_count: shResult.rows[0]?.screenhouse_count ?? 0,
+      active_nodes: stats?.active_nodes ?? 0,
+      active_sensors: stats?.active_sensors ?? 0,
+      active_alerts: stats?.active_alerts ?? 0,
     });
   } catch (err) {
-    console.log(err);
+    console.error("[my-stats]", err);
     res.status(500).json({ message: "Internal server error" });
   }
 }

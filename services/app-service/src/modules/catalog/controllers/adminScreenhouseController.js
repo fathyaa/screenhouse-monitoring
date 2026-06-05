@@ -1,4 +1,5 @@
 const pool = require("../../../config/db");
+const { monitoringGet } = require("../../../shared/monitoringClient");
 
 async function listAdminScreenhouses(req, res) {
   try {
@@ -44,23 +45,42 @@ async function listAdminScreenhouses(req, res) {
         p.name AS province,
         r.name AS regency,
         d.name AS district,
-        v.name AS village,
-        COUNT(sn.id)::int AS node_count
+        v.name AS village
       FROM screenhouses s
       JOIN users u ON u.id = s.owner_user_id
       JOIN provinces p ON p.id = s.province_id
       JOIN regencies r ON r.id = s.regency_id
       JOIN districts d ON d.id = s.district_id
       JOIN villages v ON v.id = s.village_id
-      LEFT JOIN sensor_nodes sn ON sn.screenhouse_id = s.id
       WHERE ${conditions.join(" AND ")}
-      GROUP BY s.id, u.id, p.name, r.name, d.name, v.name
       ORDER BY s.created_at DESC
       `,
       params
     );
 
-    res.json(result.rows);
+    const screenhouses = result.rows;
+
+    // node_count comes from the monitoring DB (sensor_nodes).
+    const ids = screenhouses.map((s) => s.id);
+    let nodeCountById = {};
+    if (ids.length) {
+      const counts = await monitoringGet(
+        `/stats/node-counts?screenhouseIds=${ids.join(",")}`,
+        []
+      );
+      if (Array.isArray(counts)) {
+        nodeCountById = Object.fromEntries(
+          counts.map((c) => [c.screenhouse_id, c.node_count])
+        );
+      }
+    }
+
+    res.json(
+      screenhouses.map((s) => ({
+        ...s,
+        node_count: nodeCountById[s.id] ?? 0,
+      }))
+    );
   } catch (err) {
     console.log(err);
     res.status(500).json({ message: "Internal server error" });

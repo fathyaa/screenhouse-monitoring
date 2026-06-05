@@ -12,6 +12,7 @@ const { startAlertWorker } = require("./modules/alerting/worker");
 const { attachSocketServer } = require("./modules/realtime/socketServer");
 const sensorRoutes = require("./modules/ingest/routes/sensorRoutes");
 const alertRoutes = require("./modules/alerting/routes/alertRoutes");
+const statsRoutes = require("./modules/stats/routes/statsRoutes");
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.get("/", (req, res) => {
 
 app.use("/sensor-data", sensorRoutes);
 app.use("/alerts", alertRoutes);
+app.use("/stats", statsRoutes);
 
 async function bootstrap() {
   await connectRedis();
