@@ -1,24 +1,64 @@
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Menu } from "lucide-react";
+import L from "leaflet";
 import Sidebar from "../layouts/Sidebar";
-import { POPUP_SENSOR_FIELDS, formatSensorValue } from "../constants/sensorMetrics";
+import OperatorTopbar from "../layouts/OperatorTopbar";
+import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import { API_URL } from "../config/api";
+import { THRESHOLD_METRICS } from "../constants/thresholdMetrics";
+import {
+  getStatusMeta,
+  timeAgo,
+  STATUS_ORDER,
+  SCREENHOUSE_STATUS,
+} from "../constants/screenhouseStatus";
+
+const METRIC_UNIT = Object.fromEntries(
+  THRESHOLD_METRICS.map((m) => [m.key, m.unit])
+);
+
+// Cache divIcon per warna agar tidak dibuat ulang tiap render.
+const ICON_CACHE = {};
+function statusIcon(status) {
+  const { color } = getStatusMeta(status);
+  if (ICON_CACHE[status]) return ICON_CACHE[status];
+
+  const pulse =
+    status === "critical"
+      ? `<span style="position:absolute;top:2px;left:5px;width:18px;height:18px;border-radius:50%;background:${color};opacity:0.45;animation:shPulse 1.4s ease-out infinite;"></span>`
+      : "";
+
+  const icon = L.divIcon({
+    className: "sh-status-marker",
+    html: `
+      <div style="position:relative;width:28px;height:40px;">
+        ${pulse}
+        <svg width="28" height="40" viewBox="0 0 28 40" xmlns="http://www.w3.org/2000/svg">
+          <path d="M14 0C6.27 0 0 6.27 0 14c0 9.5 14 26 14 26s14-16.5 14-26C28 6.27 21.73 0 14 0z" fill="${color}"/>
+          <circle cx="14" cy="14" r="5.5" fill="#ffffff"/>
+        </svg>
+      </div>
+    `,
+    iconSize: [28, 40],
+    iconAnchor: [14, 40],
+    popupAnchor: [0, -36],
+  });
+
+  ICON_CACHE[status] = icon;
+  return icon;
+}
 
 function OperatorDashboard() {
   const navigate = useNavigate();
   const [screenhouses, setScreenhouses] = useState([]);
-  const [time, setTime] = useState(new Date());
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const { isOpen: sidebarOpen, toggle: toggleSidebar, close: closeSidebar } = useSidebarOpen();
   const user = JSON.parse(
     localStorage.getItem("user")
   );
   const [selectedId, setSelectedId] = useState(null);
   const [search, setSearch] = useState("");
-  const [selectedProvince, setSelectedProvince] = useState("");
-  const [selectedDistrict, setSelectedDistrict] = useState("");
-  const [latestSensorData, setLatestSensorData] = useState({});
+  const [mapSummary, setMapSummary] = useState({});
   const mapRef = useRef(null);
   const markerRefs = useRef({});
 
@@ -38,54 +78,50 @@ function OperatorDashboard() {
   }, []);
 
   useEffect(() => {
-    const t = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(t);
+    let active = true;
+
+    const loadSummary = async () => {
+      try {
+        const res = await fetch(`${API_URL}/sensor-data/map-summary`);
+        const data = await res.json();
+        if (!active || !Array.isArray(data)) return;
+        setMapSummary(
+          Object.fromEntries(data.map((item) => [item.screenhouse_id, item]))
+        );
+      } catch (err) {
+        console.log(err);
+      }
+    };
+
+    loadSummary();
+    const interval = setInterval(loadSummary, 30000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
   }, []);
 
-  const provinces = [...new Set(screenhouses.map((sh) => sh.province))];
-
-  const districts = [
-    ...new Set(
-      screenhouses
-        .filter((sh) => !selectedProvince || sh.province === selectedProvince)
-        .map((sh) => sh.district)
-    ),
-  ];
+  const statusCounts = useMemo(() => {
+    const counts = { healthy: 0, warning: 0, critical: 0, offline: 0 };
+    for (const sh of screenhouses) {
+      const status = mapSummary[sh.id]?.status ?? "offline";
+      counts[status] = (counts[status] ?? 0) + 1;
+    }
+    return counts;
+  }, [screenhouses, mapSummary]);
 
   const filteredScreenhouses = screenhouses.filter((sh) => {
     const keyword = search.toLowerCase();
 
-    const matchSearch =
+    return (
       sh.name?.toLowerCase().includes(keyword) ||
       sh.owner_name?.toLowerCase().includes(keyword) ||
       sh.address_detail?.toLowerCase().includes(keyword) ||
       sh.village?.toLowerCase().includes(keyword) ||
       sh.district?.toLowerCase().includes(keyword) ||
-      sh.province?.toLowerCase().includes(keyword);
-
-    const matchProvince = !selectedProvince || sh.province === selectedProvince;
-
-    const matchDistrict = !selectedDistrict || sh.district === selectedDistrict;
-
-    return matchSearch && matchProvince && matchDistrict;
+      sh.province?.toLowerCase().includes(keyword)
+    );
   });
-
-  const fetchLatestSensorData = async (screenhouseId) => {
-    try {
-      const response = await fetch(
-        `${API_URL}/sensor-data/latest/${screenhouseId}`
-      );
-
-      const data = await response.json();
-
-      setLatestSensorData((prev) => ({
-        ...prev,
-        [screenhouseId]: data,
-      }));
-    } catch (err) {
-      console.log(err);
-    }
-  };
 
   const focusScreenhouse = (screenhouse) => {
     setSelectedId(screenhouse.id);
@@ -103,55 +139,24 @@ function OperatorDashboard() {
 
   return (
     // fixed inset-0 = fullscreen tanpa scroll, tidak terpengaruh elemen luar
-    <div className="fixed inset-0 flex bg-slate-100 overflow-hidden">
-      {/* SIDEBAR */}
+    <div className="app-shell fixed inset-0 flex bg-slate-100 overflow-hidden">
       <Sidebar
         isOpen={sidebarOpen}
+        onClose={closeSidebar}
         screenhouses={screenhouses}
         role={user.role}
         user={user}
       />
 
-      {/* MAIN */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        {/* TOPBAR */}
-        <header className="h-14 shrink-0 bg-white border-b border-gray-200 flex items-center justify-between px-5 z-10">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-1.5 rounded-lg hover:bg-gray-100 transition"
-              aria-label="Toggle sidebar"
-            >
-              <Menu size={20} className="text-gray-500" />
-            </button>
-            <div>
-              <div className="text-sm font-semibold text-gray-800 text-left">
-                Dashboard operator
-              </div>
-              <div className="text-xs text-gray-400">
-                Monitoring realtime · Jawa Barat
-              </div>
-            </div>
-          </div>
+        <OperatorTopbar
+          onToggleSidebar={toggleSidebar}
+          title="Dashboard operator"
+          subtitle="Monitoring realtime · peta screenhouse"
+        />
 
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-green-50 text-green-800 text-xs font-medium px-3 py-1.5 rounded-full">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              Online
-            </div>
-            <div className="text-sm font-semibold text-gray-700 tabular-nums">
-              {time.toLocaleTimeString("id-ID", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </div>
-          </div>
-        </header>
-
-        {/* BODY */}
-        <div className="flex flex-1 overflow-hidden">
-          {/* MAP */}
-          <div className="flex-1 relative overflow-hidden">
+        <div className="flex flex-1 flex-col lg:flex-row overflow-hidden min-h-0">
+          <div className="dashboard-map flex-1 relative overflow-hidden min-h-[45dvh] lg:min-h-0 isolate z-0">
             <MapContainer
               center={[-6.9175, 106.9287]}
               zoom={10}
@@ -163,170 +168,214 @@ function OperatorDashboard() {
                 attribution="&copy; OpenStreetMap"
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
-              {filteredScreenhouses.map((sh) => (
-                <Marker
-                  key={sh.id}
-                  position={[sh.latitude, sh.longitude]}
-                  eventHandlers={{
-                    popupopen: () => fetchLatestSensorData(sh.id),
-                  }}
-                  ref={(ref) => {
-                    markerRefs.current[sh.id] = ref;
-                  }}
-                >
-                  <Popup>
-                    <div className="min-w-[220px]">
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/operator/screenhouse/${sh.id}`)}
-                        className="text-base font-bold text-emerald-700 hover:text-emerald-900 hover:underline text-left w-full"
-                      >
-                        {sh.name}
-                      </button>
-                      <p className="text-[10px] text-emerald-600 mt-0.5">
-                        Klik nama untuk dashboard detail →
-                      </p>
+              {filteredScreenhouses.map((sh) => {
+                const summary = mapSummary[sh.id];
+                const status = summary?.status ?? "offline";
+                const meta = getStatusMeta(status);
+                const abnormal = summary?.abnormal ?? [];
 
-                      {sh.owner_name && (
-                        <p className="text-xs text-slate-500 mt-1">
-                          👤 {sh.owner_name}
+                return (
+                  <Marker
+                    key={sh.id}
+                    position={[sh.latitude, sh.longitude]}
+                    icon={statusIcon(status)}
+                    ref={(ref) => {
+                      markerRefs.current[sh.id] = ref;
+                    }}
+                  >
+                    <Popup>
+                      <div className="min-w-[240px]">
+                        <div className="flex items-start justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/operator/screenhouse/${sh.id}`)}
+                            className="text-base font-bold text-emerald-700 hover:text-emerald-900 hover:underline text-left"
+                          >
+                            {sh.name}
+                          </button>
+                          <span
+                            className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold ${meta.badgeClass}`}
+                          >
+                            {meta.label}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-emerald-600 mt-0.5">
+                          Klik nama untuk dashboard detail →
                         </p>
-                      )}
 
-                      <p className="text-xs text-slate-500 mt-1">
-                        📍{" "}
-                        {[sh.address_detail, sh.village, sh.district]
-                          .filter(Boolean)
-                          .join(", ")}
-                      </p>
-
-                      {/* SENSOR */}
-
-                      <div className="mt-4 space-y-2">
-                        {!latestSensorData[sh.id] && (
-                          <div className="text-xs text-slate-400">
-                            Memuat data sensor...
-                          </div>
+                        {sh.owner_name && (
+                          <p className="text-xs text-slate-500 mt-1">
+                            👤 {sh.owner_name}
+                          </p>
                         )}
 
-                        {latestSensorData[sh.id] && (
-                          <>
-                            <div className="grid grid-cols-2 gap-2">
-                              {POPUP_SENSOR_FIELDS.map(({ key, label, unit }) => (
-                                <div key={key} className="bg-slate-50 rounded-lg p-2">
-                                  <p className="text-[10px] text-slate-400 uppercase">{label}</p>
-                                  <p className="text-sm font-bold text-slate-700">
-                                    {formatSensorValue(latestSensorData[sh.id][key], unit)}
-                                  </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          📍{" "}
+                          {[sh.address_detail, sh.village, sh.district]
+                            .filter(Boolean)
+                            .join(", ")}
+                        </p>
+
+                        {/* INSIGHT */}
+                        <div className="mt-3 space-y-2">
+                          {!summary && (
+                            <div className="text-xs text-slate-400">
+                              Memuat status...
+                            </div>
+                          )}
+
+                          {summary && (
+                            <>
+                              <div
+                                className={`rounded-lg px-3 py-2 text-xs font-medium ${meta.badgeClass}`}
+                              >
+                                {summary.insight}
+                              </div>
+
+                              <div className="flex items-center justify-between text-[11px] text-slate-500">
+                                <span className="flex items-center gap-1">
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full ${meta.dotClass}`}
+                                  />
+                                  {status === "offline"
+                                    ? `Offline · ${timeAgo(summary.last_seen)}`
+                                    : `Update ${timeAgo(summary.last_seen)}`}
+                                </span>
+                                {summary.active_alerts > 0 && (
+                                  <span className="text-red-600 font-semibold">
+                                    {summary.active_alerts} alert aktif
+                                  </span>
+                                )}
+                              </div>
+
+                              {abnormal.length > 0 ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {abnormal.map((a) => (
+                                    <span
+                                      key={a.key}
+                                      className="inline-flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-md px-1.5 py-0.5 text-[10px] text-slate-600"
+                                    >
+                                      <span
+                                        className={
+                                          a.direction === "high"
+                                            ? "text-red-500"
+                                            : "text-amber-500"
+                                        }
+                                      >
+                                        {a.direction === "high" ? "▲" : "▼"}
+                                      </span>
+                                      {a.label}: {a.value}
+                                      {METRIC_UNIT[a.key] || ""}
+                                      <span className="text-slate-400">
+                                        (≤{a.max}
+                                        {METRIC_UNIT[a.key] || ""})
+                                      </span>
+                                    </span>
+                                  ))}
                                 </div>
-                              ))}
-                            </div>
-                            {latestSensorData[sh.id].node_name && (
-                              <p className="text-[10px] text-slate-400 mt-1">
-                                Node: {latestSensorData[sh.id].node_name}
-                              </p>
-                            )}
+                              ) : (
+                                status !== "offline" &&
+                                summary.has_threshold && (
+                                  <p className="text-[11px] text-emerald-600">
+                                    ✓ Semua parameter dalam batas normal
+                                  </p>
+                                )
+                              )}
 
-                            <div
-                              className="mt-3 bg-emerald-50 text-emerald-700 rounded-lg py-2 text-center text-xs font-medium"
-                            >
-                              Device Online
-                            </div>
-                          </>
-                        )}
+                              {summary.node_name && (
+                                <p className="text-[10px] text-slate-400">
+                                  Node: {summary.node_name}
+                                </p>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </Popup>
-                </Marker>
-              ))}
+                    </Popup>
+                  </Marker>
+                );
+              })}
             </MapContainer>
+
+            {/* LEGEND */}
+            <div className="absolute bottom-3 left-3 sm:bottom-4 sm:left-4 z-[500] bg-white/95 backdrop-blur rounded-xl shadow-lg border border-gray-200 px-3 py-2.5 max-w-[calc(100%-1.5rem)]">
+              <div className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-1.5">
+                Status screenhouse
+              </div>
+              <div className="space-y-1">
+                {STATUS_ORDER.map((key) => {
+                  const meta = SCREENHOUSE_STATUS[key];
+                  return (
+                    <div key={key} className="flex items-center gap-2 text-xs text-gray-600">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full"
+                        style={{ backgroundColor: meta.color }}
+                      />
+                      <span className="flex-1">{meta.label}</span>
+                      <span className="tabular-nums font-medium text-gray-500">
+                        {statusCounts[key]}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           {/* LIST PANEL KANAN */}
-          <div className="w-[320px] shrink-0 border-l border-gray-200 bg-white flex flex-col overflow-hidden">
-            <div className="px-4 py-3border-gray-100">
-              <div className="px-4 py-4 border-b border-gray-100 space-y-3">
-                <div>
-                  <div
-                    className="text-xs uppercase tracking-widest text-gray-400 font-medium mb-3"
-                  >
-                    Daftar screenhouse
-                  </div>
-
-                  <input
-                    type="text"
-                    placeholder="Cari nama, owner, alamat..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-green-100 focus:border-green-300"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <select
-                    value={selectedProvince}
-                    onChange={(e) => {
-                      setSelectedProvince(e.target.value);
-
-                      setSelectedDistrict("");
-                    }}
-                    className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-green-100"
-                  >
-                    <option value="">Provinsi</option>
-
-                    {provinces.map((province) => (
-                      <option key={province} value={province}>
-                        {province}
-                      </option>
-                    ))}
-                  </select>
-
-                  <select
-                    value={selectedDistrict}
-                    onChange={(e) => setSelectedDistrict(e.target.value)}
-                    className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-green-100"
-                  >
-                    <option value="">Kabupaten</option>
-
-                    {districts.map((district) => (
-                      <option key={district} value={district}>
-                        {district}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+          <div className="w-full lg:w-[320px] shrink-0 border-t lg:border-t-0 lg:border-l border-gray-200 bg-white flex flex-col overflow-hidden max-h-[45dvh] lg:max-h-none">
+            <div className="px-4 py-4 border-b border-gray-100">
+              <div className="text-xs uppercase tracking-widest text-gray-400 font-medium mb-3">
+                Daftar screenhouse
               </div>
+              <input
+                type="text"
+                placeholder="Cari nama, owner, alamat..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-green-100 focus:border-green-300"
+              />
             </div>
             <div className="flex-1 overflow-y-auto p-2">
-              {filteredScreenhouses.map((sh, i) => (
-                <div
-                  key={sh.id}
-                  onClick={() => focusScreenhouse(sh)}
-                  className={`
-                    flex items-center gap-3 p-3 rounded-xl cursor-pointer mb-1
-                    border transition
-                    ${selectedId === sh.id
-                      ? "bg-green-50 border-green-200"
-                      : "border-transparent hover:bg-gray-50"
-                    }
-                  `}
-                >
-                  <div className="w-7 h-7 rounded-lg bg-[#1e4d2b] text-white text-xs font-medium flex items-center justify-center shrink-0">
-                    {i + 1}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-800 truncate">
-                      {sh.name}
+              {filteredScreenhouses.map((sh, i) => {
+                const status = mapSummary[sh.id]?.status ?? "offline";
+                const meta = getStatusMeta(status);
+                return (
+                  <div
+                    key={sh.id}
+                    onClick={() => focusScreenhouse(sh)}
+                    className={`
+                      flex items-center gap-3 p-3 rounded-xl cursor-pointer mb-1
+                      border transition
+                      ${selectedId === sh.id
+                        ? "bg-green-50 border-green-200"
+                        : "border-transparent hover:bg-gray-50"
+                      }
+                    `}
+                  >
+                    <div className="relative w-7 h-7 rounded-lg bg-[#1e4d2b] text-white text-xs font-medium flex items-center justify-center shrink-0">
+                      {i + 1}
+                      <span
+                        className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white"
+                        style={{ backgroundColor: meta.color }}
+                      />
                     </div>
-                    <div className="text-xs text-gray-400 truncate mt-0.5">
-                      {[sh.village, sh.district].filter(Boolean).join(", ")}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-gray-800 truncate">
+                        {sh.name}
+                      </div>
+                      <div className="text-xs text-gray-400 truncate mt-0.5">
+                        {[sh.village, sh.district].filter(Boolean).join(", ")}
+                      </div>
                     </div>
+                    <span
+                      className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${meta.badgeClass}`}
+                    >
+                      {meta.label}
+                    </span>
                   </div>
-                  <span className="text-xs font-medium bg-green-50 text-green-700 px-2 py-0.5 rounded-full shrink-0">
-                    Aktif
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

@@ -1,11 +1,14 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { AlertProvider } from "./context/AlertContext";
+import PwaInstallBanner from "./components/PwaInstallBanner";
 import "./App.css";
 
 import OperatorDashboard from "./pages/OperatorDashboard";
+import OperatorLaporanPage from "./pages/OperatorLaporanPage";
 import ScreenhouseDetailPage from "./pages/ScreenhouseDetailPage";
 import PetaniDashboard from "./pages/PetaniDashboard";
+import PetaniTrenPage from "./pages/PetaniTrenPage";
 import NotifikasiPage from "./pages/NotifikasiPage";
 import ApprovalPage from "./pages/ApprovalPage";
 import FarmerScreenhousesPage from "./pages/FarmerScreenhousesPage";
@@ -29,8 +32,13 @@ const SUPER_ADMIN = ["super_admin"];
 const OPERATOR = ["operator", "super_admin"];
 
 function AppRoutes() {
+  const location = useLocation();
+  const showPwaBanner = location.pathname.startsWith("/petani");
+
   return (
-    <Routes>
+    <>
+      {showPwaBanner && <PwaInstallBanner />}
+      <Routes>
       {/* PUBLIC */}
       <Route path="/" element={<LoginPage />} />
       <Route path="/login" element={<LoginPage />} />
@@ -39,11 +47,14 @@ function AppRoutes() {
 
       {/* PETANI */}
       <Route path="/petani" element={<PrivateRoute allowedRole="petani"><PetaniDashboard /></PrivateRoute>} />
+      <Route path="/petani/tren" element={<PrivateRoute allowedRole="petani"><PetaniTrenPage /></PrivateRoute>} />
       <Route path="/petani/screenhouse/:id" element={<PrivateRoute allowedRole="petani"><ScreenhouseDetailPage basePath="/petani" /></PrivateRoute>} />
-      <Route path="/petani/notifikasi" element={<PrivateRoute allowedRole="petani"><NotifikasiPage /></PrivateRoute>} />
+      <Route path="/petani/peringatan" element={<PrivateRoute allowedRole="petani"><NotifikasiPage /></PrivateRoute>} />
+      <Route path="/petani/notifikasi" element={<Navigate to="/petani/peringatan" replace />} />
 
       {/* OPERATOR (+ super_admin) */}
       <Route path="/operator" element={<PrivateRoute allowedRoles={OPERATOR}><OperatorDashboard /></PrivateRoute>} />
+      <Route path="/operator/laporan" element={<PrivateRoute allowedRoles={OPERATOR}><OperatorLaporanPage /></PrivateRoute>} />
       <Route path="/operator/screenhouse/:id" element={<PrivateRoute allowedRoles={OPERATOR}><ScreenhouseDetailPage basePath="/operator" /></PrivateRoute>} />
       <Route path="/operator/approval" element={<PrivateRoute allowedRoles={OPERATOR}><ApprovalPage /></PrivateRoute>} />
       <Route path="/operator/approval/petani/:userId" element={<PrivateRoute allowedRoles={OPERATOR}><FarmerScreenhousesPage /></PrivateRoute>} />
@@ -56,7 +67,8 @@ function AppRoutes() {
 
       {/* FALLBACK */}
       <Route path="*" element={<Navigate to="/login" replace />} />
-    </Routes>
+      </Routes>
+    </>
   );
 }
 

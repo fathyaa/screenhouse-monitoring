@@ -168,7 +168,7 @@ async function resolveFromCoordinates(req, res) {
     if (!matched) {
       return res.status(404).json({
         message:
-          "Wilayah belum tersedia di sistem. Pilih titik di Jawa Barat (area Sukabumi/Bogor/Cianjur) atau hubungi operator.",
+          "Wilayah belum tersedia di sistem. Untuk demo, pilih titik di Kabupaten Sukabumi (Kec. Cisaat atau Kadudampit) — atau jalankan import wilayah lengkap.",
         display_name: data.display_name,
       });
     }

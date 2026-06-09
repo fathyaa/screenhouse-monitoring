@@ -1,6 +1,8 @@
 const pool = require("../../config/db");
 const { THRESHOLD_METRICS } = require("./thresholdMetrics");
 const { subscriber, publisher } = require("../../config/redis");
+const { setActuators } = require("../ingest/actuatorService");
+const { resolveActuatorActions } = require("../../shared/actuatorRules");
 
 const SNAPSHOT_FIELDS = [
   "min_nitrogen", "max_nitrogen",
@@ -107,6 +109,8 @@ async function handleSensorDataCreated(message) {
   const threshold = thresholdResult.rows[0];
   if (!threshold) return console.log("Threshold snapshot tidak ditemukan");
 
+  const violations = [];
+
   for (const m of THRESHOLD_METRICS) {
     const value = sensorData[m.key];
     if (value == null) continue;
@@ -115,6 +119,7 @@ async function handleSensorDataCreated(message) {
     const max = threshold[m.maxCol];
 
     if (min != null && Number(value) < Number(min)) {
+      violations.push({ key: m.key, direction: "low", label: m.label });
       await createAlert({
         sensorDataId,
         screenhouseId,
@@ -123,12 +128,34 @@ async function handleSensorDataCreated(message) {
       });
     }
     if (max != null && Number(value) > Number(max)) {
+      violations.push({ key: m.key, direction: "high", label: m.label });
       await createAlert({
         sensorDataId,
         screenhouseId,
         sensorNodeId,
         message: `${m.label} melebihi batas maksimum`,
       });
+    }
+  }
+
+  if (violations.length) {
+    const actions = resolveActuatorActions(violations);
+    if (Object.keys(actions).length) {
+      try {
+        const reason = violations.map((v) => v.label).join(", ");
+        await setActuators({
+          screenhouseId: Number(screenhouseId),
+          sensorNodeId: Number(sensorNodeId),
+          fan: actions.fan,
+          irrigation: actions.irrigation,
+          lamp: actions.lamp,
+          source: "auto",
+          reason: `Alert: ${reason}`,
+        });
+        console.log("[auto-actuator]", screenhouseId, actions);
+      } catch (err) {
+        console.error("[auto-actuator]", err.message);
+      }
     }
   }
 }

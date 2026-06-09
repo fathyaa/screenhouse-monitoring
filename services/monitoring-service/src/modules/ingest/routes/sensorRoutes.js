@@ -4,10 +4,12 @@ const {
   getSensorData,
   getLatestSensorData,
   getLatestAllSensorData,
+  getMapSummary,
   getSensorNodesByScreenhouse,
   getScreenhouseSensorHistory,
   getScreenhouseDashboardSummary,
 } = require("../controllers/sensorController");
+const { postScreenhouseActuators } = require("../controllers/actuatorController");
 
 const router = express.Router();
 
@@ -27,6 +29,11 @@ router.get(
   "/screenhouse/:screenhouseId/sensors",
   getSensorNodesByScreenhouse
 );
+router.post(
+  "/screenhouse/:screenhouseId/actuators",
+  postScreenhouseActuators
+);
+router.get("/map-summary", getMapSummary);
 router.get("/latest/:screenhouseId", getLatestSensorData);
 router.get("/latest", getLatestAllSensorData);
 router.get("/", getSensorData);

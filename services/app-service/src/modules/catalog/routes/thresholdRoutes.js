@@ -5,6 +5,7 @@ const {
   listThresholds,
   getThreshold,
   upsertThreshold,
+  bulkUpsertThreshold,
 } = require("../controllers/thresholdController");
 
 const router = express.Router();
@@ -15,6 +16,13 @@ router.get(
   authMiddleware,
   roleMiddleware(adminRoles),
   listThresholds
+);
+
+router.put(
+  "/bulk",
+  authMiddleware,
+  roleMiddleware(adminRoles),
+  bulkUpsertThreshold
 );
 
 router.get(

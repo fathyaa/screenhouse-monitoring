@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard,
   Map,
@@ -6,31 +6,32 @@ import {
   Leaf,
   Wifi,
   CheckCircle,
-  Bell,
   LogOut,
   User,
   SlidersHorizontal,
+  TrendingUp,
+  FileBarChart,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useAlerts } from "../context/AlertContext";
 import { disconnectSocket } from "../lib/socket";
 
 import { API_URL } from "../config/api";
 
-function Sidebar({ isOpen, screenhouses = [], role = "operator", user }) {
+function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { activeCount } = useAlerts();
   const [footerStats, setFooterStats] = useState({ screenhouseCount: 0, deviceCount: 0 });
+  const [pendingApprovals, setPendingApprovals] = useState(0);
 
   const menusByRole = {
     operator: [
       { icon: <LayoutDashboard size={17} />, label: "Dashboard", path: "/operator" },
+      { icon: <FileBarChart size={17} />, label: "Laporan Wilayah", path: "/operator/laporan" },
       { icon: <Map size={17} />, label: "Approval Petani", path: "/operator/approval" },
     ],
     petani: [
       { icon: <LayoutDashboard size={17} />, label: "Dashboard", path: "/petani" },
-      { icon: <Bell size={17} />, label: "Notifikasi", path: "/petani/notifikasi", badge: activeCount },
+      { icon: <TrendingUp size={17} />, label: "Tren Tanah", path: "/petani/tren" },
     ],
     super_admin: [
       { icon: <User size={17} />, label: "Kelola User", path: "/admin/kelola-user" },
@@ -38,14 +39,57 @@ function Sidebar({ isOpen, screenhouses = [], role = "operator", user }) {
       { icon: <SlidersHorizontal size={17} />, label: "Kelola Threshold", path: "/admin/kelola-threshold" },
       { icon: <Radio size={17} />, label: "Konfigurasi", path: "/admin/konfigurasi" },
       { icon: <LayoutDashboard size={17} />, label: "Dashboard Operator", path: "/operator" },
+      { icon: <FileBarChart size={17} />, label: "Laporan Wilayah", path: "/operator/laporan" },
       { icon: <Map size={17} />, label: "Approval Petani", path: "/operator/approval" },
     ],
   };
 
-  const menus = menusByRole[role] || menusByRole.operator;
+  const fetchPendingApprovals = useCallback(() => {
+    if (role !== "operator" && role !== "super_admin") {
+      setPendingApprovals(0);
+      return;
+    }
+    const token = localStorage.getItem("token");
+    if (!token) return;
 
-  const isActive = (path) =>
-    location.pathname === path || location.pathname.startsWith(`${path}/`);
+    fetch(`${API_URL}/auth/stats`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setPendingApprovals(data.pending ?? 0);
+      })
+      .catch(console.error);
+  }, [role]);
+
+  const menus = useMemo(() => {
+    const base = menusByRole[role] || menusByRole.operator;
+    return base.map((item) =>
+      item.path === "/operator/approval"
+        ? { ...item, badge: pendingApprovals }
+        : item
+    );
+  }, [role, pendingApprovals]);
+
+  const activePath = menus
+    .map((m) => m.path)
+    .filter(
+      (path) =>
+        location.pathname === path || location.pathname.startsWith(`${path}/`)
+    )
+    .sort((a, b) => b.length - a.length)[0];
+
+  const isActive = (path) => path === activePath;
+
+  useEffect(() => {
+    fetchPendingApprovals();
+    window.addEventListener("approval-changed", fetchPendingApprovals);
+    const interval = setInterval(fetchPendingApprovals, 60000);
+    return () => {
+      window.removeEventListener("approval-changed", fetchPendingApprovals);
+      clearInterval(interval);
+    };
+  }, [fetchPendingApprovals]);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -95,6 +139,13 @@ function Sidebar({ isOpen, screenhouses = [], role = "operator", user }) {
       ? footerStats.deviceCount
       : footerStats.deviceCount;
 
+  const handleNavigate = (path) => {
+    navigate(path);
+    if (window.matchMedia("(max-width: 1023px)").matches) {
+      onClose?.();
+    }
+  };
+
   const handleLogout = () => {
     disconnectSocket();
     localStorage.removeItem("token");
@@ -102,10 +153,34 @@ function Sidebar({ isOpen, screenhouses = [], role = "operator", user }) {
     localStorage.removeItem("user");
     window.dispatchEvent(new Event("auth-changed"));
     navigate("/login");
+    onClose?.();
   };
 
   return (
-    <aside className={`h-full flex flex-col bg-[#0f2d18] text-white transition-all duration-300 overflow-hidden shrink-0 text-left ${isOpen ? "w-[280px]" : "w-0"}`}>
+    <>
+      {isOpen && (
+        <button
+          type="button"
+          aria-label="Tutup menu"
+          className="fixed inset-0 z-[990] bg-black/40 lg:hidden"
+          onClick={onClose}
+        />
+      )}
+
+      <aside
+        className={`
+          fixed lg:relative inset-y-0 left-0 z-[1000] lg:z-auto
+          h-full w-[min(280px,85vw)] lg:w-[280px]
+          flex flex-col bg-[#0f2d18] text-white shrink-0 text-left
+          transition-transform duration-300 lg:transition-all
+          overflow-hidden
+          ${isOpen ? "translate-x-0 lg:w-[280px]" : "-translate-x-full lg:translate-x-0 lg:w-0"}
+        `}
+        style={{
+          paddingTop: "env(safe-area-inset-top)",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
+      >
 
       {/* BRAND */}
       <div className="h-16 px-5 flex items-center gap-3 border-b border-white/10 shrink-0">
@@ -132,7 +207,7 @@ function Sidebar({ isOpen, screenhouses = [], role = "operator", user }) {
           return (
             <button
               key={path}
-              onClick={() => navigate(path)}
+              onClick={() => handleNavigate(path)}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium whitespace-nowrap transition w-full text-left ${active ? "bg-[#1e4d2b] text-white" : "text-white/55 hover:bg-white/5 hover:text-white"}`}
             >
               {icon}
@@ -181,7 +256,8 @@ function Sidebar({ isOpen, screenhouses = [], role = "operator", user }) {
           <LogOut size={16} />Logout
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
 

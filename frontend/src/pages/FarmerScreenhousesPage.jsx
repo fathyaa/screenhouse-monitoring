@@ -2,13 +2,14 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ChevronRight, Leaf, MapPin, Menu, Phone, User } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
+import { useSidebarOpen } from "../hooks/useSidebarOpen";
 
 import { API_URL } from "../config/api";
 
 function FarmerScreenhousesPage() {
   const { userId } = useParams();
   const navigate = useNavigate();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const { isOpen: sidebarOpen, toggle: toggleSidebar, close: closeSidebar } = useSidebarOpen();
   const [loading, setLoading] = useState(true);
   const [farmer, setFarmer] = useState(null);
   const [screenhouses, setScreenhouses] = useState([]);
@@ -47,21 +48,22 @@ function FarmerScreenhousesPage() {
   };
 
   return (
-    <div className="fixed inset-0 flex bg-slate-100 overflow-hidden text-left">
-      <Sidebar isOpen={sidebarOpen} role={user?.role} user={user} />
+    <div className="app-shell fixed inset-0 flex bg-slate-100 overflow-hidden text-left">
+      <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} role={user?.role} user={user} />
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0 text-left">
-        <header className="h-14 shrink-0 bg-white border-b border-gray-200 flex items-center justify-between px-5 z-10">
-          <div className="flex items-center gap-3">
+        <header className="app-topbar h-14 shrink-0 bg-white border-b border-gray-200 flex items-center justify-between z-10">
+          <div className="flex items-center gap-3 min-w-0">
             <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-1.5 rounded-lg hover:bg-gray-100 transition"
+              onClick={toggleSidebar}
+              className="p-1.5 rounded-lg hover:bg-gray-100 transition shrink-0"
+              aria-label="Toggle sidebar"
             >
               <Menu size={20} className="text-gray-500" />
             </button>
-            <div>
-              <div className="text-sm font-semibold text-gray-800">Screenhouse milik petani</div>
-              <div className="text-xs text-gray-400">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-gray-800 truncate">Screenhouse milik petani</div>
+              <div className="text-xs text-gray-400 truncate">
                 {farmer?.name ? `Daftar screenhouse ${farmer.name}` : "Memuat..."}
               </div>
             </div>

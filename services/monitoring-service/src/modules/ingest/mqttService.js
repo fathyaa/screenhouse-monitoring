@@ -1,5 +1,5 @@
-const mqtt = require("mqtt");
 const pool = require("../../config/db");
+const { getMqttClient } = require("../../config/mqttClient");
 const { redisClient } = require("../../config/redis");
 
 const INSERT_SENSOR_DATA = `
@@ -65,7 +65,11 @@ async function resolveSensorNode(screenhouseIdFromTopic, data, topicParts) {
 }
 
 function connectMQTT() {
-  const client = mqtt.connect(process.env.MQTT_BROKER_URL);
+  const client = getMqttClient();
+  if (!client) {
+    console.warn("[mqtt] MQTT_BROKER_URL not set — ingest disabled");
+    return;
+  }
 
   client.on("connect", () => {
     console.log("Connected to MQTT Broker");

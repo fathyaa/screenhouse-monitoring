@@ -64,20 +64,18 @@ function LoginPage() {
     };
 
     return (
-        <div className="fixed inset-0 flex">
+        <div className="app-shell fixed inset-0 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
 
-            {/* KIRI — foto + gradasi */}
-            <div className="flex-1 relative overflow-hidden">
+            {/* Hero — desktop only */}
+            <div className="hidden lg:flex flex-1 relative overflow-hidden">
                 <img
                     src="https://images.unsplash.com/photo-1625246333195-78d9c38ad449?q=80&w=1974&auto=format&fit=crop"
                     alt="Sawah"
                     className="absolute inset-0 w-full h-full object-cover"
                 />
-                {/* Gradasi dari kiri (nyambung ke form) + gelap di bawah untuk teks */}
                 <div className="absolute inset-0 bg-gradient-to-r from-[#0f2d18]/85 via-[#0f2d18]/50 to-[#0a2312]/15" />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0a2312]/80 via-transparent to-transparent" />
 
-                {/* Teks di kanan bawah */}
                 <div className="absolute bottom-0 left-0 p-10 max-w-4xl text-left">
                     <div className="text-5xl font-bold text-white leading-snug mb-3">
                         Monitoring Screenhouse<br />Pembibitan Padi UPTD Mektan
@@ -88,8 +86,19 @@ function LoginPage() {
                 </div>
             </div>
 
-            {/* KANAN — form */}
-            <div className="w-[360px] shrink-0 bg-white flex flex-col justify-center px-8 py-10 overflow-y-auto">
+            {/* Brand bar — mobile */}
+            <div className="lg:hidden bg-[#0f2d18] px-5 py-4 text-white shrink-0">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-[#1e4d2b] flex items-center justify-center text-lg">🌾</div>
+                    <div>
+                        <div className="text-base font-bold">Screenhouse Monitoring</div>
+                        <div className="text-xs text-white/60">UPTD Mektan · Jawa Barat</div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Form */}
+            <div className="w-full lg:w-[360px] shrink-0 bg-white flex flex-col justify-center px-6 sm:px-8 py-8 lg:py-10 overflow-y-auto flex-1 lg:flex-none">
 
                 <div className="text-lg font-semibold text-gray-800">Masuk ke akun</div>
                 <div className="text-xs text-gray-400 mt-1 mb-6">Gunakan nomor HP dan kata sandi yang terdaftar</div>

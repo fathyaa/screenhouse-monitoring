@@ -33,8 +33,11 @@ function alertBelongsToCurrentUser(alert) {
 
 export function AlertProvider({ children }) {
   const [alerts, setAlerts] = useState([]);
-  const [activeCount, setActiveCount] = useState(0);
   const [alertsLoading, setAlertsLoading] = useState(true);
+
+  const activeCount = alerts.filter((a) => a.status === "active").length;
+  const resolvedCount = alerts.filter((a) => a.status === "resolved").length;
+  const totalCount = alerts.length;
 
   const loadAlerts = useCallback(() => {
     const role = localStorage.getItem("role");
@@ -42,7 +45,6 @@ export function AlertProvider({ children }) {
 
     if (!authToken || role !== "petani") {
       setAlerts([]);
-      setActiveCount(0);
       setAlertsLoading(false);
       return;
     }
@@ -66,7 +68,6 @@ export function AlertProvider({ children }) {
           return;
         }
         setAlerts(data);
-        setActiveCount(data.filter((a) => a.status === "active").length);
       })
       .catch((err) => console.error("[alerts] fetch gagal", err))
       .finally(() => setAlertsLoading(false));
@@ -110,7 +111,6 @@ export function AlertProvider({ children }) {
           if (exists) return prev;
           return [newAlert, ...prev];
         });
-        setActiveCount((prev) => prev + 1);
       } else {
         loadAlerts();
       }
@@ -126,7 +126,7 @@ export function AlertProvider({ children }) {
                 <TriangleAlert size={18} className="text-red-600" />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-gray-800">Alert Baru</div>
+                <div className="text-sm font-semibold text-gray-800">Peringatan baru</div>
                 <div className="text-xs text-gray-500 mt-1 truncate">{newAlert.message}</div>
                 <div className="text-xs text-gray-400 mt-0.5">{newAlert.screenhouse_name}</div>
               </div>
@@ -163,14 +163,23 @@ export function AlertProvider({ children }) {
             : a
         )
       );
-      setActiveCount((prev) => Math.max(0, prev - 1));
     } catch {
-      toast.error("Gagal resolve alert");
+      toast.error("Gagal menandai peringatan sudah ditangani");
     }
   };
 
   return (
-    <AlertContext.Provider value={{ alerts, activeCount, alertsLoading, resolveAlert, refetchAlerts: loadAlerts }}>
+    <AlertContext.Provider
+      value={{
+        alerts,
+        activeCount,
+        resolvedCount,
+        totalCount,
+        alertsLoading,
+        resolveAlert,
+        refetchAlerts: loadAlerts,
+      }}
+    >
       {children}
     </AlertContext.Provider>
   );
@@ -179,6 +188,8 @@ export function AlertProvider({ children }) {
 const defaultAlertsContext = {
   alerts: [],
   activeCount: 0,
+  resolvedCount: 0,
+  totalCount: 0,
   alertsLoading: false,
   resolveAlert: async () => {},
   refetchAlerts: async () => {},

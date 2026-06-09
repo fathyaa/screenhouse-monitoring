@@ -100,51 +100,89 @@ async function getThreshold(req, res) {
   }
 }
 
+async function upsertThresholdForScreenhouse(screenhouseId, body, client = pool) {
+  const shCheck = await client.query(
+    `SELECT id FROM screenhouses WHERE id = $1 AND status = 'active'`,
+    [screenhouseId]
+  );
+  if (!shCheck.rows[0]) {
+    const err = new Error("Screenhouse tidak ditemukan");
+    err.status = 404;
+    throw err;
+  }
+
+  const values = THRESHOLD_FIELDS.map((f) => body[f] ?? null);
+  const existing = await client.query(
+    `SELECT id FROM thresholds WHERE screenhouse_id = $1`,
+    [screenhouseId]
+  );
+
+  let result;
+  if (existing.rows[0]) {
+    const setClause = THRESHOLD_FIELDS.map((f, i) => `${f} = $${i + 1}`).join(", ");
+    result = await client.query(
+      `UPDATE thresholds SET ${setClause} WHERE screenhouse_id = $${THRESHOLD_FIELDS.length + 1} RETURNING *`,
+      [...values, screenhouseId]
+    );
+  } else {
+    const cols = ["screenhouse_id", ...THRESHOLD_FIELDS].join(", ");
+    const placeholders = THRESHOLD_FIELDS.map((_, i) => `$${i + 2}`).join(", ");
+    result = await client.query(
+      `INSERT INTO thresholds (${cols}) VALUES ($1, ${placeholders}) RETURNING *`,
+      [screenhouseId, ...values]
+    );
+  }
+
+  await publishEvent("threshold.updated", {
+    screenhouse_id: Number(screenhouseId),
+    ...result.rows[0],
+  });
+
+  return result.rows[0];
+}
+
 async function upsertThreshold(req, res) {
   try {
     const { screenhouseId } = req.params;
-    const body = req.body;
-
-    const shCheck = await pool.query(
-      `SELECT id FROM screenhouses WHERE id = $1 AND status = 'active'`,
-      [screenhouseId]
-    );
-    if (!shCheck.rows[0]) {
-      return res.status(404).json({ message: "Screenhouse tidak ditemukan" });
-    }
-
-    const values = THRESHOLD_FIELDS.map((f) => body[f] ?? null);
-    const existing = await pool.query(
-      `SELECT id FROM thresholds WHERE screenhouse_id = $1`,
-      [screenhouseId]
-    );
-
-    let result;
-    if (existing.rows[0]) {
-      const setClause = THRESHOLD_FIELDS.map((f, i) => `${f} = $${i + 1}`).join(", ");
-      result = await pool.query(
-        `UPDATE thresholds SET ${setClause} WHERE screenhouse_id = $${THRESHOLD_FIELDS.length + 1} RETURNING *`,
-        [...values, screenhouseId]
-      );
-    } else {
-      const cols = ["screenhouse_id", ...THRESHOLD_FIELDS].join(", ");
-      const placeholders = THRESHOLD_FIELDS.map((_, i) => `$${i + 2}`).join(", ");
-      result = await pool.query(
-        `INSERT INTO thresholds (${cols}) VALUES ($1, ${placeholders}) RETURNING *`,
-        [screenhouseId, ...values]
-      );
-    }
-
-    await publishEvent("threshold.updated", {
-      screenhouse_id: Number(screenhouseId),
-      ...result.rows[0],
-    });
-
-    res.json(result.rows[0]);
+    const row = await upsertThresholdForScreenhouse(screenhouseId, req.body);
+    res.json(row);
   } catch (err) {
+    if (err.status === 404) {
+      return res.status(404).json({ message: err.message });
+    }
     console.log(err);
     res.status(500).json({ message: "Internal server error" });
   }
 }
 
-module.exports = { listThresholds, getThreshold, upsertThreshold };
+async function bulkUpsertThreshold(req, res) {
+  const { screenhouse_ids: rawIds, ...thresholdBody } = req.body;
+  const screenhouseIds = [...new Set((rawIds || []).map(Number).filter(Boolean))];
+
+  if (!screenhouseIds.length) {
+    return res.status(400).json({ message: "Pilih minimal satu screenhouse" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const updated = [];
+    for (const screenhouseId of screenhouseIds) {
+      const row = await upsertThresholdForScreenhouse(screenhouseId, thresholdBody, client);
+      updated.push(row);
+    }
+    await client.query("COMMIT");
+    res.json({ updated_count: updated.length, screenhouse_ids: screenhouseIds });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    if (err.status === 404) {
+      return res.status(404).json({ message: err.message });
+    }
+    console.log(err);
+    res.status(500).json({ message: "Internal server error" });
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { listThresholds, getThreshold, upsertThreshold, bulkUpsertThreshold };

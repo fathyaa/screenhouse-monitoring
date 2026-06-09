@@ -118,11 +118,29 @@ JWT_SECRET=supersecret
 REDIS_HOST=localhost
 REDIS_PORT=6379
 
+# Web Push (PWA notifikasi saat app tertutup) — generate dengan:
+#   cd services/app-service && npx web-push generate-vapid-keys
+VAPID_PUBLIC_KEY=your_vapid_public_key
+VAPID_PRIVATE_KEY=your_vapid_private_key
+VAPID_SUBJECT=mailto:admin@screenhouse.local
+
 # Baca data monitoring lewat HTTP + koneksi read-only stats
 MONITORING_SERVICE_URL=http://localhost:3001
 DB_MON_PORT=5433
 DB_MON_NAME=screenhouse_monitoring
 ```
+
+---
+
+## frontend/.env
+
+```env
+VITE_API_URL=http://localhost:8000
+VITE_MONITORING_URL=http://localhost:3001
+VITE_VAPID_PUBLIC_KEY=your_vapid_public_key
+```
+
+(`VITE_VAPID_PUBLIC_KEY` harus sama dengan `VAPID_PUBLIC_KEY` di app-service.)
 
 ---
 
@@ -183,6 +201,9 @@ Dua container Postgres dijalankan oleh Docker (lihat `docker/docker-compose.yaml
 psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/schema.sql
 psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/seed.sql
 
+# Jika DB app sudah ada sebelumnya, tambah tabel push:
+psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/push_subscriptions.sql
+
 # Monitoring DB (ingest + alerting)
 psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring -f database/monitoring/schema.sql
 psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring -f database/monitoring/seed.sql
@@ -229,9 +250,90 @@ http://localhost:5173
 
 ---
 
-# MQTT Testing
+# MQTT — Telemetry & Aktuator
 
-## Publish Dummy Sensor Data
+## Alur singkat
+
+```txt
+Petani toggle di web / Alert otomatis
+    → monitoring-service publish MQTT command
+    → Node WSN (ESP32) terima & nyalakan relay
+    → Node publish telemetry balik (status aktuator terbaru)
+    → monitoring-service simpan ke sensor_data
+```
+
+## Topic MQTT
+
+| Arah | Topic | Keterangan |
+| ---- | ----- | ---------- |
+| Server → Node | `screenhouse/{screenhouse_id}/node/{node_code}/command` | Perintah ON/OFF aktuator |
+| Server → Node (broadcast) | `screenhouse/{screenhouse_id}/actuator` | Sama + field `node_code` |
+| Node → Server | `screenhouse/{screenhouse_id}/node/{node_code}/sensor` | Telemetry + status relay |
+| Node → Server (alt) | `node/{node_code}/telemetry` | Format telemetry sama |
+
+`node_code` **wajib** cocok dengan kolom `sensor_nodes.node_code` di DB monitoring.
+
+## Payload command (server → node)
+
+```json
+{
+  "fan_status": true,
+  "irrigation_status": false,
+  "lamp_status": false,
+  "source": "manual",
+  "reason": null
+}
+```
+
+| Field | Arti |
+| ----- | ---- |
+| `fan_status` | Kipas ON/OFF |
+| `irrigation_status` | Irigasi ON/OFF |
+| `lamp_status` | Lampu ON/OFF |
+| `source` | `"manual"` (petani) atau `"auto"` (alert worker) |
+
+## Payload telemetry (node → server)
+
+```json
+{
+  "node_code": "SH01-N01",
+  "nitrogen": 24,
+  "soil_moisture": 68,
+  "fan_status": true,
+  "irrigation_status": false,
+  "lamp_status": false
+}
+```
+
+Setelah menerima command, node **wajib publish ulang** telemetry dengan status relay yang sudah diterapkan.
+
+## Otomatis dari alert
+
+| Kondisi | Aktuator |
+| ------- | -------- |
+| Kelembapan tanah rendah | Irigasi ON |
+| Kelembapan tanah tinggi | Irigasi OFF |
+| Suhu / kelembapan udara tinggi | Kipas ON |
+| Suhu tanah rendah | Lampu ON |
+| Intensitas cahaya rendah | Lampu ON |
+
+## Contoh firmware ESP32
+
+Sketch lengkap ada di [`docs/hardware/esp32-actuator-mqtt.ino`](docs/hardware/esp32-actuator-mqtt.ino).
+
+Ringkasannya: subscribe topic `command`, apply relay, publish ke topic `sensor`.
+
+## Tes tanpa hardware
+
+**Dengarkan command dari web:**
+
+```bash
+mosquitto_sub -h localhost -t 'screenhouse/+/node/+/command' -v
+```
+
+Toggle irigasi/kipas/lampu dari dashboard petani — pesan harus muncul di terminal.
+
+**Publish telemetry dummy (node → server):**
 
 ```bash
 mosquitto_pub \
@@ -297,7 +399,10 @@ Password: 123456
 
 * Login
 * Monitoring sensor realtime
-* Receive alert
+* Receive alert (WebSocket + toast saat app terbuka)
+* **PWA**: install ke home screen
+* **Push notification** saat app ditutup (Web Push)
+* Kontrol aktuator manual (kipas, irigasi, lampu)
 * Melihat data screenhouse milik sendiri
 
 ## Operator
@@ -312,14 +417,63 @@ Password: 123456
 * MQTT realtime ingestion
 * Redis event bus
 * WebSocket realtime frontend
-* Alert automation
+* Alert automation + aktuator otomatis
 * Realtime map dashboard
+
+---
+
+# PWA & Push Notification
+
+Aplikasi petani bisa **diinstall ke home screen** dan menerima **notifikasi push** walau browser ditutup.
+
+## Cara install (petani)
+
+1. Buka app di **Chrome Android** atau **Safari iOS**
+2. Login sebagai petani
+3. Banner bawah layar → **Install app** (Android) atau ikuti petunjuk **Add to Home Screen** (iOS)
+4. Tap **Aktifkan notifikasi** → izinkan notifikasi browser
+
+## Setup server (sekali)
+
+```bash
+cd services/app-service
+npx web-push generate-vapid-keys
+```
+
+Salin public/private key ke:
+
+* `services/app-service/.env` → `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`
+* `frontend/.env` → `VITE_VAPID_PUBLIC_KEY` (public key saja)
+
+Jalankan migrasi push (jika DB app sudah ada):
+
+```bash
+psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/push_subscriptions.sql
+```
+
+Restart **app-service** (push worker subscribe channel Redis `alert-created`).
+
+## Cara kerja
+
+| Kondisi app | Mekanisme notifikasi |
+| ----------- | -------------------- |
+| Terbuka | Socket.IO + toast + suara |
+| Tertutup / background | **Web Push** via service worker |
+
+Service worker custom: `frontend/src/pwa/sw.js` (push handler + notification click → buka `/petani/peringatan`).
+
+## Catatan platform
+
+* **HTTPS wajib** untuk push di production (localhost OK untuk dev)
+* **iOS**: push hanya bekerja setelah app di-Add to Home Screen (iOS 16.4+)
+* **Android Chrome**: install + push didukung penuh
 
 ---
 
 # Notes
 
 * Sistem masih tahap development.
-* Threshold saat ini masih global sederhana.
-* Device ESP32 + RS485 NPK sensor akan menjadi publisher MQTT utama.
-* Sistem fokus monitoring, belum ada aktuator otomatis.
+* Threshold per screenhouse via halaman admin/kelola-threshold.
+* Device ESP32 + RS485 NPK sensor = publisher MQTT utama; lihat `docs/hardware/esp32-actuator-mqtt.ino`.
+* Kontrol aktuator: manual (petani via web) + otomatis saat alert threshold.
+* PWA + Web Push untuk petani — butuh VAPID keys di app-service.

@@ -35,6 +35,122 @@ function buildInsight(latest, threshold) {
   return "Kondisi screenhouse dalam batas normal.";
 }
 
+// Kumpulkan parameter yang keluar dari rentang threshold (untuk chip di popup peta).
+function collectAbnormal(latest, threshold) {
+  if (!latest || !threshold) return [];
+
+  const abnormal = [];
+  for (const m of THRESHOLD_METRICS) {
+    const value = latest[m.key];
+    const min = threshold[m.minCol];
+    const max = threshold[m.maxCol];
+    if (value == null) continue;
+    if (min != null && Number(value) < Number(min)) {
+      abnormal.push({ key: m.key, label: m.label, value, min, max, direction: "low" });
+    } else if (max != null && Number(value) > Number(max)) {
+      abnormal.push({ key: m.key, label: m.label, value, min, max, direction: "high" });
+    }
+  }
+  return abnormal;
+}
+
+// Ringkasan status seluruh screenhouse untuk pewarnaan marker peta operator.
+async function getMapSummary(req, res) {
+  try {
+    const [registry, latestRows, thresholdRows, alertRows] = await Promise.all([
+      pool.query(
+        `SELECT screenhouse_id FROM screenhouse_registry WHERE status = 'active'`
+      ),
+      pool.query(
+        `
+        SELECT DISTINCT ON (sn.screenhouse_id)
+          sn.screenhouse_id,
+          sn.node_name,
+          sn.send_interval_seconds,
+          sd.nitrogen, sd.phosphorus, sd.potassium,
+          sd.soil_moisture, sd.soil_temperature, sd.soil_ph, sd.conductivity,
+          sd.air_temperature, sd.air_humidity, sd.light_intensity,
+          sd.created_at
+        ${SENSOR_DATA_JOIN}
+        ORDER BY sn.screenhouse_id, sd.created_at DESC
+        `
+      ),
+      pool.query(`SELECT * FROM threshold_snapshots`),
+      pool.query(
+        `
+        SELECT screenhouse_id, COUNT(*)::int AS active_alerts
+        FROM alerts
+        WHERE status = 'active'
+        GROUP BY screenhouse_id
+        `
+      ),
+    ]);
+
+    const latestById = new Map(
+      latestRows.rows.map((r) => [r.screenhouse_id, r])
+    );
+    const thresholdById = new Map(
+      thresholdRows.rows.map((r) => [r.screenhouse_id, r])
+    );
+    const alertsById = new Map(
+      alertRows.rows.map((r) => [r.screenhouse_id, r.active_alerts])
+    );
+
+    const now = Date.now();
+
+    const summary = registry.rows.map(({ screenhouse_id }) => {
+      const latest = latestById.get(screenhouse_id) ?? null;
+      const threshold = thresholdById.get(screenhouse_id) ?? null;
+      const activeAlerts = alertsById.get(screenhouse_id) ?? 0;
+
+      const lastSeen = latest?.created_at ?? null;
+      const intervalSec = Number(latest?.send_interval_seconds) || 60;
+      // Anggap offline jika data lebih lama dari 3x interval kirim (min. 15 menit).
+      const staleMs = Math.max(intervalSec * 3, 900) * 1000;
+      const ageMs = lastSeen ? now - new Date(lastSeen).getTime() : Infinity;
+      const isOffline = !lastSeen || ageMs > staleMs;
+
+      const abnormal = collectAbnormal(latest, threshold);
+
+      let status;
+      let insight;
+      if (isOffline) {
+        status = "offline";
+        insight = lastSeen
+          ? "Perangkat tidak mengirim data terbaru."
+          : "Belum ada data sensor dari perangkat.";
+      } else if (activeAlerts > 0) {
+        status = "critical";
+        insight = buildInsight(latest, threshold);
+      } else if (abnormal.length > 0) {
+        status = "warning";
+        insight = buildInsight(latest, threshold);
+      } else {
+        status = "healthy";
+        insight = threshold
+          ? "Kondisi screenhouse dalam batas normal."
+          : "Online — threshold belum diatur.";
+      }
+
+      return {
+        screenhouse_id,
+        status,
+        insight,
+        last_seen: lastSeen,
+        node_name: latest?.node_name ?? null,
+        active_alerts: activeAlerts,
+        abnormal,
+        has_threshold: threshold != null,
+      };
+    });
+
+    res.json(summary);
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
 async function getSensorData(req, res) {
   try {
     const result = await pool.query(`
@@ -320,6 +436,7 @@ async function getScreenhouseDashboardSummary(req, res) {
 module.exports = {
   getLatestSensorData,
   getSensorData,
+  getMapSummary,
   getLatestAllSensorData,
   getSensorsByScreenhouse: getSensorNodesByScreenhouse,
   getSensorNodesByScreenhouse,

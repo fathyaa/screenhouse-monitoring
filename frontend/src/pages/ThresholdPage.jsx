@@ -25,10 +25,15 @@ export default function ThresholdPage() {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState(null);
+  const [checkedIds, setCheckedIds] = useState(new Set());
   const [form, setForm] = useState(rowToForm(null));
   const [saving, setSaving] = useState(false);
 
   const selected = list.find((r) => r.screenhouse_id === selectedId);
+  const allChecked = list.length > 0 && list.every((r) => checkedIds.has(r.screenhouse_id));
+  const someChecked = list.some((r) => checkedIds.has(r.screenhouse_id));
+  const saveTargets =
+    checkedIds.size > 0 ? [...checkedIds] : selectedId ? [selectedId] : [];
 
   const loadList = useCallback(async () => {
     setLoading(true);
@@ -43,10 +48,15 @@ export default function ThresholdPage() {
 
       if (rows.length === 0) {
         setSelectedId(null);
+        setCheckedIds(new Set());
         setForm(rowToForm(null));
-      } else if (!rows.some((r) => r.screenhouse_id === selectedId)) {
-        setSelectedId(rows[0].screenhouse_id);
-        setForm(rowToForm(rows[0]));
+      } else {
+        const validIds = new Set(rows.map((r) => r.screenhouse_id));
+        setCheckedIds((prev) => new Set([...prev].filter((id) => validIds.has(id))));
+        if (!rows.some((r) => r.screenhouse_id === selectedId)) {
+          setSelectedId(rows[0].screenhouse_id);
+          setForm(rowToForm(rows[0]));
+        }
       }
     } catch (err) {
       console.error(err);
@@ -74,23 +84,53 @@ export default function ThresholdPage() {
     setForm(rowToForm(row));
   };
 
+  const toggleChecked = (screenhouseId) => {
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(screenhouseId)) next.delete(screenhouseId);
+      else next.add(screenhouseId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (allChecked) {
+      setCheckedIds(new Set());
+      return;
+    }
+    setCheckedIds(new Set(list.map((r) => r.screenhouse_id)));
+  };
+
   const handleReset = () => setForm(rowToForm(null));
 
   const handleSave = async () => {
-    if (!selectedId) return;
+    if (!saveTargets.length) {
+      toast.error("Centang screenhouse yang akan disamakan threshold-nya");
+      return;
+    }
     setSaving(true);
     try {
-      const res = await fetch(`${API_URL}/thresholds/${selectedId}`, {
-        method: "PUT",
-        headers: authHeaders,
-        body: JSON.stringify(form),
-      });
+      const isBulk = saveTargets.length > 1;
+      const res = await fetch(
+        isBulk ? `${API_URL}/thresholds/bulk` : `${API_URL}/thresholds/${saveTargets[0]}`,
+        {
+          method: "PUT",
+          headers: authHeaders,
+          body: JSON.stringify(
+            isBulk ? { screenhouse_ids: saveTargets, ...form } : form
+          ),
+        }
+      );
       const data = await res.json();
       if (!res.ok) {
         toast.error(data.message || "Gagal menyimpan threshold");
         return;
       }
-      toast.success("Threshold berhasil disimpan");
+      toast.success(
+        isBulk
+          ? `Threshold disamakan ke ${data.updated_count ?? saveTargets.length} screenhouse`
+          : "Threshold berhasil disimpan"
+      );
       loadList();
     } catch (err) {
       console.error(err);
@@ -103,7 +143,7 @@ export default function ThresholdPage() {
   return (
     <AdminPageShell
       title="Kelola Threshold"
-      subtitle="Atur batas min/maks per screenhouse — alert dikirim jika nilai melewati batas"
+      subtitle="Atur batas min/maks — centang beberapa screenhouse untuk menyamakan sekaligus (mis. satu kecamatan)"
     >
       <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
         <WilayahFilter value={wilayah} onChange={setWilayah} />
@@ -120,12 +160,28 @@ export default function ThresholdPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 min-h-0">
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden flex flex-col max-h-[calc(100vh-220px)]">
+        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden flex flex-col max-h-[calc(100dvh-220px)]">
           <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2 shrink-0">
             <SlidersHorizontal size={16} className="text-green-700" />
-            <span className="text-sm font-semibold text-gray-800">Pilih Screenhouse</span>
-            <span className="text-xs text-gray-400 ml-auto">{list.length}</span>
+            <span className="text-sm font-semibold text-gray-800">Screenhouse</span>
+            <span className="text-xs text-gray-400 ml-auto">{checkedIds.size}/{list.length}</span>
           </div>
+          {list.length > 0 && (
+            <label className="flex items-center gap-2.5 px-4 py-2.5 border-b border-gray-100 bg-gray-50/80 cursor-pointer text-left">
+              <input
+                type="checkbox"
+                checked={allChecked}
+                ref={(el) => {
+                  if (el) el.indeterminate = someChecked && !allChecked;
+                }}
+                onChange={toggleSelectAll}
+                className="w-4 h-4 rounded border-gray-300 text-[#1e4d2b] focus:ring-green-300"
+              />
+              <span className="text-xs font-medium text-gray-700">
+                Pilih semua ({list.length})
+              </span>
+            </label>
+          )}
           <div className="overflow-y-auto flex-1">
             {loading ? (
               <div className="p-6 text-center text-sm text-gray-400">Memuat...</div>
@@ -134,24 +190,38 @@ export default function ThresholdPage() {
             ) : (
               list.map((row) => {
                 const active = row.screenhouse_id === selectedId;
+                const checked = checkedIds.has(row.screenhouse_id);
                 const hasThreshold = Boolean(row.threshold_id);
                 return (
-                  <button
+                  <div
                     key={row.screenhouse_id}
-                    onClick={() => handleSelect(row)}
-                    className={`w-full text-left px-4 py-3 border-b border-gray-50 transition ${active ? "bg-green-50" : "hover:bg-gray-50"}`}
+                    className={`flex items-start gap-2.5 px-3 py-3 border-b border-gray-50 transition ${active ? "bg-green-50" : checked ? "bg-amber-50/40" : "hover:bg-gray-50"}`}
                   >
-                    <div className="text-sm font-medium text-gray-800">{row.screenhouse_name}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">{row.owner_name}</div>
-                    <div className="text-[10px] text-gray-400 mt-1">
-                      {[row.village, row.district, row.regency].filter(Boolean).join(", ")}
-                    </div>
-                    {!hasThreshold && (
-                      <span className="inline-block mt-1 text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">
-                        Belum diset
-                      </span>
-                    )}
-                  </button>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleChecked(row.screenhouse_id)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="mt-1 w-4 h-4 shrink-0 rounded border-gray-300 text-[#1e4d2b] focus:ring-green-300"
+                      aria-label={`Pilih ${row.screenhouse_name}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleSelect(row)}
+                      className="flex-1 min-w-0 text-left"
+                    >
+                      <div className="text-sm font-medium text-gray-800">{row.screenhouse_name}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">{row.owner_name}</div>
+                      <div className="text-[10px] text-gray-400 mt-1">
+                        {[row.village, row.district, row.regency].filter(Boolean).join(", ")}
+                      </div>
+                      {!hasThreshold && (
+                        <span className="inline-block mt-1 text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">
+                          Belum diset
+                        </span>
+                      )}
+                    </button>
+                  </div>
                 );
               })
             )}
@@ -201,20 +271,39 @@ export default function ThresholdPage() {
                 </div>
               ))}
 
-              <div className="flex justify-end gap-2 pt-1">
-                <button
-                  onClick={handleReset}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 text-sm font-medium transition"
-                >
-                  <RotateCcw size={15} />Reset default
-                </button>
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1e4d2b] hover:bg-[#2d6e3e] text-white text-sm font-medium transition disabled:opacity-50"
-                >
-                  <Save size={15} />{saving ? "Menyimpan..." : "Simpan perubahan"}
-                </button>
+              {checkedIds.size > 0 && (
+                <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-2.5 text-xs text-amber-900">
+                  Nilai di bawah akan disamakan ke <span className="font-semibold">{checkedIds.size} screenhouse</span> yang dicentang.
+                  {checkedIds.size > 1 && " Filter kecamatan lalu centang semua untuk update massal."}
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-1">
+                <div className="text-xs text-gray-400">
+                  {saveTargets.length > 0
+                    ? `Akan disimpan ke ${saveTargets.length} screenhouse`
+                    : "Centang screenhouse di daftar kiri"}
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={handleReset}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 text-sm font-medium transition"
+                  >
+                    <RotateCcw size={15} />Reset default
+                  </button>
+                  <button
+                    onClick={handleSave}
+                    disabled={saving || saveTargets.length === 0}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1e4d2b] hover:bg-[#2d6e3e] text-white text-sm font-medium transition disabled:opacity-50"
+                  >
+                    <Save size={15} />
+                    {saving
+                      ? "Menyimpan..."
+                      : saveTargets.length > 1
+                      ? `Simpan ke ${saveTargets.length} screenhouse`
+                      : "Simpan perubahan"}
+                  </button>
+                </div>
               </div>
             </>
           ) : (

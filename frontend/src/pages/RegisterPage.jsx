@@ -40,10 +40,9 @@ function RegisterPage() {
     };
 
     return (
-        <div className="fixed inset-0 flex">
+        <div className="app-shell fixed inset-0 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
 
-            {/* KIRI */}
-            <div className="flex-1 relative overflow-hidden">
+            <div className="hidden lg:flex flex-1 relative overflow-hidden">
                 <img
                     src="https://images.unsplash.com/photo-1625246333195-78d9c38ad449?q=80&w=1974&auto=format&fit=crop"
                     alt="Sawah"
@@ -65,8 +64,17 @@ function RegisterPage() {
                 </div>
             </div>
 
-            {/* KANAN */}
-            <div className="w-[410px] shrink-0 bg-white flex flex-col justify-center px-8 py-10 overflow-y-auto">
+            <div className="lg:hidden bg-[#0f2d18] px-5 py-4 text-white shrink-0">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-[#1e4d2b] flex items-center justify-center text-lg">🌾</div>
+                    <div>
+                        <div className="text-base font-bold">Daftar Petani</div>
+                        <div className="text-xs text-white/60">Screenhouse Monitoring · UPTD Mektan</div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="w-full lg:w-[410px] shrink-0 bg-white flex flex-col justify-center px-6 sm:px-8 py-8 lg:py-10 overflow-y-auto flex-1 lg:flex-none">
 
                 <div className="text-lg font-semibold text-gray-800">
                     Daftar akun petani

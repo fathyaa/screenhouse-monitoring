@@ -46,7 +46,20 @@ function attachSocketServer(httpServer, subscriber) {
     }
   });
 
-  console.log("Socket.IO attached — listening for alert-created");
+  subscriber.subscribe("actuator-updated", (message) => {
+    try {
+      const data = JSON.parse(message);
+      const ownerId = data.user_id;
+      if (ownerId) {
+        io.to(`user:${ownerId}`).emit("actuator-update", data);
+        console.log(`Actuator update ke user:${ownerId}`);
+      }
+    } catch (err) {
+      console.error("[socket] actuator-updated:", err.message);
+    }
+  });
+
+  console.log("Socket.IO attached — listening for alert-created, actuator-updated");
   return io;
 }
 

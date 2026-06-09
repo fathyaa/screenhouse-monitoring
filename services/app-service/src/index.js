@@ -12,6 +12,12 @@ const screenhouseRoutes = require("./modules/catalog/routes/screenhouseRoutes");
 const wilayahRoutes = require("./modules/catalog/routes/wilayahRoutes");
 const thresholdRoutes = require("./modules/catalog/routes/thresholdRoutes");
 const adminScreenhouseRoutes = require("./modules/catalog/routes/adminRoutes");
+const authMiddleware = require("./shared/middlewares/authMiddleware");
+const roleMiddleware = require("./shared/middlewares/roleMiddleware");
+const { setScreenhouseActuators } = require("./modules/catalog/controllers/actuatorController");
+const pushRoutes = require("./modules/push/routes/pushRoutes");
+const { connectRedis, subscriber } = require("./config/redis");
+const { startPushWorker } = require("./modules/push/pushWorker");
 
 const MONITORING_SERVICE =
   process.env.MONITORING_SERVICE_URL || "http://localhost:3001";
@@ -50,6 +56,14 @@ app.use("/admin", adminScreenhouseRoutes);
 app.use("/screenhouses", screenhouseRoutes);
 app.use("/wilayah", wilayahRoutes);
 app.use("/thresholds", thresholdRoutes);
+app.use("/push", pushRoutes);
+
+app.post(
+  "/sensor-data/screenhouse/:screenhouseId/actuators",
+  authMiddleware,
+  roleMiddleware(["petani"]),
+  setScreenhouseActuators
+);
 
 /* Proxy monitoring domain */
 app.use(
@@ -68,6 +82,17 @@ app.use(
 
 const PORT = process.env.PORT || 8000;
 
-app.listen(PORT, () => {
-  console.log(`App Service running on port ${PORT} (REST + gateway proxy)`);
-});
+async function bootstrap() {
+  try {
+    await connectRedis();
+    await startPushWorker(subscriber);
+  } catch (err) {
+    console.warn("[push] Redis worker tidak aktif:", err.message);
+  }
+
+  app.listen(PORT, () => {
+    console.log(`App Service running on port ${PORT} (REST + gateway proxy)`);
+  });
+}
+
+bootstrap();

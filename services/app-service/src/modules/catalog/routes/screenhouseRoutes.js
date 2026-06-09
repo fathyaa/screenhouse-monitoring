@@ -10,6 +10,7 @@ const {
   getMyDashboardStats,
   getScreenhouseById,
 } = require("../controllers/screenhouseController");
+const { getOperatorReports } = require("../controllers/operatorReportController");
 
 const router = express.Router();
 
@@ -31,6 +32,13 @@ router.get(
   authMiddleware,
   roleMiddleware(["operator", "super_admin"]),
   getOperatorStats
+);
+
+router.get(
+  "/operator-reports",
+  authMiddleware,
+  roleMiddleware(["operator", "super_admin"]),
+  getOperatorReports
 );
 
 router.post(

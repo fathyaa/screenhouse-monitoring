@@ -1,0 +1,84 @@
+<mxfile host="app.diagrams.net" modified="2026-06-07T00:00:00.000Z" agent="Cursor" version="22.1.0" type="device">
+  <diagram id="erd-app" name="ERD App Database">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="Gambar III-4 — ERD Database App (screenhouse_app :5434)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="350" y="15" width="700" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="Bounded context: Identity + Catalog + Push Notification" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=11;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="350" y="42" width="700" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Wilayah hierarchy -->
+        <mxCell id="provinces" value="&lt;b&gt;provinces&lt;/b&gt;&lt;hr size=&quot;1&quot;&gt;&lt;div align=&quot;left&quot;&gt;🔑 &lt;i&gt;id&lt;/i&gt; SERIAL PK&lt;br&gt;name VARCHAR(255)&lt;br&gt;kode VARCHAR(2) UK&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=center;verticalAlign=top;spacingTop=0;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="60" y="80" width="180" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="regencies" value="&lt;b&gt;regencies&lt;/b&gt;&lt;hr&gt;&lt;div align=&quot;left&quot;&gt;🔑 &lt;i&gt;id&lt;/i&gt; SERIAL PK&lt;br&gt;🔗 province_id FK&lt;br&gt;name VARCHAR(255)&lt;br&gt;kode VARCHAR(5) UK&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=center;verticalAlign=top;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="60" y="210" width="180" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="districts" value="&lt;b&gt;districts&lt;/b&gt;&lt;hr&gt;&lt;div align=&quot;left&quot;&gt;🔑 &lt;i&gt;id&lt;/i&gt; SERIAL PK&lt;br&gt;🔗 regency_id FK&lt;br&gt;name VARCHAR(255)&lt;br&gt;kode VARCHAR(8) UK&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=center;verticalAlign=top;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="60" y="350" width="180" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="villages" value="&lt;b&gt;villages&lt;/b&gt;&lt;hr&gt;&lt;div align=&quot;left&quot;&gt;🔑 &lt;i&gt;id&lt;/i&gt; SERIAL PK&lt;br&gt;🔗 district_id FK&lt;br&gt;name VARCHAR(255)&lt;br&gt;kode VARCHAR(13) UK&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=center;verticalAlign=top;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="60" y="490" width="180" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- Identity -->
+        <mxCell id="users" value="&lt;b&gt;users&lt;/b&gt;&lt;hr&gt;&lt;div align=&quot;left&quot;&gt;🔑 &lt;i&gt;id&lt;/i&gt; SERIAL PK&lt;br&gt;name VARCHAR(255)&lt;br&gt;phone_number VARCHAR(30) UK&lt;br&gt;password TEXT&lt;br&gt;role VARCHAR(50)&lt;br&gt;status VARCHAR(50)&lt;br&gt;created_at TIMESTAMP&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=center;verticalAlign=top;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="380" y="80" width="220" height="150" as="geometry" />
+        </mxCell>
+
+        <!-- Catalog -->
+        <mxCell id="screenhouses" value="&lt;b&gt;screenhouses&lt;/b&gt;&lt;hr&gt;&lt;div align=&quot;left&quot;&gt;🔑 &lt;i&gt;id&lt;/i&gt; SERIAL PK&lt;br&gt;name VARCHAR(255)&lt;br&gt;🔗 province_id FK&lt;br&gt;🔗 regency_id FK&lt;br&gt;🔗 district_id FK&lt;br&gt;🔗 village_id FK&lt;br&gt;🔗 owner_user_id FK&lt;br&gt;address_detail TEXT&lt;br&gt;latitude DOUBLE PRECISION&lt;br&gt;longitude DOUBLE PRECISION&lt;br&gt;status VARCHAR(50)&lt;br&gt;created_at TIMESTAMPTZ&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=center;verticalAlign=top;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="380" y="280" width="220" height="220" as="geometry" />
+        </mxCell>
+
+        <mxCell id="thresholds" value="&lt;b&gt;thresholds&lt;/b&gt;&lt;hr&gt;&lt;div align=&quot;left&quot;&gt;🔑 &lt;i&gt;id&lt;/i&gt; SERIAL PK&lt;br&gt;🔗 screenhouse_id FK UK (1:1)&lt;br&gt;&lt;br&gt;&lt;b&gt;11 parameter (min/max):&lt;/b&gt;&lt;br&gt;nitrogen, phosphorus, potassium&lt;br&gt;soil_moisture, soil_temperature, soil_ph&lt;br&gt;conductivity&lt;br&gt;air_temperature, air_humidity&lt;br&gt;light_intensity&lt;br&gt;created_at TIMESTAMPTZ&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=center;verticalAlign=top;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="680" y="280" width="240" height="220" as="geometry" />
+        </mxCell>
+
+        <!-- Push -->
+        <mxCell id="push_subscriptions" value="&lt;b&gt;push_subscriptions&lt;/b&gt;&lt;hr&gt;&lt;div align=&quot;left&quot;&gt;🔑 &lt;i&gt;id&lt;/i&gt; SERIAL PK&lt;br&gt;🔗 user_id FK&lt;br&gt;endpoint TEXT&lt;br&gt;p256dh TEXT&lt;br&gt;auth TEXT&lt;br&gt;user_agent TEXT&lt;br&gt;created_at TIMESTAMPTZ&lt;br&gt;updated_at TIMESTAMPTZ&lt;br&gt;UK (user_id, endpoint)&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=center;verticalAlign=top;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="680" y="80" width="240" height="160" as="geometry" />
+        </mxCell>
+
+        <!-- Wilayah relationships -->
+        <mxCell id="r1" style="endArrow=ERoneToMany;endFill=0;startArrow=ERmandOne;startFill=0;html=1;" edge="1" parent="1" source="provinces" target="regencies"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="r2" style="endArrow=ERoneToMany;endFill=0;startArrow=ERmandOne;startFill=0;html=1;" edge="1" parent="1" source="regencies" target="districts"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="r3" style="endArrow=ERoneToMany;endFill=0;startArrow=ERmandOne;startFill=0;html=1;" edge="1" parent="1" source="districts" target="villages"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- Screenhouse to wilayah -->
+        <mxCell id="r4" style="endArrow=ERoneToMany;endFill=0;startArrow=ERmandOne;startFill=0;html=1;" edge="1" parent="1" source="provinces" target="screenhouses"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="r5" style="endArrow=ERoneToMany;endFill=0;startArrow=ERmandOne;startFill=0;html=1;" edge="1" parent="1" source="regencies" target="screenhouses"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="r6" style="endArrow=ERoneToMany;endFill=0;startArrow=ERmandOne;startFill=0;html=1;" edge="1" parent="1" source="districts" target="screenhouses"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="r7" style="endArrow=ERoneToMany;endFill=0;startArrow=ERmandOne;startFill=0;html=1;" edge="1" parent="1" source="villages" target="screenhouses"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- User relationships -->
+        <mxCell id="r8" style="endArrow=ERoneToMany;endFill=0;startArrow=ERzeroToOne;startFill=0;html=1;" edge="1" parent="1" source="users" target="screenhouses"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="r8l" value="memiliki" style="edgeLabel;html=1;align=center;" vertex="1" connectable="0" parent="r8"><mxGeometry relative="1" as="geometry"><mxPoint as="offset" /></mxGeometry></mxCell>
+
+        <mxCell id="r9" style="endArrow=ERoneToMany;endFill=0;startArrow=ERmandOne;startFill=0;html=1;" edge="1" parent="1" source="users" target="push_subscriptions"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="r9l" value="berlangganan" style="edgeLabel;html=1;align=center;" vertex="1" connectable="0" parent="r9"><mxGeometry relative="1" as="geometry"><mxPoint as="offset" /></mxGeometry></mxCell>
+
+        <!-- Threshold 1:1 -->
+        <mxCell id="r10" style="endArrow=ERmandOne;endFill=0;startArrow=ERmandOne;startFill=0;html=1;" edge="1" parent="1" source="screenhouses" target="thresholds"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="r10l" value="1 : 1" style="edgeLabel;html=1;align=center;fontStyle=1;" vertex="1" connectable="0" parent="r10"><mxGeometry relative="1" as="geometry"><mxPoint as="offset" /></mxGeometry></mxCell>
+
+        <!-- Legend -->
+        <mxCell id="legend" value="&lt;b&gt;Keterangan&lt;/b&gt;&lt;hr&gt;🔑 Primary Key (PK)&amp;nbsp;&amp;nbsp;🔗 Foreign Key (FK)&amp;nbsp;&amp;nbsp;UK = Unique&#xa;role: petani | operator | super_admin&#xa;status user: pending | approved | rejected" style="shape=note;whiteSpace=wrap;html=1;size=14;align=left;spacingLeft=10;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="980" y="80" width="320" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="group-wilayah" value="Modul Wilayah" style="text;html=1;strokeColor=#d6b656;fillColor=none;align=left;verticalAlign=top;fontStyle=2;fontColor=#996600;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="70" width="200" height="530" as="geometry" />
+        </mxCell>
+        <mxCell id="group-catalog" value="Modul Katalog &amp; Identitas" style="text;html=1;strokeColor=#6c8ebf;fillColor=none;align=left;verticalAlign=top;fontStyle=2;fontColor=#0066CC;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="370" y="70" width="560" height="440" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,7 +1,11 @@
 import { useRef, useState, useEffect } from "react";
-import { Menu } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Bell, Menu } from "lucide-react";
+import { useAlerts } from "../context/AlertContext";
 
-export default function PetaniTopbar({ onToggleSidebar, title, subtitle, activeAlerts = 0 }) {
+export default function PetaniTopbar({ onToggleSidebar, title, subtitle }) {
+    const navigate = useNavigate();
+    const { activeCount } = useAlerts();
     const [soundEnabled, setSoundEnabled] = useState(
         sessionStorage.getItem("sound_enabled") === "true"
     );
@@ -43,7 +47,6 @@ export default function PetaniTopbar({ onToggleSidebar, title, subtitle, activeA
     function toggleSound() {
         const audio = getAudio();
         if (!soundEnabled) {
-            // Buka izin autoplay browser tanpa memutar suara notifikasi
             unlockAudioPlayback(audio).finally(() => {
                 setSoundEnabled(true);
                 sessionStorage.setItem("sound_enabled", "true");
@@ -60,38 +63,48 @@ export default function PetaniTopbar({ onToggleSidebar, title, subtitle, activeA
     }
 
     return (
-        <header className="h-14 shrink-0 bg-white border-b border-gray-200 flex items-center justify-between px-5 z-10">
-            <div className="flex items-center gap-3">
+        <header className="app-topbar h-14 shrink-0 bg-white border-b border-gray-200 flex items-center justify-between z-10">
+            <div className="flex items-center gap-3 min-w-0">
                 <button
                     onClick={onToggleSidebar}
-                    className="relative p-1.5 rounded-lg hover:bg-gray-100 transition"
+                    className="p-1.5 rounded-lg hover:bg-gray-100 transition shrink-0"
+                    aria-label="Toggle sidebar"
                 >
                     <Menu size={20} className="text-gray-500" />
-                    {activeAlerts > 0 && (
-                        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
-                    )}
                 </button>
-                <div>
-                    <div className="text-sm font-semibold text-gray-800">{title}</div>
-                    <div className="text-xs text-gray-400">{subtitle}</div>
+                <div className="min-w-0">
+                    <div className="text-sm font-semibold text-gray-800 truncate">{title}</div>
+                    <div className="text-xs text-gray-400 truncate hidden sm:block">{subtitle}</div>
                 </div>
             </div>
 
-            <div className="flex items-center gap-2">
-                {/* Tombol suara */}
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 <button
                     onClick={toggleSound}
-                    title={soundEnabled ? "Matikan suara notifikasi" : "Aktifkan suara notifikasi"}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition ${soundEnabled
+                    title={soundEnabled ? "Matikan suara peringatan" : "Aktifkan suara peringatan"}
+                    className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-full text-xs font-medium border transition ${soundEnabled
                         ? "bg-green-50 border-green-200 text-green-700"
                         : "bg-gray-50 border-gray-200 text-gray-400 hover:text-gray-600"
                         }`}
                 >
-                    {soundEnabled ? "🔔 Suara aktif" : "🔇 Suara mati"}
+                    <span className="sm:hidden">{soundEnabled ? "🔔" : "🔇"}</span>
+                    <span className="hidden sm:inline">{soundEnabled ? "🔔 Suara aktif" : "🔇 Suara mati"}</span>
                 </button>
 
-                {/* Badge online */}
-                <div className="flex items-center gap-2 bg-green-50 text-green-800 text-xs font-medium px-3 py-1.5 rounded-full">
+                <button
+                    onClick={() => navigate("/petani/peringatan")}
+                    title="Peringatan screenhouse"
+                    className="relative p-2 rounded-xl hover:bg-gray-100 transition"
+                >
+                    <Bell size={18} className="text-gray-600" />
+                    {activeCount > 0 && (
+                        <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                            {activeCount > 9 ? "9+" : activeCount}
+                        </span>
+                    )}
+                </button>
+
+                <div className="hidden sm:flex items-center gap-2 bg-green-50 text-green-800 text-xs font-medium px-3 py-1.5 rounded-full">
                     <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
                     Online
                 </div>

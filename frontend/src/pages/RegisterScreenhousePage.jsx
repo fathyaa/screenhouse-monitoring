@@ -149,26 +149,29 @@ function RegisterScreenhousePage() {
       </div>
 
       {/* KANAN */}
-      <div className="w-[410px] shrink-0 bg-white flex flex-col justify-center px-8 py-10 overflow-y-auto text-left">
+      <div className="w-[410px] shrink-0 bg-white flex flex-col h-full min-h-0 text-left">
 
-        <button
-          type="button"
-          onClick={() => navigate("/register")}
-          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 mb-4"
-        >
-          <ArrowLeft size={14} />
-          Kembali ke data akun
-        </button>
+        <div className="shrink-0 px-8 pt-10 pb-4">
+          <button
+            type="button"
+            onClick={() => navigate("/register")}
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 mb-4"
+          >
+            <ArrowLeft size={14} />
+            Kembali ke data akun
+          </button>
 
-        <div className="text-lg font-semibold text-gray-800">
-          Daftar screenhouse
+          <div className="text-lg font-semibold text-gray-800">
+            Daftar screenhouse
+          </div>
+
+          <div className="text-xs text-gray-400 mt-1">
+            Lengkapi lokasi screenhouse untuk {account.name}
+          </div>
         </div>
 
-        <div className="text-xs text-gray-400 mt-1 mb-5">
-          Lengkapi lokasi screenhouse untuk {account.name}
-        </div>
-
-        <div className="space-y-3">
+        <div className="flex-1 min-h-0 overflow-y-auto px-8">
+        <div className="space-y-3 pb-4">
 
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1.5">
@@ -245,27 +248,32 @@ function RegisterScreenhousePage() {
           </div>
 
         </div>
+        </div>
 
-        <button
-          onClick={handleSubmit}
-          disabled={loading || resolving}
-          className="w-full h-10 rounded-lg bg-[#1e4d2b] hover:bg-[#2d6e3e] text-white text-sm font-medium transition mt-5 mb-3 disabled:opacity-50"
-        >
-          {loading ? "Mengirim pendaftaran..." : "Kirim pendaftaran"}
-        </button>
-
-        <p className="text-center text-xs text-gray-400 mb-4 leading-relaxed">
-          Data akun dan screenhouse akan diverifikasi operator sebelum akun aktif
-        </p>
-
-        <div className="text-center text-xs text-gray-400">
-          Sudah punya akun?{" "}
+        <div className="shrink-0 px-8 pb-10 pt-4 border-t border-gray-100 bg-white">
           <button
-            onClick={() => navigate("/login")}
-            className="text-[#1e4d2b] font-medium hover:underline"
+            type="button"
+            onClick={handleSubmit}
+            disabled={loading || resolving}
+            className="w-full h-10 shrink-0 rounded-lg bg-[#1e4d2b] hover:bg-[#2d6e3e] text-white text-sm font-medium transition mb-3 disabled:opacity-50"
           >
-            Masuk di sini
+            {loading ? "Mengirim pendaftaran..." : "Kirim pendaftaran"}
           </button>
+
+          <p className="text-center text-xs text-gray-400 mb-4 leading-relaxed">
+            Data akun dan screenhouse akan diverifikasi operator sebelum akun aktif
+          </p>
+
+          <div className="text-center text-xs text-gray-400">
+            Sudah punya akun?{" "}
+            <button
+              type="button"
+              onClick={() => navigate("/login")}
+              className="text-[#1e4d2b] font-medium hover:underline"
+            >
+              Masuk di sini
+            </button>
+          </div>
         </div>
 
       </div>
