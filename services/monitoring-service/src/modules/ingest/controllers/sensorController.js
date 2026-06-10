@@ -10,7 +10,6 @@ const LATEST_READING_COLUMNS = `
   nitrogen, phosphorus, potassium,
   soil_temperature, soil_moisture, soil_ph, conductivity,
   air_temperature, air_humidity, light_intensity,
-  fan_status, irrigation_status, lamp_status,
   created_at
 `;
 
@@ -25,10 +24,10 @@ function buildInsight(latest, threshold) {
     const max = threshold[m.maxCol];
     if (value == null) continue;
     if (min != null && Number(value) < Number(min)) {
-      return `${m.label} rendah — periksa kondisi screenhouse.`;
+      return `${m.label} rendah, periksa kondisi screenhouse.`;
     }
     if (max != null && Number(value) > Number(max)) {
-      return `${m.label} tinggi — perlu tindakan segera.`;
+      return `${m.label} tinggi, perlu tindakan segera.`;
     }
   }
 
@@ -54,6 +53,40 @@ function collectAbnormal(latest, threshold) {
   return abnormal;
 }
 
+// Gabungkan abnormal dari semua node (dedupe per key, ambil yang paling parah).
+function collectAbnormalAllNodes(nodeRows, threshold) {
+  if (!threshold || !nodeRows?.length) return [];
+
+  const byKey = new Map();
+  for (const row of nodeRows) {
+    for (const item of collectAbnormal(row, threshold)) {
+      const prev = byKey.get(item.key);
+      if (!prev) {
+        byKey.set(item.key, item);
+        continue;
+      }
+      const prevDist =
+        prev.direction === "high"
+          ? Number(prev.value) - Number(prev.max)
+          : Number(prev.min) - Number(prev.value);
+      const nextDist =
+        item.direction === "high"
+          ? Number(item.value) - Number(item.max)
+          : Number(item.min) - Number(item.value);
+      if (nextDist > prevDist) byKey.set(item.key, item);
+    }
+  }
+  return [...byKey.values()];
+}
+
+function pickLatestNodeRow(nodeRows) {
+  if (!nodeRows?.length) return null;
+  return nodeRows.reduce((best, row) => {
+    if (!best) return row;
+    return new Date(row.created_at) > new Date(best.created_at) ? row : best;
+  }, null);
+}
+
 // Ringkasan status seluruh screenhouse untuk pewarnaan marker peta operator.
 async function getMapSummary(req, res) {
   try {
@@ -63,8 +96,9 @@ async function getMapSummary(req, res) {
       ),
       pool.query(
         `
-        SELECT DISTINCT ON (sn.screenhouse_id)
+        SELECT DISTINCT ON (sn.id)
           sn.screenhouse_id,
+          sn.id AS sensor_node_id,
           sn.node_name,
           sn.send_interval_seconds,
           sd.nitrogen, sd.phosphorus, sd.potassium,
@@ -72,45 +106,59 @@ async function getMapSummary(req, res) {
           sd.air_temperature, sd.air_humidity, sd.light_intensity,
           sd.created_at
         ${SENSOR_DATA_JOIN}
-        ORDER BY sn.screenhouse_id, sd.created_at DESC
+        ORDER BY sn.id, sd.created_at DESC
         `
       ),
       pool.query(`SELECT * FROM threshold_snapshots`),
       pool.query(
         `
-        SELECT screenhouse_id, COUNT(*)::int AS active_alerts
+        SELECT screenhouse_id, message
         FROM alerts
         WHERE status = 'active'
-        GROUP BY screenhouse_id
         `
       ),
     ]);
 
-    const latestById = new Map(
-      latestRows.rows.map((r) => [r.screenhouse_id, r])
-    );
+    const nodesByScreenhouse = new Map();
+    for (const row of latestRows.rows) {
+      const list = nodesByScreenhouse.get(row.screenhouse_id) ?? [];
+      list.push(row);
+      nodesByScreenhouse.set(row.screenhouse_id, list);
+    }
+
     const thresholdById = new Map(
       thresholdRows.rows.map((r) => [r.screenhouse_id, r])
     );
-    const alertsById = new Map(
-      alertRows.rows.map((r) => [r.screenhouse_id, r.active_alerts])
-    );
+    const alertsByScreenhouse = new Map();
+    for (const row of alertRows.rows) {
+      const list = alertsByScreenhouse.get(row.screenhouse_id) ?? [];
+      list.push(row);
+      alertsByScreenhouse.set(row.screenhouse_id, list);
+    }
 
     const now = Date.now();
 
     const summary = registry.rows.map(({ screenhouse_id }) => {
-      const latest = latestById.get(screenhouse_id) ?? null;
+      const nodeRows = nodesByScreenhouse.get(screenhouse_id) ?? [];
+      const latest = pickLatestNodeRow(nodeRows);
       const threshold = thresholdById.get(screenhouse_id) ?? null;
-      const activeAlerts = alertsById.get(screenhouse_id) ?? 0;
+      const activeAlertRows = alertsByScreenhouse.get(screenhouse_id) ?? [];
+      const activeAlerts = activeAlertRows.length;
 
       const lastSeen = latest?.created_at ?? null;
-      const intervalSec = Number(latest?.send_interval_seconds) || 60;
-      // Anggap offline jika data lebih lama dari 3x interval kirim (min. 15 menit).
+      const intervalSec = Math.max(
+        ...nodeRows.map((n) => Number(n.send_interval_seconds) || 60),
+        60
+      );
       const staleMs = Math.max(intervalSec * 3, 900) * 1000;
       const ageMs = lastSeen ? now - new Date(lastSeen).getTime() : Infinity;
       const isOffline = !lastSeen || ageMs > staleMs;
 
-      const abnormal = collectAbnormal(latest, threshold);
+      const abnormal = collectAbnormalAllNodes(nodeRows, threshold);
+      const insightSource =
+        abnormal.length > 0
+          ? nodeRows.find((row) => collectAbnormal(row, threshold).length > 0) ?? latest
+          : latest;
 
       let status;
       let insight;
@@ -119,28 +167,40 @@ async function getMapSummary(req, res) {
         insight = lastSeen
           ? "Perangkat tidak mengirim data terbaru."
           : "Belum ada data sensor dari perangkat.";
-      } else if (activeAlerts > 0) {
+      } else if (activeAlerts >= 2) {
         status = "critical";
-        insight = buildInsight(latest, threshold);
+        insight = buildInsight(insightSource, threshold);
+      } else if (activeAlerts === 1) {
+        status = "warning";
+        insight =
+          abnormal.length > 0
+            ? buildInsight(insightSource, threshold)
+            : "Sensor sudah normal; masih ada 1 alert aktif.";
+      } else if (abnormal.length >= 2) {
+        status = "critical";
+        insight = buildInsight(insightSource, threshold);
       } else if (abnormal.length > 0) {
         status = "warning";
-        insight = buildInsight(latest, threshold);
+        insight = buildInsight(insightSource, threshold);
       } else {
         status = "healthy";
         insight = threshold
           ? "Kondisi screenhouse dalam batas normal."
-          : "Online — threshold belum diatur.";
+          : "Online, threshold belum diatur.";
       }
+
+      const nodeNames = [...new Set(nodeRows.map((n) => n.node_name).filter(Boolean))];
 
       return {
         screenhouse_id,
         status,
         insight,
         last_seen: lastSeen,
-        node_name: latest?.node_name ?? null,
+        node_name: nodeNames.length ? nodeNames.join(", ") : null,
         active_alerts: activeAlerts,
         abnormal,
         has_threshold: threshold != null,
+        alerts_pending_review: activeAlerts > 0 && abnormal.length === 0,
       };
     });
 
@@ -208,8 +268,14 @@ async function getLatestAllSensorData(req, res) {
           sn.screenhouse_id,
           sn.id AS sensor_node_id,
           sn.node_code,
-          sn.node_name
+          sn.node_name,
+          sk.id AS sink_node_id,
+          sk.node_code AS sink_node_code,
+          sk.fan_status,
+          sk.irrigation_status,
+          sk.lamp_status
         ${SENSOR_DATA_JOIN}
+        LEFT JOIN sink_nodes sk ON sk.screenhouse_id = sn.screenhouse_id AND sk.is_active = true
         ORDER BY sn.screenhouse_id, sd.created_at DESC
         `
     );
@@ -246,13 +312,30 @@ function mapSensorNodeRow(row) {
           air_temperature: row.air_temperature,
           air_humidity: row.air_humidity,
           light_intensity: row.light_intensity,
-          fan_status: row.fan_status,
-          irrigation_status: row.irrigation_status,
-          lamp_status: row.lamp_status,
           created_at: row.last_reading_at,
         }
       : null,
   };
+}
+
+async function getSinkNodeByScreenhouse(req, res) {
+  try {
+    const { screenhouseId } = req.params;
+    const result = await pool.query(
+      `
+      SELECT id, screenhouse_id, node_code, node_name, relay_channels,
+             fan_status, irrigation_status, lamp_status, is_active, updated_at
+      FROM sink_nodes
+      WHERE screenhouse_id = $1
+      LIMIT 1
+      `,
+      [screenhouseId]
+    );
+    res.json(result.rows[0] ?? null);
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ message: "Internal server error" });
+  }
 }
 
 async function getSensorNodesByScreenhouse(req, res) {
@@ -279,9 +362,6 @@ async function getSensorNodesByScreenhouse(req, res) {
           latest.air_temperature,
           latest.air_humidity,
           latest.light_intensity,
-          latest.fan_status,
-          latest.irrigation_status,
-          latest.lamp_status,
           latest.created_at AS last_reading_at
         FROM sensor_nodes sn
         LEFT JOIN LATERAL (
@@ -347,7 +427,7 @@ async function getScreenhouseDashboardSummary(req, res) {
   try {
     const { screenhouseId } = req.params;
 
-    const [latest, sensorNodes, hourlyTrend, threshold] = await Promise.all([
+    const [latest, sensorNodes, hourlyTrend, threshold, sinkNode] = await Promise.all([
       pool.query(
         `
           SELECT sd.*, sn.screenhouse_id, sn.node_name, sn.node_code
@@ -376,9 +456,6 @@ async function getScreenhouseDashboardSummary(req, res) {
             latest.air_temperature,
             latest.air_humidity,
             latest.light_intensity,
-            latest.fan_status,
-            latest.irrigation_status,
-            latest.lamp_status,
             latest.created_at AS last_reading_at
           FROM sensor_nodes sn
           LEFT JOIN LATERAL (
@@ -413,6 +490,16 @@ async function getScreenhouseDashboardSummary(req, res) {
       pool.query(`SELECT * FROM threshold_snapshots WHERE screenhouse_id = $1`, [
         screenhouseId,
       ]),
+      pool.query(
+        `
+        SELECT id, screenhouse_id, node_code, node_name, relay_channels,
+               fan_status, irrigation_status, lamp_status, is_active, updated_at
+        FROM sink_nodes
+        WHERE screenhouse_id = $1
+        LIMIT 1
+        `,
+        [screenhouseId]
+      ),
     ]);
 
     const latestRow = latest.rows[0] ?? null;
@@ -423,6 +510,7 @@ async function getScreenhouseDashboardSummary(req, res) {
       latest: latestRow,
       sensorNodes: nodes,
       sensors: nodes,
+      sinkNode: sinkNode.rows[0] ?? null,
       hourlyTrend: hourlyTrend.rows,
       threshold: thresholdRow,
       insight: buildInsight(latestRow, thresholdRow),
@@ -442,4 +530,5 @@ module.exports = {
   getSensorNodesByScreenhouse,
   getScreenhouseSensorHistory,
   getScreenhouseDashboardSummary,
+  getSinkNodeByScreenhouse,
 };

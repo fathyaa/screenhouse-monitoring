@@ -15,7 +15,7 @@ self.addEventListener("push", (event) => {
     payload = { body: event.data?.text() ?? "Peringatan screenhouse baru" };
   }
 
-  const title = payload.title ?? "Screenhouse Monitoring";
+  const title = payload.title ?? "BibitLive";
   const options = {
     body: payload.body ?? "Ada peringatan sensor baru",
     icon: "/pwa-192x192.png",

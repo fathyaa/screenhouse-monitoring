@@ -6,27 +6,27 @@ export const CHART_LEGEND = {
 
 export const SCREENHOUSE_CHART_GUIDE = [
   {
-    title: "Kartu kondisi terkini",
-    body: "Baca ini dulu. Tiap parameter diberi label Ideal/Kurang/Berlebih dengan bar zona hijau. Saran tindakan muncul otomatis bila ada yang menyimpang.",
+    title: "Kartu kondisi tanah",
+    body: "Mulai dari sini. Setiap ukuran tanah dapat label Pas (hijau), Kurang (oranye), atau Berlebih (merah). Garis hijau di bawah angka menunjukkan batas aman. Kalau ada yang tidak pas, saran tindakan muncul otomatis di bawah kartu.",
   },
   {
-    title: "Garis nitrogen & kelembapan (24 jam)",
-    body: "Sumbu kiri (hijau) = nitrogen. Sumbu kanan (biru) = kelembapan tanah (%). Area samar = zona ideal — selama garis di dalam area, kondisi aman.",
+    title: "Grafik nitrogen & air tanah",
+    body: "Menampilkan perubahan selama 24 jam terakhir. Garis hijau = kadar nitrogen (N). Garis biru = kelembapan tanah (%). Blok warna tipis = batas aman. Selama garis masih di dalam blok, kondisi tanah masih oke.",
   },
   {
-    title: "Batang NPK",
-    body: "Kondisi terbaru. Warna batang = verdict: hijau ideal, oranye kurang, merah berlebih.",
+    title: "Diagram batang N, P, K",
+    body: "Nilai pupuk terbaru di tanah. Warna batang: hijau = pas, oranye = kurang, merah = kelebihan. Arahkan kursor ke batang untuk melihat angkanya.",
   },
   {
-    title: "Garis phosphorus & potassium",
-    body: "Tren rata-rata per jam. Dua area samar = zona ideal P (biru) dan K (kuning). Garis di dalam area = aman.",
+    title: "Grafik fosfor & kalium",
+    body: "Perubahan fosfor (P) dan kalium (K) per jam. Blok biru = batas aman fosfor, blok kuning = batas aman kalium. Garis di dalam blok berarti masih dalam batas.",
   },
 ];
 
 export const PETANI_CHART_GUIDE = [
   {
     title: "Ringkasan semua screenhouse",
-    body: "Kartu & grafik menggabungkan data 24 jam terakhir dari seluruh screenhouse milik kamu (rata-rata per jam). Cocok untuk melihat kondisi keseluruhan sebelum membuka detail per lokasi.",
+    body: "Grafik di halaman ini menggabungkan data 24 jam terakhir dari semua screenhouse Anda. Cocok untuk melihat kondisi keseluruhan sebelum buka detail per lokasi.",
   },
   ...SCREENHOUSE_CHART_GUIDE,
 ];
@@ -60,7 +60,7 @@ export function ChartTooltip({ active, payload, label }) {
       {payload.map((p) => (
         <div key={p.dataKey} style={{ color: p.color }} className="text-left">
           <span className="font-semibold">{p.value}</span>
-          <span className="text-gray-500"> — {p.name}</span>
+          <span className="text-gray-500"> · {p.name}</span>
         </div>
       ))}
     </div>

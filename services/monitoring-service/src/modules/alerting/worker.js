@@ -4,6 +4,97 @@ const { subscriber, publisher } = require("../../config/redis");
 const { setActuators } = require("../ingest/actuatorService");
 const { resolveActuatorActions } = require("../../shared/actuatorRules");
 
+/** Cocokkan pesan alert offline (per node). */
+const OFFLINE_ALERT_MESSAGE_SUFFIX = "tidak mengirim data sensor terbaru";
+
+function buildOfflineAlertMessage(nodeName) {
+  const label = String(nodeName ?? "").trim() || "Node sensor";
+  return `${label} ${OFFLINE_ALERT_MESSAGE_SUFFIX}`;
+}
+
+/** Sama dengan getMapSummary: interval × 3, minimal 15 menit. */
+function staleThresholdMs(sendIntervalSeconds) {
+  const intervalSec = Math.max(Number(sendIntervalSeconds) || 60, 60);
+  return Math.max(intervalSec * 3, 900) * 1000;
+}
+
+async function resolveOfflineAlertsForNode(screenhouseId, sensorNodeId) {
+  const result = await pool.query(
+    `
+    UPDATE alerts
+    SET status = 'resolved'
+    WHERE screenhouse_id = $1
+      AND sensor_node_id = $2
+      AND status = 'active'
+      AND message ILIKE $3
+    RETURNING id
+    `,
+    [screenhouseId, sensorNodeId, `%${OFFLINE_ALERT_MESSAGE_SUFFIX}%`]
+  );
+
+  for (const row of result.rows) {
+    console.log("OFFLINE ALERT auto-resolved for node", sensorNodeId);
+    const enriched = await enrichAlert(row.id);
+    if (enriched) {
+      await publisher.publish("alert-resolved", JSON.stringify(enriched));
+    }
+  }
+
+  return result.rows.length > 0;
+}
+
+async function checkOfflineNodes() {
+  const result = await pool.query(
+    `
+    SELECT
+      sn.id AS sensor_node_id,
+      sn.screenhouse_id,
+      sn.node_name,
+      sn.send_interval_seconds,
+      (
+        SELECT MAX(sd.created_at)
+        FROM sensor_data sd
+        WHERE sd.sensor_node_id = sn.id
+      ) AS last_seen
+    FROM sensor_nodes sn
+    INNER JOIN screenhouse_registry sr ON sr.screenhouse_id = sn.screenhouse_id
+    WHERE sn.is_active = true
+      AND sr.status = 'active'
+    `
+  );
+
+  const now = Date.now();
+  let created = 0;
+  let resolved = 0;
+
+  for (const row of result.rows) {
+    const { sensor_node_id, screenhouse_id, node_name, send_interval_seconds, last_seen } = row;
+
+    // Lewati node yang belum pernah kirim data (bukan "tiba-tiba" offline).
+    if (!last_seen) continue;
+
+    const ageMs = now - new Date(last_seen).getTime();
+    const isOffline = ageMs > staleThresholdMs(send_interval_seconds);
+    const message = buildOfflineAlertMessage(node_name);
+
+    if (isOffline) {
+      const isNew = await ensureAlert({
+        sensorDataId: null,
+        screenhouseId: screenhouse_id,
+        sensorNodeId: sensor_node_id,
+        message,
+      });
+      if (isNew) created += 1;
+    } else if (await resolveOfflineAlertsForNode(screenhouse_id, sensor_node_id)) {
+      resolved += 1;
+    }
+  }
+
+  if (created || resolved) {
+    console.log(`[offline-check] alert baru: ${created}, resolved: ${resolved}`);
+  }
+}
+
 const SNAPSHOT_FIELDS = [
   "min_nitrogen", "max_nitrogen",
   "min_phosphorus", "max_phosphorus",
@@ -61,14 +152,7 @@ async function upsertScreenhouseRegistry(row) {
   );
 }
 
-async function createAlert({ sensorDataId, screenhouseId, sensorNodeId, message }) {
-  const result = await pool.query(
-    `INSERT INTO alerts (sensor_data_id, screenhouse_id, sensor_node_id, message, status)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [sensorDataId, screenhouseId, sensorNodeId, message, "active"]
-  );
-  console.log("ALERT CREATED:", message);
-
+async function enrichAlert(alertId) {
   const enriched = await pool.query(
     `SELECT a.id, a.screenhouse_id, a.sensor_node_id, a.message, a.status, a.created_at, a.sensor_data_id,
             sd.nitrogen AS actual_nitrogen,
@@ -92,14 +176,93 @@ async function createAlert({ sensorDataId, screenhouseId, sensorNodeId, message 
      LEFT JOIN threshold_snapshots t ON t.screenhouse_id = a.screenhouse_id
      LEFT JOIN screenhouse_registry sr ON sr.screenhouse_id = a.screenhouse_id
      WHERE a.id = $1`,
-    [result.rows[0].id]
+    [alertId]
   );
+  return enriched.rows[0] ?? null;
+}
 
-  await publisher.publish("alert-created", JSON.stringify(enriched.rows[0]));
+async function findActiveAlert({ screenhouseId, sensorNodeId, message }) {
+  const result = await pool.query(
+    `
+    SELECT id FROM alerts
+    WHERE screenhouse_id = $1
+      AND sensor_node_id = $2
+      AND message = $3
+      AND status = 'active'
+    LIMIT 1
+    `,
+    [screenhouseId, sensorNodeId, message]
+  );
+  return result.rows[0] ?? null;
+}
+
+/** Perbarui nilai aktual alert yang masih active — tanpa notifikasi baru. */
+async function touchActiveAlert(alertId, sensorDataId) {
+  await pool.query(`UPDATE alerts SET sensor_data_id = $1 WHERE id = $2`, [
+    sensorDataId,
+    alertId,
+  ]);
+}
+
+async function createAlert({ sensorDataId, screenhouseId, sensorNodeId, message }) {
+  return ensureAlert({ sensorDataId, screenhouseId, sensorNodeId, message });
+}
+
+/** Buat alert hanya jika belum ada yang active untuk kombinasi screenhouse + node + pesan. */
+async function ensureAlert({ sensorDataId, screenhouseId, sensorNodeId, message }) {
+  try {
+    const result = await pool.query(
+      `INSERT INTO alerts (sensor_data_id, screenhouse_id, sensor_node_id, message, status)
+       VALUES ($1, $2, $3, $4, 'active') RETURNING id`,
+      [sensorDataId, screenhouseId, sensorNodeId, message]
+    );
+    console.log("ALERT CREATED:", message);
+    const row = await enrichAlert(result.rows[0].id);
+    if (row) {
+      await publisher.publish("alert-created", JSON.stringify(row));
+    }
+    return true;
+  } catch (err) {
+    if (err.code !== "23505") throw err;
+
+    const existing = await findActiveAlert({ screenhouseId, sensorNodeId, message });
+    if (existing) {
+      await touchActiveAlert(existing.id, sensorDataId);
+    }
+    console.log("ALERT already active (skipped notify):", message);
+    return false;
+  }
+}
+
+/** Tutup alert active otomatis bila parameter sudah kembali normal. */
+async function resolveActiveAlertIfAny({ screenhouseId, sensorNodeId, message }) {
+  const result = await pool.query(
+    `
+    UPDATE alerts
+    SET status = 'resolved'
+    WHERE screenhouse_id = $1
+      AND sensor_node_id = $2
+      AND message = $3
+      AND status = 'active'
+    RETURNING id
+    `,
+    [screenhouseId, sensorNodeId, message]
+  );
+  if (!result.rows[0]) return false;
+
+  console.log("ALERT auto-resolved:", message);
+  const row = await enrichAlert(result.rows[0].id);
+  if (row) {
+    await publisher.publish("alert-resolved", JSON.stringify(row));
+  }
+  return true;
 }
 
 async function handleSensorDataCreated(message) {
   const { sensorDataId, screenhouseId, sensorNodeId, data: sensorData } = JSON.parse(message);
+
+  await resolveOfflineAlertsForNode(screenhouseId, sensorNodeId);
+
   console.log("Checking threshold...");
 
   const thresholdResult = await pool.query(
@@ -117,23 +280,41 @@ async function handleSensorDataCreated(message) {
 
     const min = threshold[m.minCol];
     const max = threshold[m.maxCol];
+    const lowMsg = `${m.label} di bawah batas minimum`;
+    const highMsg = `${m.label} melebihi batas maksimum`;
 
-    if (min != null && Number(value) < Number(min)) {
+    const isLow = min != null && Number(value) < Number(min);
+    const isHigh = max != null && Number(value) > Number(max);
+
+    if (isLow) {
       violations.push({ key: m.key, direction: "low", label: m.label });
-      await createAlert({
+      await ensureAlert({
         sensorDataId,
         screenhouseId,
         sensorNodeId,
-        message: `${m.label} di bawah batas minimum`,
+        message: lowMsg,
+      });
+    } else {
+      await resolveActiveAlertIfAny({
+        screenhouseId,
+        sensorNodeId,
+        message: lowMsg,
       });
     }
-    if (max != null && Number(value) > Number(max)) {
+
+    if (isHigh) {
       violations.push({ key: m.key, direction: "high", label: m.label });
-      await createAlert({
+      await ensureAlert({
         sensorDataId,
         screenhouseId,
         sensorNodeId,
-        message: `${m.label} melebihi batas maksimum`,
+        message: highMsg,
+      });
+    } else {
+      await resolveActiveAlertIfAny({
+        screenhouseId,
+        sensorNodeId,
+        message: highMsg,
       });
     }
   }
@@ -145,7 +326,6 @@ async function handleSensorDataCreated(message) {
         const reason = violations.map((v) => v.label).join(", ");
         await setActuators({
           screenhouseId: Number(screenhouseId),
-          sensorNodeId: Number(sensorNodeId),
           fan: actions.fan,
           irrigation: actions.irrigation,
           lamp: actions.lamp,
@@ -186,6 +366,17 @@ async function startAlertWorker() {
   });
 
   console.log("Alert worker listening on Redis channels");
+
+  const offlineCheckMs =
+    Math.max(Number(process.env.OFFLINE_CHECK_INTERVAL_SEC) || 300, 60) * 1000;
+
+  const runOfflineCheck = () => {
+    checkOfflineNodes().catch((err) => console.error("[offline-check]", err.message));
+  };
+
+  setTimeout(runOfflineCheck, 15_000);
+  setInterval(runOfflineCheck, offlineCheckMs);
+  console.log(`Offline node check every ${offlineCheckMs / 1000}s`);
 }
 
 module.exports = { startAlertWorker, upsertThresholdSnapshot, upsertScreenhouseRegistry };

@@ -24,7 +24,7 @@ function roleLabel(role) {
 function statusBadge(status) {
   const styles = {
     pending: "bg-amber-50 text-amber-700 border-amber-100",
-    approved: "bg-green-50 text-green-700 border-green-100",
+    approved: "bg-bl-surface-muted text-bl-primary border-bl-accent/20",
     rejected: "bg-red-50 text-red-700 border-red-100",
   };
   const labels = {
@@ -180,7 +180,7 @@ export default function KelolaUserPage() {
 
       <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
-          <Users size={18} className="text-green-700" />
+          <Users size={18} className="text-bl-primary" />
           <span className="text-sm font-semibold text-gray-800">Daftar User</span>
           <span className="text-xs text-gray-400 ml-auto">{users.length} user</span>
         </div>
@@ -222,7 +222,7 @@ export default function KelolaUserPage() {
                       <div className="flex items-center justify-center gap-1">
                         <button
                           onClick={() => setEditUser({ ...u })}
-                          className="p-1.5 rounded-lg hover:bg-green-50 text-green-700 transition"
+                          className="p-1.5 rounded-lg hover:bg-bl-surface-muted text-bl-primary transition"
                           title="Edit user"
                         >
                           <Pencil size={15} />
@@ -287,7 +287,7 @@ export default function KelolaUserPage() {
               <button
                 onClick={handleSaveUser}
                 disabled={saving}
-                className="px-4 py-2 rounded-xl bg-[#1e4d2b] text-white text-sm disabled:opacity-50"
+                className="px-4 py-2 rounded-xl bg-bl-primary text-white text-sm disabled:opacity-50"
               >
                 {saving ? "Menyimpan..." : "Simpan"}
               </button>
@@ -315,7 +315,7 @@ export default function KelolaUserPage() {
               <button
                 onClick={handleResetPassword}
                 disabled={saving}
-                className="px-4 py-2 rounded-xl bg-[#1e4d2b] text-white text-sm disabled:opacity-50"
+                className="px-4 py-2 rounded-xl bg-bl-primary text-white text-sm disabled:opacity-50"
               >
                 {saving ? "Menyimpan..." : "Reset"}
               </button>

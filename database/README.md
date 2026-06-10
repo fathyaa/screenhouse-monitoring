@@ -37,7 +37,7 @@ Password demo: `123456`
 | Folder | DB (port) | Isi |
 |--------|-----------|-----|
 | `database/app/` | `screenhouse_app` (5434) | users, wilayah, screenhouses, thresholds |
-| `database/monitoring/` | `screenhouse_monitoring` (5433) | screenhouse_registry, threshold_snapshots, sensor_nodes, sensor_data, alerts |
+| `database/monitoring/` | `screenhouse_monitoring` (5433) | screenhouse_registry, threshold_snapshots, sink_nodes, sensor_nodes, sensor_data, actuator_logs, alerts |
 | `database/scripts/` | App + Monitoring | import wilayah, sync registry, seed peta |
 
 ## Model
@@ -45,7 +45,44 @@ Password demo: `123456`
 ```
 App DB:        users → screenhouses → thresholds
 Monitoring DB: screenhouse_registry + threshold_snapshots (sync)
-                 sensor_nodes → sensor_data → alerts
+                 sink_nodes (1/SH) + sensor_nodes (tray) → sensor_data → alerts
+                 actuator_logs (riwayat relay)
 ```
 
-Migrasi service: [`docs/migration-app-monitoring-service.md`](../docs/migration-app-monitoring-service.md)
+### Konvensi kode node
+
+| Sumber | Tray (`sensor_nodes`) | Sink (`sink_nodes`) |
+|--------|----------------------|---------------------|
+| 3 screenhouse inti (`seed.sql`) | `SH01-T01`, `SH01-T02`, … | `SH01-SINK`, `SH02-SINK`, … |
+| 30+ titik peta (`npm run seed:map`) | `SHM01-N01`, `SHM02-N01`, … | `SHM01-SINK`, `SHM02-SINK`, … |
+| DB lama (auto-migrasi 001) | — | `SH01-SINK` berdasarkan `screenhouse_id` |
+
+Kode tray harus cocok dengan `node_id` di payload MQTT. Untuk simulasi/demo inti pakai `SH01-T01`; titik peta pakai kode `SHMxx-N01` dari DB.
+
+### Migrasi DB monitoring yang sudah ada
+
+Jalankan berurutan (tidak perlu drop database):
+
+```bash
+# 1. Sink node + actuator logs (wajib)
+psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring \
+  -f database/monitoring/migrations/001_sink_nodes_actuators.sql
+
+# 2. Dedup alert active (jika index belum ada)
+psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring \
+  -f database/monitoring/data/migrate_alert_dedup_index.sql
+
+# 3. Kode tray legacy → Txx (hanya 3 demo inti, jika masih SHxx-Nxx)
+psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring \
+  -f database/monitoring/data/migrate_tray_node_codes.sql
+```
+
+Setelah migrasi, restart `monitoring-service`. Detail + seed opsional: [`database/monitoring/README.md`](monitoring/README.md).
+
+### Seed & demo opsional (Monitoring DB)
+
+```bash
+# Inject reading "live" untuk demo status peta (Sehat / Peringatan / Kritis)
+psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring \
+  -f database/monitoring/data/seed_live_demo.sql
+```

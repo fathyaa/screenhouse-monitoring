@@ -1,5 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" fill="none">
-  <rect width="180" height="180" rx="32" fill="#0f2d18"/>
-  <rect x="12" y="12" width="156" height="156" rx="24" fill="#1e4d2b"/>
-  <text x="90" y="112" text-anchor="middle" font-size="72" fill="#ffffff"><></text>
+  <rect width="180" height="180" rx="32" fill="#FAF8F3"/>
+  <ellipse cx="90" cy="134" rx="62" ry="16" fill="#52B788" opacity="0.35"/>
+  <path d="M90 44 C90 44 62 98 62 128 C62 146 74 156 90 156 C106 156 118 146 118 128 C118 98 90 44 90 44Z" fill="url(#leaf)"/>
+  <circle cx="120" cy="52" r="10" fill="#E63946"/>
+  <circle cx="120" cy="52" r="16" stroke="#E63946" stroke-width="2" opacity="0.35"/>
+  <defs>
+    <linearGradient id="leaf" x1="90" y1="44" x2="90" y2="156" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#40916C"/>
+      <stop offset="1" stop-color="#74C69D"/>
+    </linearGradient>
+  </defs>
 </svg>

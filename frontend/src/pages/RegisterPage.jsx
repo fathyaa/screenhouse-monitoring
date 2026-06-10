@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { User, Phone, Lock } from "lucide-react";
+import AuthHero from "../components/AuthHero";
+import BrandBar from "../components/BrandBar";
 
 function RegisterPage() {
 
@@ -42,37 +44,17 @@ function RegisterPage() {
     return (
         <div className="app-shell fixed inset-0 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
 
-            <div className="hidden lg:flex flex-1 relative overflow-hidden">
-                <img
-                    src="https://images.unsplash.com/photo-1625246333195-78d9c38ad449?q=80&w=1974&auto=format&fit=crop"
-                    alt="Sawah"
-                    className="absolute inset-0 w-full h-full object-cover"
-                />
+            <AuthHero
+                title={
+                    <>
+                        Daftar ke BibitLive
+                        <br />
+                        Pembibitan Padi
+                    </>
+                }
+            />
 
-                <div className="absolute inset-0 bg-gradient-to-r from-[#0f2d18]/85 via-[#0f2d18]/50 to-[#0a2312]/15" />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0a2312]/80 via-transparent to-transparent" />
-
-                <div className="absolute bottom-0 left-0 p-10 max-w-4xl text-left">
-                    <div className="text-5xl font-bold text-white leading-snug mb-3">
-                        Monitoring Screenhouse<br />
-                        Pembibitan Padi UPTD Mektan
-                    </div>
-
-                    <div className="text-2xl text-white/60 leading-relaxed">
-                        Pantau kondisi NPK, kelembaban, dan suhu langsung dari genggaman tangan.
-                    </div>
-                </div>
-            </div>
-
-            <div className="lg:hidden bg-[#0f2d18] px-5 py-4 text-white shrink-0">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-[#1e4d2b] flex items-center justify-center text-lg">🌾</div>
-                    <div>
-                        <div className="text-base font-bold">Daftar Petani</div>
-                        <div className="text-xs text-white/60">Screenhouse Monitoring · UPTD Mektan</div>
-                    </div>
-                </div>
-            </div>
+            <BrandBar title="Daftar Petani" subtitle="BibitLive · Pembibitan padi" />
 
             <div className="w-full lg:w-[410px] shrink-0 bg-white flex flex-col justify-center px-6 sm:px-8 py-8 lg:py-10 overflow-y-auto flex-1 lg:flex-none">
 
@@ -81,7 +63,7 @@ function RegisterPage() {
                 </div>
 
                 <div className="text-xs text-gray-400 mt-1 mb-5">
-                    Isi data diri untuk mendaftar ke sistem UPTD Mektan
+                    Isi data diri untuk mendaftar ke BibitLive
                 </div>
 
                 <div className="space-y-3">
@@ -150,7 +132,7 @@ function RegisterPage() {
 
                 <button
                     onClick={handleContinue}
-                    className="w-full h-10 rounded-lg bg-[#1e4d2b] hover:bg-[#2d6e3e] text-white text-sm font-medium transition mt-5 mb-3"
+                    className="btn-bl w-full h-10 rounded-lg text-sm mt-5 mb-3"
                 >
                     Daftar sekarang → isi screenhouse
                 </button>
@@ -163,7 +145,7 @@ function RegisterPage() {
                     Sudah punya akun?{" "}
                     <button
                         onClick={() => navigate("/login")}
-                        className="text-[#1e4d2b] font-medium hover:underline"
+                        className="link-bl"
                     >
                         Masuk di sini
                     </button>

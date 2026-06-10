@@ -51,11 +51,11 @@ function drawHeader(doc, report) {
   doc.setTextColor(...BRAND.white);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
-  doc.text("Laporan Monitoring Screenhouse Wilayah", 14, 16);
+  doc.text("Laporan BibitLive Wilayah", 14, 16);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
-  doc.text("Sistem Monitoring Screenhouse · UPTD Mekanisasi Pertanian", 14, 24);
+  doc.text("BibitLive · UPTD Mekanisasi Pertanian", 14, 24);
 
   doc.setFontSize(8.5);
   doc.text(
@@ -212,8 +212,8 @@ function drawRegionTable(doc, report, startY) {
     row.offline,
     `${row.uptime_pct}%`,
     row.active_alerts,
-    row.sensor_avg?.soil_moisture != null ? `${row.sensor_avg.soil_moisture}%` : "—",
-    row.sensor_avg?.soil_temperature != null ? `${row.sensor_avg.soil_temperature}°C` : "—",
+    row.sensor_avg?.soil_moisture != null ? `${row.sensor_avg.soil_moisture}%` : "Tidak ada",
+    row.sensor_avg?.soil_temperature != null ? `${row.sensor_avg.soil_temperature}°C` : "Tidak ada",
   ]);
 
   autoTable(doc, {
@@ -272,7 +272,7 @@ function drawAlertParamsTable(doc, report, startY) {
     body: report.top_alert_params.map((p, i) => [
       p.label,
       p.count,
-      i === 0 ? "Prioritas tindak lanjut" : "—",
+      i === 0 ? "Prioritas tindak lanjut" : "Tidak ada",
     ]),
     theme: "striped",
     headStyles: {
@@ -347,7 +347,7 @@ function drawFooter(doc, pageNum, totalPages) {
   doc.setTextColor(...BRAND.slate);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
-  doc.text("Dokumen resmi · Sistem Monitoring Screenhouse", 14, h - 8);
+  doc.text("Dokumen resmi · BibitLive", 14, h - 8);
   doc.text(`Halaman ${pageNum} dari ${totalPages}`, w - 14, h - 8, { align: "right" });
 }
 

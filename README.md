@@ -1,6 +1,6 @@
 # Screenhouse Monitoring System
 
-Sistem monitoring realtime screenhouse pembibitan padi untuk MCtan.
+Sistem monitoring realtime screenhouse pembibitan padi.
 
 ## Stack
 
@@ -39,11 +39,12 @@ Microservices dengan **bounded context** dan **2 database terpisah**:
 App Service membaca data monitoring lewat HTTP (`MONITORING_SERVICE_URL`); Monitoring Service punya read-model tersinkron (`screenhouse_registry`, `threshold_snapshots`) yang di-sync dari App DB.
 
 ```txt
-Sensor ESP32
-    ↓ MQTT
-Mosquitto Broker
-    ↓
-Monitoring Service ──→ screenhouse_monitoring (sensor_data, alerts)
+Sensor Node (tray) ──radio WSN──► Sink Node (gateway)
+                                      ↓ MQTT publish
+                                 Mosquitto Broker
+                                      ↓ subscribe
+Monitoring Service ──→ screenhouse_monitoring
+  (sink_nodes, sensor_nodes, sensor_data, actuator_logs, alerts)
     ↓ Redis event bus + WebSocket
 Frontend Dashboard ←── App Service ──→ screenhouse_app (users, screenhouses, thresholds)
 ```
@@ -255,28 +256,34 @@ http://localhost:5173
 ## Alur singkat
 
 ```txt
-Petani toggle di web / Alert otomatis
-    → monitoring-service publish MQTT command
-    → Node WSN (ESP32) terima & nyalakan relay
-    → Node publish telemetry balik (status aktuator terbaru)
-    → monitoring-service simpan ke sensor_data
+Tray (sensor node) → Sink node → MQTT cloud
+Petani toggle / Alert otomatis
+    → monitoring-service publish command ke sink node
+    → Sink nyalakan relay
+    → Sink publish telemetry balik
+    → monitoring-service simpan sensor_data (tray) + actuator_logs (sink)
 ```
 
 ## Topic MQTT
 
 | Arah | Topic | Keterangan |
 | ---- | ----- | ---------- |
-| Server → Node | `screenhouse/{screenhouse_id}/node/{node_code}/command` | Perintah ON/OFF aktuator |
-| Server → Node (broadcast) | `screenhouse/{screenhouse_id}/actuator` | Sama + field `node_code` |
-| Node → Server | `screenhouse/{screenhouse_id}/node/{node_code}/sensor` | Telemetry + status relay |
-| Node → Server (alt) | `node/{node_code}/telemetry` | Format telemetry sama |
+| Server → Sink | `screenhouse/{id}/sink/{sink_code}/command` | Perintah ON/OFF relay |
+| Server → Sink (broadcast) | `screenhouse/{id}/actuator` | Sama + `node_id` / `destination_id` |
+| Sink → Server | `screenhouse/{id}/sink/{sink_code}/sensor` | Telemetry tray atau status relay |
+| Legacy | `screenhouse/{id}/node/{code}/sensor` | Masih didukung |
 
-`node_code` **wajib** cocok dengan kolom `sensor_nodes.node_code` di DB monitoring.
+| Field payload | DB |
+| ------------- | -- |
+| `node_id` | `sensor_nodes.node_code` (tray pengirim) |
+| `destination_id` | `sink_nodes.node_code` (sink penerima) |
 
-## Payload command (server → node)
+## Payload command (server → sink)
 
 ```json
 {
+  "node_id": "SH01-SINK",
+  "destination_id": "SH01-SINK",
   "fan_status": true,
   "irrigation_status": false,
   "lamp_status": false,
@@ -285,27 +292,23 @@ Petani toggle di web / Alert otomatis
 }
 ```
 
-| Field | Arti |
-| ----- | ---- |
-| `fan_status` | Kipas ON/OFF |
-| `irrigation_status` | Irigasi ON/OFF |
-| `lamp_status` | Lampu ON/OFF |
-| `source` | `"manual"` (petani) atau `"auto"` (alert worker) |
-
-## Payload telemetry (node → server)
+## Payload telemetry tray (sink → server)
 
 ```json
 {
-  "node_code": "SH01-N01",
+  "node_id": "SH01-T01",
+  "destination_id": "SH01-SINK",
   "nitrogen": 24,
   "soil_moisture": 68,
-  "fan_status": true,
-  "irrigation_status": false,
-  "lamp_status": false
+  "soil_temperature": 26.5
 }
 ```
 
-Setelah menerima command, node **wajib publish ulang** telemetry dengan status relay yang sudah diterapkan.
+Status relay disimpan di `sink_nodes` + `actuator_logs`, **bukan** di `sensor_data`.
+
+Migrasi DB lama: `database/monitoring/migrations/001_sink_nodes_actuators.sql` (lihat `database/monitoring/README.md`).
+
+Setelah menerima command, sink **wajib publish ulang** status relay ke topic sensor.
 
 ## Otomatis dari alert
 
@@ -325,37 +328,52 @@ Ringkasannya: subscribe topic `command`, apply relay, publish ke topic `sensor`.
 
 ## Tes tanpa hardware
 
-**Dengarkan command dari web:**
+**Dengarkan command dari web (topic sink — terbaru):**
 
 ```bash
-mosquitto_sub -h localhost -t 'screenhouse/+/node/+/command' -v
+mosquitto_sub -h localhost -t 'screenhouse/+/sink/+/command' -v
 ```
 
 Toggle irigasi/kipas/lampu dari dashboard petani — pesan harus muncul di terminal.
 
-**Publish telemetry dummy (node → server):**
+**Publish telemetry tray (via sink — format terbaru):**
 
 ```bash
-mosquitto_pub \
--h localhost \
--t screenhouse/1/node/SH01-N01/sensor \
--m '{
-  "node_code": "SH01-N01",
-  "nitrogen": 24,
-  "phosphorus": 15,
-  "potassium": 18,
-  "soil_moisture": 68,
-  "soil_temperature": 26.5,
-  "soil_ph": 6.2,
-  "conductivity": 450,
-  "air_temperature": 28,
-  "air_humidity": 65,
-  "light_intensity": 12000,
-  "fan_status": false,
-  "irrigation_status": true,
-  "lamp_status": false
-}'
+mosquitto_pub -h localhost \
+  -t screenhouse/1/sink/SH01-SINK/sensor \
+  -m '{
+    "node_id": "SH01-T01",
+    "destination_id": "SH01-SINK",
+    "nitrogen": 30,
+    "phosphorus": 20,
+    "potassium": 30,
+    "soil_moisture": 65,
+    "soil_temperature": 27.0,
+    "soil_ph": 6.3,
+    "conductivity": 450,
+    "air_temperature": 28,
+    "air_humidity": 70,
+    "light_intensity": 20000
+  }'
 ```
+
+**Simulasi balasan relay dari sink (setelah toggle web):**
+
+```bash
+mosquitto_pub -h localhost \
+  -t screenhouse/1/sink/SH01-SINK/sensor \
+  -m '{
+    "node_id": "SH01-SINK",
+    "destination_id": "SH01-SINK",
+    "fan_status": true,
+    "irrigation_status": false,
+    "lamp_status": false
+  }'
+```
+
+Script lengkap (alert, loop 10×, dll.): [`docs/evaluasi-kualitas/mqtt-simulasi.sh`](docs/evaluasi-kualitas/mqtt-simulasi.sh)
+
+**Legacy** — topic `screenhouse/{id}/node/{code}/sensor` + field `node_code` masih didukung, tapi **jangan pakai `SH01-N01`** (sudah diganti `SH01-T01` / `SH01-SINK`).
 
 ---
 
@@ -474,6 +492,6 @@ Service worker custom: `frontend/src/pwa/sw.js` (push handler + notification cli
 
 * Sistem masih tahap development.
 * Threshold per screenhouse via halaman admin/kelola-threshold.
-* Device ESP32 + RS485 NPK sensor = publisher MQTT utama; lihat `docs/hardware/esp32-actuator-mqtt.ino`.
+* Device WSN: **Sensor Node** (1 tray) + **Sink Node** (1 gateway/screenhouse) = publisher MQTT; lihat `docs/hardware/` dan `database/monitoring/README.md`.
 * Kontrol aktuator: manual (petani via web) + otomatis saat alert threshold.
 * PWA + Web Push untuk petani — butuh VAPID keys di app-service.

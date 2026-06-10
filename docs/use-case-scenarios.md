@@ -12,7 +12,7 @@ Format mengikuti template: Aktor, Referensi FR, Prasyarat, Pasca kondisi, Alur i
 
 | | |
 |---|---|
-| **Aktor** | Petani, Operator MCtan, Super Admin |
+| **Aktor** | Petani, Operator, Super Admin |
 | **Referensi FR** | FR-01, FR-12 |
 | **Prasyarat** | Akun sudah terdaftar; petani berstatus approved |
 | **Pasca kondisi** | Pengguna masuk dashboard sesuai role; token JWT tersimpan |
@@ -52,7 +52,7 @@ Format mengikuti template: Aktor, Referensi FR, Prasyarat, Pasca kondisi, Alur i
 
 | | |
 |---|---|
-| **Aktor** | Operator MCtan, Super Admin |
+| **Aktor** | Operator, Super Admin |
 | **Referensi FR** | FR-03 |
 | **Prasyarat** | Operator/Admin sudah login; terdapat petani berstatus pending |
 | **Pasca kondisi** | Status akun petani menjadi approved atau rejected |
@@ -151,7 +151,7 @@ Format mengikuti template: Aktor, Referensi FR, Prasyarat, Pasca kondisi, Alur i
 
 | | |
 |---|---|
-| **Aktor** | Operator MCtan, Super Admin |
+| **Aktor** | Operator, Super Admin |
 | **Referensi FR** | FR-08 |
 | **Prasyarat** | Operator/Admin sudah login |
 | **Pasca kondisi** | Operator/Admin melihat detail kondisi screenhouse terpilih |
@@ -169,7 +169,7 @@ Format mengikuti template: Aktor, Referensi FR, Prasyarat, Pasca kondisi, Alur i
 
 | | |
 |---|---|
-| **Aktor** | Operator MCtan, Super Admin |
+| **Aktor** | Operator, Super Admin |
 | **Referensi FR** | FR-09 |
 | **Prasyarat** | Operator/Admin sudah login |
 | **Pasca kondisi** | Peta menampilkan lokasi screenhouse dengan marker status |
@@ -188,7 +188,7 @@ Format mengikuti template: Aktor, Referensi FR, Prasyarat, Pasca kondisi, Alur i
 
 | | |
 |---|---|
-| **Aktor** | Operator MCtan, Super Admin |
+| **Aktor** | Operator, Super Admin |
 | **Referensi FR** | FR-10 (include FR-09) |
 | **Prasyarat** | Operator/Admin sudah login |
 | **Pasca kondisi** | Peta dan daftar screenhouse terfilter sesuai provinsi |
@@ -206,7 +206,7 @@ Format mengikuti template: Aktor, Referensi FR, Prasyarat, Pasca kondisi, Alur i
 
 | | |
 |---|---|
-| **Aktor** | Operator MCtan, Super Admin |
+| **Aktor** | Operator, Super Admin |
 | **Referensi FR** | FR-11 |
 | **Prasyarat** | Operator/Admin sudah login |
 | **Pasca kondisi** | Operator/Admin mengetahui status online/offline device |
@@ -228,7 +228,7 @@ Format mengikuti template: Aktor, Referensi FR, Prasyarat, Pasca kondisi, Alur i
 
 | | |
 |---|---|
-| **Aktor** | Operator MCtan |
+| **Aktor** | Operator |
 | **Referensi FR** | FR-13 |
 | **Prasyarat** | Operator sudah login |
 | **Pasca kondisi** | Laporan wilayah ditampilkan; file PDF terunduh (jika export) |
@@ -271,7 +271,7 @@ Format mengikuti template: Aktor, Referensi FR, Prasyarat, Pasca kondisi, Alur i
 
 | | |
 |---|---|
-| **Aktor** | Operator MCtan, Super Admin |
+| **Aktor** | Operator, Super Admin |
 | **Referensi FR** | FR-08, FR-15 |
 | **Prasyarat** | Operator/Admin sudah login; screenhouse memiliki histori sensor |
 | **Pasca kondisi** | Grafik historis 24 jam ditampilkan pada halaman detail |

@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { Toaster } from "react-hot-toast";
+import AppToaster from "./components/AppToaster";
 import { AlertProvider } from "./context/AlertContext";
 import PwaInstallBanner from "./components/PwaInstallBanner";
 import "./App.css";
@@ -19,6 +19,7 @@ import KonfigurasiPage from "./pages/KonfigurasiPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import RegisterScreenhousePage from "./pages/RegisterScreenhousePage";
+import PetaniAjukanScreenhousePage from "./pages/PetaniAjukanScreenhousePage";
 
 function PrivateRoute({ children, allowedRole, allowedRoles }) {
   const token = localStorage.getItem("token");
@@ -49,6 +50,7 @@ function AppRoutes() {
       <Route path="/petani" element={<PrivateRoute allowedRole="petani"><PetaniDashboard /></PrivateRoute>} />
       <Route path="/petani/tren" element={<PrivateRoute allowedRole="petani"><PetaniTrenPage /></PrivateRoute>} />
       <Route path="/petani/screenhouse/:id" element={<PrivateRoute allowedRole="petani"><ScreenhouseDetailPage basePath="/petani" /></PrivateRoute>} />
+      <Route path="/petani/ajukan-screenhouse" element={<PrivateRoute allowedRole="petani"><PetaniAjukanScreenhousePage /></PrivateRoute>} />
       <Route path="/petani/peringatan" element={<PrivateRoute allowedRole="petani"><NotifikasiPage /></PrivateRoute>} />
       <Route path="/petani/notifikasi" element={<Navigate to="/petani/peringatan" replace />} />
 
@@ -75,7 +77,7 @@ function AppRoutes() {
 function App() {
   return (
     <>
-      <Toaster />
+      <AppToaster />
       <AlertProvider>
         <AppRoutes />
       </AlertProvider>

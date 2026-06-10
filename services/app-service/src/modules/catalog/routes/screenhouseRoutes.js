@@ -9,6 +9,11 @@ const {
   getOperatorStats,
   getMyDashboardStats,
   getScreenhouseById,
+  submitMyScreenhouse,
+  getPendingScreenhouses,
+  getPendingScreenhouseStats,
+  approveScreenhouse,
+  rejectScreenhouse,
 } = require("../controllers/screenhouseController");
 const { getOperatorReports } = require("../controllers/operatorReportController");
 
@@ -25,6 +30,41 @@ router.get(
   authMiddleware,
   roleMiddleware(["petani"]),
   getMyDashboardStats
+);
+
+router.post(
+  "/mine",
+  authMiddleware,
+  roleMiddleware(["petani"]),
+  submitMyScreenhouse
+);
+
+router.get(
+  "/pending/stats",
+  authMiddleware,
+  roleMiddleware(["operator", "super_admin"]),
+  getPendingScreenhouseStats
+);
+
+router.get(
+  "/pending",
+  authMiddleware,
+  roleMiddleware(["operator", "super_admin"]),
+  getPendingScreenhouses
+);
+
+router.patch(
+  "/:id/approve",
+  authMiddleware,
+  roleMiddleware(["operator", "super_admin"]),
+  approveScreenhouse
+);
+
+router.patch(
+  "/:id/reject",
+  authMiddleware,
+  roleMiddleware(["operator", "super_admin"]),
+  rejectScreenhouse
 );
 
 router.get(

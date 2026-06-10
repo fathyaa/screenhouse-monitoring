@@ -42,13 +42,13 @@ function FarmerScreenhousesPage() {
   };
 
   const statusLabel = (status) => {
-    if (status === "active") return { text: "Aktif", className: "bg-green-50 text-green-700" };
+    if (status === "active") return { text: "Aktif", className: "bg-bl-surface-muted text-bl-primary" };
     if (status === "pending") return { text: "Pending", className: "bg-amber-50 text-amber-700" };
     return { text: status || "-", className: "bg-gray-100 text-gray-600" };
   };
 
   return (
-    <div className="app-shell fixed inset-0 flex bg-slate-100 overflow-hidden text-left">
+    <div className="app-shell fixed inset-0 flex bg-bl-surface overflow-hidden text-left">
       <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} role={user?.role} user={user} />
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0 text-left">
@@ -87,8 +87,8 @@ function FarmerScreenhousesPage() {
           ) : (
             <>
               <div className="bg-white rounded-2xl border border-gray-200 p-4 flex flex-wrap gap-4 items-center">
-                <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
-                  <User size={18} className="text-green-700" />
+                <div className="w-10 h-10 rounded-xl bg-bl-surface-muted flex items-center justify-center">
+                  <User size={18} className="text-bl-primary" />
                 </div>
                 <div className="flex-1 min-w-[200px]">
                   <div className="text-sm font-semibold text-gray-800">{farmer.name}</div>
@@ -121,8 +121,8 @@ function FarmerScreenhousesPage() {
                           onClick={() => navigate(`/operator/screenhouse/${sh.id}`)}
                           className="w-full p-4 flex items-start gap-3 hover:bg-gray-50 transition text-left"
                         >
-                          <div className="w-9 h-9 rounded-xl bg-green-50 flex items-center justify-center shrink-0">
-                            <Leaf size={16} className="text-green-700" />
+                          <div className="w-9 h-9 rounded-xl bg-bl-surface-muted flex items-center justify-center shrink-0">
+                            <Leaf size={16} className="text-bl-primary" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">

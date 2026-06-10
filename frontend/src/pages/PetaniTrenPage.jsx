@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import {
   Bar,
   BarChart,
@@ -26,6 +26,7 @@ import {
   buildNpkFromLatest,
 } from "../constants/chartGuide";
 import { API_URL } from "../config/api";
+import PullToRefresh from "../components/PullToRefresh";
 
 function PetaniTrenPage() {
   const [screenhouses, setScreenhouses] = useState([]);
@@ -34,18 +35,23 @@ function PetaniTrenPage() {
   const [chartHistories, setChartHistories] = useState([]);
   const [chartThreshold, setChartThreshold] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const { isOpen: sidebarOpen, toggle: toggleSidebar, close: closeSidebar } = useSidebarOpen();
 
   const user = JSON.parse(localStorage.getItem("user"));
   const token = localStorage.getItem("token");
   const headers = { Authorization: `Bearer ${token}` };
 
+  const refreshPage = useCallback(async () => {
+    setRefreshKey((k) => k + 1);
+  }, []);
+
   useEffect(() => {
     fetch(`${API_URL}/screenhouses/my-screenhouses`, { headers })
       .then((res) => res.json())
       .then((data) => setScreenhouses(Array.isArray(data) ? data : []))
       .catch(console.error);
-  }, []);
+  }, [refreshKey]);
 
   useEffect(() => {
     fetch(`${API_URL}/sensor-data/latest`, { headers })
@@ -59,7 +65,7 @@ function PetaniTrenPage() {
         setLatestSensorData(mapped);
       })
       .catch(console.error);
-  }, []);
+  }, [refreshKey]);
 
   useEffect(() => {
     if (!screenhouses.length || !token) {
@@ -93,7 +99,7 @@ function PetaniTrenPage() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [screenhouses, token]);
+  }, [screenhouses, token, refreshKey]);
 
   const trendChartData = useMemo(
     () => aggregateHourlyTrend(chartDashboards, chartHistories),
@@ -138,7 +144,7 @@ function PetaniTrenPage() {
   }, [npkCompareData, chartThreshold]);
 
   return (
-    <div className="app-shell fixed inset-0 flex bg-slate-100 overflow-hidden text-left">
+    <div className="app-shell fixed inset-0 flex bg-bl-surface overflow-hidden text-left">
       <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} screenhouses={screenhouses} role={user?.role} user={user} />
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0 text-left">
@@ -148,7 +154,7 @@ function PetaniTrenPage() {
           subtitle="Grafik 24 jam terakhir dari semua screenhouse Anda"
         />
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-4 text-left">
+        <PullToRefresh onRefresh={refreshPage} className="p-5 space-y-4 text-left">
           <div className="bg-white rounded-2xl border border-gray-200 p-4 text-left">
             <div className="text-sm font-semibold text-gray-800">Ringkasan tren</div>
             <div className="text-xs text-gray-400 mt-0.5">
@@ -162,7 +168,7 @@ function PetaniTrenPage() {
               latest={aggregateLatest}
               threshold={chartThreshold}
               title="Kondisi rata-rata saat ini"
-              subtitle="Snapshot terbaru — bukan tren historis"
+              subtitle="Snapshot terbaru, bukan tren historis"
             />
           )}
 
@@ -183,7 +189,7 @@ function PetaniTrenPage() {
                     Tren nitrogen & kelembapan tanah (24 jam)
                   </div>
                   <div className="text-xs text-gray-400 mb-2">
-                    Rata-rata semua screenhouse · kiri: N · kanan: kelembapan (%)
+                    Rata-rata semua screenhouse · kiri: nitrogen · kanan: kelembapan tanah
                   </div>
                   {trendChartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height={260}>
@@ -258,7 +264,7 @@ function PetaniTrenPage() {
                     Rata-rata NPK screenhouse Anda
                   </div>
                   <div className="text-xs text-gray-400 mb-2">
-                    Rata-rata terbaru · warna batang: hijau ideal, oranye kurang, merah berlebih
+                    Nilai rata-rata terbaru · hijau = pas, oranye = kurang, merah = berlebih
                   </div>
                   {npkColored.length > 0 && npkColored.some((d) => d.value > 0) ? (
                     <ResponsiveContainer width="100%" height={260}>
@@ -273,7 +279,7 @@ function PetaniTrenPage() {
                           formatter={(value, _name, props) => [
                             `${value} mg/kg`,
                             props.payload.min != null
-                              ? `ideal ${props.payload.min}–${props.payload.max}`
+                              ? `batas aman ${props.payload.min}–${props.payload.max}`
                               : "",
                           ]}
                         />
@@ -301,7 +307,7 @@ function PetaniTrenPage() {
                   Tren phosphorus & potassium (24 jam)
                 </div>
                 <div className="text-xs text-gray-400 mb-2">
-                  Rata-rata semua node — pantau kebutuhan pupuk P dan K
+                  Rata-rata semua tray sensor · pantau kebutuhan pupuk P dan K
                 </div>
                 {trendChartData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={220}>
@@ -360,7 +366,7 @@ function PetaniTrenPage() {
               </div>
             </>
           )}
-        </div>
+        </PullToRefresh>
       </div>
     </div>
   );

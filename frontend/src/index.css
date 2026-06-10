@@ -1,5 +1,19 @@
 @import "tailwindcss";
 
+/* BibitLive brand palette — selaras dengan logo (hijau bibit + live red) */
+@theme {
+  --color-bl-forest: #0f2d18;
+  --color-bl-dark: #1b4332;
+  --color-bl-darker: #0a2312;
+  --color-bl-primary: #40916c;
+  --color-bl-primary-hover: #2d6a4f;
+  --color-bl-accent: #52b788;
+  --color-bl-mint: #74c69d;
+  --color-bl-surface: #f1f5f9;
+  --color-bl-surface-muted: #f0f5f1;
+  --color-bl-live: #e63946;
+}
+
 /* Fullscreen app shell — aman di mobile browser & PWA */
 html,
 body,
@@ -32,6 +46,31 @@ body {
 .app-topbar {
   padding-left: max(1rem, env(safe-area-inset-left));
   padding-right: max(1rem, env(safe-area-inset-right));
+}
+
+/* BibitLive reusable UI patterns */
+.btn-bl {
+  @apply bg-bl-primary hover:bg-bl-primary-hover text-white font-medium transition disabled:opacity-50;
+}
+
+.link-bl {
+  @apply text-bl-primary font-medium hover:underline;
+}
+
+.input-bl {
+  @apply border border-gray-200 rounded-lg bg-gray-50 focus-within:border-bl-primary transition;
+}
+
+.live-badge {
+  @apply inline-flex items-center gap-2 bg-bl-surface-muted text-bl-dark text-xs font-medium px-3 py-1.5 rounded-full;
+}
+
+.live-badge-dot {
+  @apply w-2 h-2 rounded-full bg-bl-live animate-pulse;
+}
+
+.overscroll-y-contain {
+  overscroll-behavior-y: contain;
 }
 
 /* Leaflet pakai z-index tinggi (400–800) — jangan timpa sidebar / topbar app */

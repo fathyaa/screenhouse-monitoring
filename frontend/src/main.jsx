@@ -10,7 +10,7 @@ import App from './App.jsx'
 registerSW({
   immediate: true,
   onNeedRefresh() {
-    toast("Versi app baru tersedia — muat ulang halaman", { icon: "🔄", duration: 8000 });
+    toast("Versi app baru tersedia. Muat ulang halaman.", { icon: "🔄", duration: 8000 });
   },
   onOfflineReady() {
     console.log("[pwa] siap offline");

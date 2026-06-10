@@ -37,22 +37,29 @@ async function getOwnerStats(req, res) {
       SELECT
         (SELECT COUNT(*)::int
            FROM screenhouse_registry
-           WHERE owner_user_id = $1) AS screenhouse_count,
+           WHERE owner_user_id = $1
+             AND status = 'active') AS screenhouse_count,
         (SELECT COUNT(*)::int
            FROM sensor_nodes sn
            JOIN screenhouse_registry r ON r.screenhouse_id = sn.screenhouse_id
            WHERE r.owner_user_id = $1
+             AND r.status = 'active'
              AND sn.is_active = true) AS active_nodes,
-        (SELECT COUNT(DISTINCT sn.id)::int
+        (SELECT COUNT(*)::int
            FROM sensor_nodes sn
            JOIN screenhouse_registry r ON r.screenhouse_id = sn.screenhouse_id
            WHERE r.owner_user_id = $1
+             AND r.status = 'active'
              AND sn.is_active = true
              AND EXISTS (
-               SELECT 1 FROM sensor_data sd
+               SELECT 1
+               FROM sensor_data sd
                WHERE sd.sensor_node_id = sn.id
-                 AND sd.created_at >= NOW() - INTERVAL '24 hours'
-             )) AS active_sensors,
+                 AND sd.created_at >= NOW() - (
+                   GREATEST(GREATEST(COALESCE(sn.send_interval_seconds, 60), 60) * 3, 900)
+                   || ' seconds'
+                 )::interval
+             )) AS online_nodes,
         (SELECT COUNT(*)::int
            FROM alerts a
            JOIN screenhouse_registry r ON r.screenhouse_id = a.screenhouse_id
@@ -63,10 +70,15 @@ async function getOwnerStats(req, res) {
     );
 
     const row = result.rows[0] || {};
+    const activeNodes = row.active_nodes ?? 0;
+    const onlineNodes = row.online_nodes ?? 0;
     res.json({
       screenhouse_count: row.screenhouse_count ?? 0,
-      active_nodes: row.active_nodes ?? 0,
-      active_sensors: row.active_sensors ?? 0,
+      active_nodes: activeNodes,
+      online_nodes: onlineNodes,
+      offline_nodes: Math.max(activeNodes - onlineNodes, 0),
+      /** @deprecated gunakan online_nodes — dipertahankan sementara untuk kompatibilitas */
+      active_sensors: onlineNodes,
       active_alerts: row.active_alerts ?? 0,
     });
   } catch (err) {

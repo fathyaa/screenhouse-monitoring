@@ -8,6 +8,7 @@ const {
   getSensorNodesByScreenhouse,
   getScreenhouseSensorHistory,
   getScreenhouseDashboardSummary,
+  getSinkNodeByScreenhouse,
 } = require("../controllers/sensorController");
 const { postScreenhouseActuators } = require("../controllers/actuatorController");
 
@@ -16,6 +17,10 @@ const router = express.Router();
 router.get(
   "/screenhouse/:screenhouseId/dashboard",
   getScreenhouseDashboardSummary
+);
+router.get(
+  "/screenhouse/:screenhouseId/sink-node",
+  getSinkNodeByScreenhouse
 );
 router.get(
   "/screenhouse/:screenhouseId/history",

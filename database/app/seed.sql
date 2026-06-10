@@ -30,7 +30,7 @@ INSERT INTO villages (id, district_id, name) VALUES
 -- ─── 2. User demo (password: 123456) ───
 INSERT INTO users (id, name, phone_number, password, role, status) VALUES
 (1, 'Pak Eko', '081111111111', '$2b$10$CpSrK0m24PkChDP3crnSjuarCH3OFl9m2tr3f.fPmD7J7GO3c4biS', 'petani', 'approved'),
-(2, 'Operator MCtan', '089999999999', '$2b$10$CpSrK0m24PkChDP3crnSjuarCH3OFl9m2tr3f.fPmD7J7GO3c4biS', 'operator', 'approved'),
+(2, 'Operator', '089999999999', '$2b$10$CpSrK0m24PkChDP3crnSjuarCH3OFl9m2tr3f.fPmD7J7GO3c4biS', 'operator', 'approved'),
 (3, 'Super Admin', '088888888888', '$2b$10$CpSrK0m24PkChDP3crnSjuarCH3OFl9m2tr3f.fPmD7J7GO3c4biS', 'super_admin', 'approved');
 
 -- ─── 3. Screenhouse inti (3) + thresholds ───

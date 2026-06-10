@@ -8,7 +8,7 @@ export default function AdminPageShell({ title, subtitle, children }) {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
 
   return (
-    <div className="app-shell fixed inset-0 flex bg-slate-100 overflow-hidden text-left">
+    <div className="app-shell fixed inset-0 flex bg-bl-surface overflow-hidden text-left">
       <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} role={user?.role} user={user} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0 text-left">
         <header className="app-topbar h-14 shrink-0 bg-white border-b border-gray-200 flex items-center justify-between z-10">

@@ -1,7 +1,8 @@
 import { buildHealthList, getActions, markerPosition } from "../constants/paramHealth";
+import { EMPTY_VALUE } from "../constants/sensorMetrics";
 
 function formatValue(value, unit) {
-  if (value == null || Number.isNaN(value)) return "—";
+  if (value == null || Number.isNaN(value)) return EMPTY_VALUE;
   const rounded = Math.round(value * 10) / 10;
   return `${rounded}${unit ? (unit === "°C" || unit === "%" ? unit : ` ${unit}`) : ""}`;
 }
@@ -29,13 +30,12 @@ function HealthCard({ item }) {
         </span>
         {item.min != null && item.max != null && (
           <span className="text-[10px] text-gray-400">
-            ideal {item.min}–{item.max}
+            batas aman {item.min}–{item.max}
             {item.unit && item.unit !== "%" && item.unit !== "°C" ? ` ${item.unit}` : item.unit}
           </span>
         )}
       </div>
 
-      {/* Bar zona ideal: track abu, segmen hijau = ideal, marker = nilai sekarang */}
       {bar ? (
         <div className="relative mt-2 h-1.5 rounded-full bg-slate-100">
           <div
@@ -55,7 +55,7 @@ function HealthCard({ item }) {
           />
         </div>
       ) : (
-        <div className="mt-2 text-[10px] text-gray-300">Belum ada acuan threshold</div>
+        <div className="mt-2 text-[10px] text-gray-300">Batas aman belum diatur</div>
       )}
 
       {item.multiNode && item.nodeName && item.status !== "ideal" && item.status !== "unknown" && (
@@ -92,7 +92,7 @@ export default function ParamHealthCards({
         </div>
         {!threshold && (
           <span className="text-[10px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-            Threshold belum diatur
+            Batas aman belum diatur
           </span>
         )}
       </div>
@@ -106,9 +106,9 @@ export default function ParamHealthCards({
       {showActions && (
         <div className="mt-3">
           {actions.length === 0 ? (
-            <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 rounded-xl px-3 py-2">
+            <div className="flex items-center gap-2 text-xs text-bl-primary bg-bl-surface-muted rounded-xl px-3 py-2">
               <span>✓</span>
-              Semua parameter dalam kondisi ideal. Tidak ada tindakan yang diperlukan.
+              Semua ukuran tanah masih pas. Tidak perlu tindakan.
             </div>
           ) : (
             <div className="space-y-1.5">
@@ -126,7 +126,7 @@ export default function ParamHealthCards({
                   />
                   <span>
                     <span className="font-semibold">{a.label}</span> {a.style.label.toLowerCase()}
-                    {a.multiNode && a.nodeName ? ` (${a.nodeName})` : ""} — {a.advice}
+                    {a.multiNode && a.nodeName ? ` (${a.nodeName})` : ""}. {a.advice}
                   </span>
                 </div>
               ))}

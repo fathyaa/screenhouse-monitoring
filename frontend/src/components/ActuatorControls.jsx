@@ -21,14 +21,14 @@ function ActuatorSwitch({ label, icon: Icon, value, onChange, disabled, loading,
     return (
       <div
         className={`flex items-center gap-2 rounded-xl border p-2.5 ${
-          on ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-100"
+          on ? "bg-bl-surface-muted border-bl-accent/30" : "bg-gray-50 border-gray-100"
         }`}
       >
-        <Icon size={16} className={on ? "text-green-700" : "text-gray-400"} />
+        <Icon size={16} className={on ? "text-bl-primary" : "text-gray-400"} />
         <div className="text-left min-w-0">
           <div className="text-xs font-medium text-gray-700">{label}</div>
-          <div className={`text-[10px] ${on ? "text-green-700" : "text-gray-400"}`}>
-            {!hasValue ? "—" : on ? "Nyala" : "Mati"}
+          <div className={`text-[10px] ${on ? "text-bl-primary" : "text-gray-400"}`}>
+            {!hasValue ? "Belum diketahui" : on ? "Nyala" : "Mati"}
           </div>
         </div>
       </div>
@@ -42,19 +42,19 @@ function ActuatorSwitch({ label, icon: Icon, value, onChange, disabled, loading,
     <div
       className={`flex items-center justify-between gap-2 rounded-xl border transition ${
         compact ? "p-2" : "p-2.5"
-      } ${on ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-100"} ${
+      } ${on ? "bg-bl-surface-muted border-bl-accent/30" : "bg-gray-50 border-gray-100"} ${
         disabled ? "opacity-60" : ""
       }`}
     >
       <div className="flex items-center gap-2 min-w-0">
-        <Icon size={compact ? 14 : 16} className={on ? "text-green-700" : "text-gray-400"} />
+        <Icon size={compact ? 14 : 16} className={on ? "text-bl-primary" : "text-gray-400"} />
         <div className="text-left min-w-0">
           <div className={`font-medium text-gray-700 ${compact ? "text-[10px]" : "text-xs"}`}>
             {label}
           </div>
           {!compact && (
-            <div className={`text-[10px] ${on ? "text-green-700" : "text-gray-400"}`}>
-              {!hasValue ? "—" : on ? "Nyala" : "Mati"}
+            <div className={`text-[10px] ${on ? "text-bl-primary" : "text-gray-400"}`}>
+              {!hasValue ? "Belum diketahui" : on ? "Nyala" : "Mati"}
             </div>
           )}
         </div>
@@ -79,7 +79,6 @@ function ActuatorSwitch({ label, icon: Icon, value, onChange, disabled, loading,
 
 export default function ActuatorControls({
   screenhouseId,
-  sensorNodeId,
   fan_status,
   irrigation_status,
   lamp_status,
@@ -99,8 +98,8 @@ export default function ActuatorControls({
 
   const handleToggle = async (actuatorKey, nextOn) => {
     if (readOnly) return;
-    if (!screenhouseId || !sensorNodeId) {
-      toast.error("Node sensor belum tersedia");
+    if (!screenhouseId) {
+      toast.error("Screenhouse belum tersedia");
       return;
     }
 
@@ -117,7 +116,6 @@ export default function ActuatorControls({
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            sensor_node_id: sensorNodeId,
             [actuatorKey]: nextOn,
           }),
         }

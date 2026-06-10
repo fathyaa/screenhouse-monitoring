@@ -187,16 +187,15 @@ async function fetchMonitoringStats(screenhouseIds, days) {
     monitoringPool.query(
       `
       SELECT
-        sn.screenhouse_id,
-        COUNT(*) FILTER (WHERE sd.irrigation_status = true)::int AS irrigation_on,
-        COUNT(*) FILTER (WHERE sd.fan_status = true)::int AS fan_on,
-        COUNT(*) FILTER (WHERE sd.lamp_status = true)::int AS lamp_on,
+        al.screenhouse_id,
+        COUNT(*) FILTER (WHERE al.irrigation_status = true)::int AS irrigation_on,
+        COUNT(*) FILTER (WHERE al.fan_status = true)::int AS fan_on,
+        COUNT(*) FILTER (WHERE al.lamp_status = true)::int AS lamp_on,
         COUNT(*)::int AS total_readings
-      FROM sensor_data sd
-      JOIN sensor_nodes sn ON sn.id = sd.sensor_node_id
-      WHERE sn.screenhouse_id = ANY($1::int[])
-        AND sd.created_at >= NOW() - ($2::int * INTERVAL '1 day')
-      GROUP BY sn.screenhouse_id
+      FROM actuator_logs al
+      WHERE al.screenhouse_id = ANY($1::int[])
+        AND al.created_at >= NOW() - ($2::int * INTERVAL '1 day')
+      GROUP BY al.screenhouse_id
       `,
       [screenhouseIds, days]
     ),

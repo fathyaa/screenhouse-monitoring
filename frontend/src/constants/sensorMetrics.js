@@ -29,7 +29,9 @@ export const ALERT_PARAM_MAP = [
   { match: "intensitas cahaya", param: "light_intensity", actual: "actual_light_intensity", min: "min_light_intensity", max: "max_light_intensity", unit: "lux" },
 ];
 
+export const EMPTY_VALUE = "Tidak ada";
+
 export function formatSensorValue(value, unit = "") {
-  if (value == null || value === "") return "—";
+  if (value == null || value === "") return EMPTY_VALUE;
   return `${value}${unit}`;
 }

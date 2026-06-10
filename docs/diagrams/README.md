@@ -7,7 +7,7 @@ File `.drawio` untuk Bab 3 (perancangan). Buka dengan [diagrams.net](https://app
 | File | Isi | Caption saran | Wajib? |
 |------|-----|---------------|--------|
 | `09-erd-app-database.drawio` | ERD `screenhouse_app` (8 tabel) | Gambar III-4 | ✅ |
-| `10-erd-monitoring-database.drawio` | ERD `screenhouse_monitoring` (5 tabel) | Gambar III-5 | ✅ |
+| `10-erd-monitoring-database.drawio` | ERD `screenhouse_monitoring` (7 tabel) | Gambar III-5 | ✅ |
 | `11-erd-sinkronisasi-antar-db.drawio` | Relasi sync antar 2 database | Gambar III-6 | ✅ |
 | `01-arsitektur-sistem.drawio` | Arsitektur layered microservices | Gambar III-X | ✅ |
 | `05-deployment-diagram.drawio` | Deployment (Docker + Node.js + IoT) | Gambar III-AB | ✅ |

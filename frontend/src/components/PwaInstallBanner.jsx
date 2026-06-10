@@ -35,7 +35,7 @@ export default function PwaInstallBanner() {
   const handlePush = async () => {
     const result = await subscribe();
     if (result.ok) {
-      toast.success("Notifikasi push aktif — alert tetap masuk saat app ditutup");
+      toast.success("Notifikasi push aktif. Alert tetap masuk saat app ditutup.");
     } else if (result.reason === "denied") {
       toast.error("Izin notifikasi ditolak. Aktifkan lewat pengaturan browser.");
     } else {
@@ -44,7 +44,7 @@ export default function PwaInstallBanner() {
   };
 
   return (
-    <div className="fixed bottom-4 left-3 right-3 z-[999] max-w-md mx-auto rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white p-4 shadow-lg relative">
+    <div className="fixed bottom-4 left-3 right-3 z-[999] max-w-md mx-auto rounded-2xl border border-bl-accent/30 bg-gradient-to-r from-bl-surface-muted to-white p-4 shadow-lg relative">
       <button
         type="button"
         onClick={dismiss}
@@ -55,8 +55,8 @@ export default function PwaInstallBanner() {
       </button>
 
       <div className="flex items-start gap-3 pr-6">
-        <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
-          <Smartphone size={18} className="text-emerald-700" />
+        <div className="w-10 h-10 rounded-xl bg-bl-surface-muted flex items-center justify-center shrink-0">
+          <Smartphone size={18} className="text-bl-primary" />
         </div>
         <div className="text-left min-w-0">
           <div className="text-sm font-semibold text-gray-800">Pasang app di HP</div>
@@ -70,7 +70,7 @@ export default function PwaInstallBanner() {
               <button
                 type="button"
                 onClick={handleInstall}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-700 text-white text-xs font-medium hover:bg-emerald-800 transition"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl btn-bl text-xs"
               >
                 <Download size={14} />
                 {isIos && !canInstall ? "Cara install (iOS)" : "Install app"}
@@ -81,7 +81,7 @@ export default function PwaInstallBanner() {
                 type="button"
                 onClick={handlePush}
                 disabled={loading}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-300 bg-white text-emerald-800 text-xs font-medium hover:bg-emerald-50 transition disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-bl-accent/40 bg-white text-bl-dark text-xs font-medium hover:bg-bl-surface-muted transition disabled:opacity-50"
               >
                 <Bell size={14} />
                 {loading ? "Memproses..." : "Aktifkan notifikasi"}

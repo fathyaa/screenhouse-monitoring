@@ -15,11 +15,11 @@ function StatusBadge({ value, label, icon: Icon }) {
             !hasValue
               ? "bg-gray-100 text-gray-400"
               : isOn
-              ? "bg-green-50 text-green-800"
+              ? "bg-bl-surface-muted text-bl-dark"
               : "bg-gray-100 text-gray-500"
           }`}
         >
-          {!hasValue ? "—" : isOn ? "Nyala" : "Mati"}
+          {!hasValue ? "Belum diketahui" : isOn ? "Nyala" : "Mati"}
         </span>
       </div>
       <Icon size={18} className="text-gray-300 shrink-0" />

@@ -143,7 +143,7 @@ export default function ThresholdPage() {
   return (
     <AdminPageShell
       title="Kelola Threshold"
-      subtitle="Atur batas min/maks — centang beberapa screenhouse untuk menyamakan sekaligus (mis. satu kecamatan)"
+      subtitle="Atur batas min/maks. Centang beberapa screenhouse untuk samakan sekaligus (mis. satu kecamatan)."
     >
       <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
         <WilayahFilter value={wilayah} onChange={setWilayah} />
@@ -162,7 +162,7 @@ export default function ThresholdPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 min-h-0">
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden flex flex-col max-h-[calc(100dvh-220px)]">
           <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2 shrink-0">
-            <SlidersHorizontal size={16} className="text-green-700" />
+            <SlidersHorizontal size={16} className="text-bl-primary" />
             <span className="text-sm font-semibold text-gray-800">Screenhouse</span>
             <span className="text-xs text-gray-400 ml-auto">{checkedIds.size}/{list.length}</span>
           </div>
@@ -175,7 +175,7 @@ export default function ThresholdPage() {
                   if (el) el.indeterminate = someChecked && !allChecked;
                 }}
                 onChange={toggleSelectAll}
-                className="w-4 h-4 rounded border-gray-300 text-[#1e4d2b] focus:ring-green-300"
+                className="w-4 h-4 rounded border-gray-300 text-bl-primary focus:ring-green-300"
               />
               <span className="text-xs font-medium text-gray-700">
                 Pilih semua ({list.length})
@@ -195,14 +195,14 @@ export default function ThresholdPage() {
                 return (
                   <div
                     key={row.screenhouse_id}
-                    className={`flex items-start gap-2.5 px-3 py-3 border-b border-gray-50 transition ${active ? "bg-green-50" : checked ? "bg-amber-50/40" : "hover:bg-gray-50"}`}
+                    className={`flex items-start gap-2.5 px-3 py-3 border-b border-gray-50 transition ${active ? "bg-bl-surface-muted" : checked ? "bg-amber-50/40" : "hover:bg-gray-50"}`}
                   >
                     <input
                       type="checkbox"
                       checked={checked}
                       onChange={() => toggleChecked(row.screenhouse_id)}
                       onClick={(e) => e.stopPropagation()}
-                      className="mt-1 w-4 h-4 shrink-0 rounded border-gray-300 text-[#1e4d2b] focus:ring-green-300"
+                      className="mt-1 w-4 h-4 shrink-0 rounded border-gray-300 text-bl-primary focus:ring-green-300"
                       aria-label={`Pilih ${row.screenhouse_name}`}
                     />
                     <button
@@ -255,7 +255,7 @@ export default function ThresholdPage() {
                         className="w-20 h-8 rounded-lg border border-gray-200 bg-gray-50 px-2 text-sm font-semibold text-gray-800 outline-none focus:ring-1 focus:ring-green-300 text-center"
                       />
                     </div>
-                    <div className="text-gray-300 text-sm mt-4">—</div>
+                    <div className="text-gray-400 text-xs mt-4 font-medium">s/d</div>
                     <div className="flex flex-col gap-1">
                       <div className="text-[10px] uppercase tracking-wide text-gray-400">Maks</div>
                       <input
@@ -294,7 +294,7 @@ export default function ThresholdPage() {
                   <button
                     onClick={handleSave}
                     disabled={saving || saveTargets.length === 0}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1e4d2b] hover:bg-[#2d6e3e] text-white text-sm font-medium transition disabled:opacity-50"
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-bl-primary hover:bg-bl-primary-hover text-white text-sm font-medium transition disabled:opacity-50"
                   >
                     <Save size={15} />
                     {saving

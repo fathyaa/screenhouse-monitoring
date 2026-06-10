@@ -16,7 +16,7 @@ const STATUS_OPTIONS = [
 
 function statusBadge(status) {
   const styles = {
-    active: "bg-green-50 text-green-700 border-green-100",
+    active: "bg-bl-surface-muted text-bl-primary border-bl-accent/20",
     pending: "bg-amber-50 text-amber-700 border-amber-100",
     inactive: "bg-gray-50 text-gray-600 border-gray-100",
   };
@@ -121,7 +121,7 @@ export default function KelolaScreenhousePage() {
 
       <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
-          <Leaf size={18} className="text-green-700" />
+          <Leaf size={18} className="text-bl-primary" />
           <span className="text-sm font-semibold text-gray-800">Daftar Screenhouse</span>
           <span className="text-xs text-gray-400 ml-auto">{items.length} screenhouse</span>
         </div>
@@ -170,7 +170,7 @@ export default function KelolaScreenhousePage() {
                         {row.status === "active" && (
                           <button
                             onClick={() => navigate(`/operator/screenhouse/${row.id}`)}
-                            className="p-1.5 rounded-lg hover:bg-green-50 text-green-700 transition"
+                            className="p-1.5 rounded-lg hover:bg-bl-surface-muted text-bl-primary transition"
                             title="Lihat detail"
                           >
                             <ExternalLink size={15} />

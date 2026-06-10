@@ -172,6 +172,26 @@ async function seedOne(appClient, monClient, point, index, allDistricts) {
     [screenhouseId, ...snapCols.map((c) => DEFAULT_THRESHOLD[c])]
   );
 
+  const sinkCode = point.nodeCode.replace(/-N\d+$/, "-SINK");
+  const sinkExists = await monClient.query(
+    `SELECT id FROM sink_nodes WHERE screenhouse_id = $1`,
+    [screenhouseId]
+  );
+  let sinkId;
+  if (sinkExists.rows[0]) {
+    sinkId = sinkExists.rows[0].id;
+  } else {
+    const sinkIns = await monClient.query(
+      `
+      INSERT INTO sink_nodes (screenhouse_id, node_code, node_name, relay_channels, is_active)
+      VALUES ($1, $2, 'Sink Node', 3, true)
+      RETURNING id
+      `,
+      [screenhouseId, sinkCode]
+    );
+    sinkId = sinkIns.rows[0].id;
+  }
+
   const nodeExists = await monClient.query(
     `SELECT id FROM sensor_nodes WHERE node_code = $1`,
     [point.nodeCode]
@@ -184,7 +204,7 @@ async function seedOne(appClient, monClient, point, index, allDistricts) {
     const nodeIns = await monClient.query(
       `
       INSERT INTO sensor_nodes (screenhouse_id, node_code, node_name, location, send_interval_seconds, is_active)
-      VALUES ($1, $2, 'Node Utama', 'Pusat screenhouse', 60, true)
+      VALUES ($1, $2, 'Tray A1', 'Pusat screenhouse', 60, true)
       RETURNING id
       `,
       [screenhouseId, point.nodeCode]
@@ -202,14 +222,14 @@ async function seedOne(appClient, monClient, point, index, allDistricts) {
     await monClient.query(
       `
       INSERT INTO sensor_data (
-        sensor_node_id, nitrogen, phosphorus, potassium,
+        sensor_node_id, sink_node_id, nitrogen, phosphorus, potassium,
         soil_temperature, soil_moisture, soil_ph, conductivity,
-        air_temperature, air_humidity, light_intensity,
-        fan_status, irrigation_status, lamp_status, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW() - INTERVAL '2 hours')
+        air_temperature, air_humidity, light_intensity, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW() - INTERVAL '2 hours')
       `,
       [
         nodeId,
+        sinkId,
         sensor.nitrogen,
         sensor.phosphorus,
         sensor.potassium,
@@ -220,10 +240,16 @@ async function seedOne(appClient, monClient, point, index, allDistricts) {
         sensor.air_temperature,
         sensor.air_humidity,
         sensor.light_intensity,
-        sensor.fan_status,
-        sensor.irrigation_status,
-        sensor.lamp_status,
       ]
+    );
+
+    await monClient.query(
+      `
+      UPDATE sink_nodes
+      SET fan_status = $2, irrigation_status = $3, lamp_status = $4, updated_at = NOW()
+      WHERE id = $1
+      `,
+      [sinkId, sensor.fan_status, sensor.irrigation_status, sensor.lamp_status]
     );
   }
 

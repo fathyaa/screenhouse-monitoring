@@ -4,6 +4,7 @@ import {
   Map,
   Radio,
   Leaf,
+  Plus,
   Wifi,
   CheckCircle,
   LogOut,
@@ -31,6 +32,7 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
     ],
     petani: [
       { icon: <LayoutDashboard size={17} />, label: "Dashboard", path: "/petani" },
+      { icon: <Plus size={17} />, label: "Ajukan Screenhouse", path: "/petani/ajukan-screenhouse" },
       { icon: <TrendingUp size={17} />, label: "Tren Tanah", path: "/petani/tren" },
     ],
     super_admin: [
@@ -170,11 +172,11 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
       <aside
         className={`
           fixed lg:relative inset-y-0 left-0 z-[1000] lg:z-auto
-          h-full w-[min(280px,85vw)] lg:w-[280px]
-          flex flex-col bg-[#0f2d18] text-white shrink-0 text-left
-          transition-transform duration-300 lg:transition-all
+          h-full w-[min(280px,85vw)]
+          flex flex-col bg-bl-forest text-white shrink-0 text-left
+          transition-[width,transform] duration-300 ease-in-out
           overflow-hidden
-          ${isOpen ? "translate-x-0 lg:w-[280px]" : "-translate-x-full lg:translate-x-0 lg:w-0"}
+          ${isOpen ? "translate-x-0 lg:w-[280px]" : "-translate-x-full lg:translate-x-0 lg:w-0 lg:min-w-0"}
         `}
         style={{
           paddingTop: "env(safe-area-inset-top)",
@@ -184,10 +186,14 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
 
       {/* BRAND */}
       <div className="h-16 px-5 flex items-center gap-3 border-b border-white/10 shrink-0">
-        <div className="w-9 h-9 rounded-xl bg-[#1e4d2b] flex items-center justify-center text-lg shrink-0">🌾</div>
+        <img
+          src="/logo-bibitlive.png"
+          alt=""
+          className="w-9 h-9 rounded-xl object-cover shrink-0 ring-1 ring-white/15"
+        />
         <div className="whitespace-nowrap text-left">
-          <div className="text-sm font-semibold">Screenhouse</div>
-          <div className="text-xs text-[#6aab7a]">Monitoring System</div>
+          <div className="text-sm font-semibold tracking-tight">BibitLive</div>
+          <div className="text-xs text-bl-mint">Pantau bibit, langsung live</div>
         </div>
       </div>
 
@@ -208,12 +214,12 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
             <button
               key={path}
               onClick={() => handleNavigate(path)}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium whitespace-nowrap transition w-full text-left ${active ? "bg-[#1e4d2b] text-white" : "text-white/55 hover:bg-white/5 hover:text-white"}`}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium whitespace-nowrap transition w-full text-left ${active ? "bg-bl-primary text-white shadow-sm shadow-black/10" : "text-white/55 hover:bg-white/5 hover:text-white"}`}
             >
               {icon}
               {label}
               {badge > 0 && (
-                <span className="ml-auto min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                <span className="ml-auto min-w-5 h-5 px-1 rounded-full bg-bl-live text-white text-[10px] font-bold flex items-center justify-center">
                   {badge > 9 ? "9+" : badge}
                 </span>
               )}
@@ -229,10 +235,10 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
           <div className="p-3 flex flex-col gap-0.5 text-left shrink-0">
             <p className="text-[10px] uppercase tracking-widest text-white/30 font-medium px-3 py-2">Status</p>
             <div className="flex items-center gap-3 px-3 py-2 text-sm text-white/55">
-              <CheckCircle size={17} className="text-green-400 shrink-0" />Realtime aktif
+              <CheckCircle size={17} className="text-bl-mint shrink-0" />Realtime aktif
             </div>
             <div className="flex items-center gap-3 px-3 py-2 text-sm text-white/55">
-              <Wifi size={17} className="text-green-400 shrink-0" />MQTT terhubung
+              <Wifi size={17} className="text-bl-mint shrink-0" />MQTT terhubung
             </div>
           </div>
         </>

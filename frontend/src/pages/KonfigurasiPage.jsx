@@ -12,13 +12,13 @@ export default function KonfigurasiPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4 text-left">
           <div className="flex items-center gap-2">
-            <Settings size={18} className="text-green-700" />
+            <Settings size={18} className="text-bl-primary" />
             <h3 className="text-sm font-semibold text-gray-800">Informasi Aplikasi</h3>
           </div>
           <dl className="space-y-3 text-sm">
             <div className="flex justify-between gap-4">
               <dt className="text-gray-500">Nama sistem</dt>
-              <dd className="font-medium text-gray-800 text-right">Screenhouse Monitoring UPTD Mektan</dd>
+              <dd className="font-medium text-gray-800 text-right">BibitLive</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-gray-500">App Service (REST)</dt>
@@ -30,26 +30,26 @@ export default function KonfigurasiPage() {
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-gray-500">Realtime</dt>
-              <dd className="text-green-700 font-medium">WebSocket + MQTT</dd>
+              <dd className="text-bl-primary font-medium">WebSocket + MQTT</dd>
             </div>
           </dl>
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4 text-left">
           <div className="flex items-center gap-2">
-            <Shield size={18} className="text-green-700" />
+            <Shield size={18} className="text-bl-primary" />
             <h3 className="text-sm font-semibold text-gray-800">Akses & Peran</h3>
           </div>
           <ul className="text-sm text-gray-600 space-y-2">
-            <li><span className="font-medium text-gray-800">Super Admin</span> — kelola user, screenhouse, threshold</li>
-            <li><span className="font-medium text-gray-800">Operator</span> — approval petani, monitoring screenhouse</li>
-            <li><span className="font-medium text-gray-800">Petani</span> — dashboard screenhouse milik sendiri</li>
+            <li><span className="font-medium text-gray-800">Super Admin</span>: kelola user, screenhouse, threshold</li>
+            <li><span className="font-medium text-gray-800">Operator</span>: approval petani, monitoring screenhouse</li>
+            <li><span className="font-medium text-gray-800">Petani</span>: dashboard screenhouse milik sendiri</li>
           </ul>
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4 text-left lg:col-span-2">
           <div className="flex items-center gap-2">
-            <Database size={18} className="text-green-700" />
+            <Database size={18} className="text-bl-primary" />
             <h3 className="text-sm font-semibold text-gray-800">Default Threshold (referensi)</h3>
           </div>
           <p className="text-xs text-gray-500">
@@ -70,7 +70,7 @@ export default function KonfigurasiPage() {
 
         <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3 text-left lg:col-span-2">
           <div className="flex items-center gap-2">
-            <Radio size={18} className="text-green-700" />
+            <Radio size={18} className="text-bl-primary" />
             <h3 className="text-sm font-semibold text-gray-800">Sensor & Alert</h3>
           </div>
           <p className="text-sm text-gray-600">

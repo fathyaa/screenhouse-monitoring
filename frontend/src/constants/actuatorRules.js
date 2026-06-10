@@ -26,3 +26,24 @@ export function getActuatorHintForAlert(alert) {
 
   return param ? ACTUATOR_HINTS[param]?.[direction] ?? null : null;
 }
+
+/** True jika alert ini ditangani sistem (kipas/irigasi/lampu), bukan manual petani. */
+export function isAutoHandledAlert(alert) {
+  return getActuatorHintForAlert(alert) != null;
+}
+
+/** Teks notifikasi bila kondisi ditangani aktuator otomatis (kipas/irigasi/lampu). */
+export function getAutoHandledNotice(alert) {
+  const hint = getActuatorHintForAlert(alert);
+  return hint ? `Ditangani otomatis: ${hint}` : null;
+}
+
+/** Override status aktuator dari teks hint otomatis (mis. "Kipas dinyalakan otomatis" → fan ON). */
+export function getActuatorStatusFromHint(hint) {
+  if (!hint) return {};
+  const isOn = hint.includes("dinyalakan");
+  if (hint.startsWith("Kipas")) return { fan_status: isOn };
+  if (hint.startsWith("Irigasi")) return { irrigation_status: isOn };
+  if (hint.startsWith("Lampu")) return { lamp_status: isOn };
+  return {};
+}

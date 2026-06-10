@@ -1,7 +1,7 @@
 const pool = require("../../../config/db");
 
 const NOMINATIM = "https://nominatim.openstreetmap.org";
-const USER_AGENT = "ScreenhouseMonitoring/1.0 (UPTD Mektan)";
+const USER_AGENT = "ScreenhouseMonitoring/1.0";
 
 function normalizeName(value) {
   return (value || "")
@@ -168,7 +168,7 @@ async function resolveFromCoordinates(req, res) {
     if (!matched) {
       return res.status(404).json({
         message:
-          "Wilayah belum tersedia di sistem. Untuk demo, pilih titik di Kabupaten Sukabumi (Kec. Cisaat atau Kadudampit) — atau jalankan import wilayah lengkap.",
+          "Wilayah belum tersedia di sistem. Untuk demo, pilih titik di Kabupaten Sukabumi (Kec. Cisaat atau Kadudampit), atau jalankan import wilayah lengkap.",
         display_name: data.display_name,
       });
     }

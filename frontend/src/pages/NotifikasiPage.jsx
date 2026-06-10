@@ -1,24 +1,42 @@
 import { useState, useEffect, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Bell, TriangleAlert, CheckCircle2, Filter, Menu } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import { useAlerts, getAlertDetail } from "../context/AlertContext";
 import PetaniTopbar from "../layouts/PetaniTopbar";
 import { pickPrimaryAlert } from "../utils/petaniAlertNav";
+import { isAutoHandledAlert } from "../constants/actuatorRules";
+import PullToRefresh from "../components/PullToRefresh";
 
 function NotifikasiPage() {
+    const navigate = useNavigate();
     const { isOpen: sidebarOpen, toggle: toggleSidebar, close: closeSidebar } = useSidebarOpen();
     const [filter, setFilter] = useState("semua");
     const [blinkId, setBlinkId] = useState(null);
     const [searchParams, setSearchParams] = useSearchParams();
     const highlightHandled = useRef(false);
     const user = JSON.parse(localStorage.getItem("user"));
-    const { alerts, activeCount, resolvedCount, totalCount, alertsLoading, resolveAlert, refetchAlerts } = useAlerts();
+    const {
+        alerts,
+        activeCount,
+        unreadCount,
+        resolvedCount,
+        totalCount,
+        alertsLoading,
+        resolveAlert,
+        markAutoHandledAlertsSeen,
+        refetchAlerts,
+    } = useAlerts();
 
     useEffect(() => {
         refetchAlerts();
     }, [refetchAlerts]);
+
+    useEffect(() => {
+        if (alertsLoading) return;
+        markAutoHandledAlertsSeen();
+    }, [alertsLoading, alerts, markAutoHandledAlertsSeen]);
 
     useEffect(() => {
         highlightHandled.current = false;
@@ -76,7 +94,7 @@ function NotifikasiPage() {
     const filtered = filter === "semua" ? alerts : alerts.filter((a) => a.status === filter);
 
     return (
-        <div className="app-shell fixed inset-0 flex bg-slate-100 overflow-hidden">
+        <div className="app-shell fixed inset-0 flex bg-bl-surface overflow-hidden">
             <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} screenhouses={[]} role={user?.role} user={user} />
 
             <div className="flex-1 flex flex-col overflow-hidden min-w-0 text-left">
@@ -86,14 +104,14 @@ function NotifikasiPage() {
                     subtitle="Pantau dan tandai peringatan screenhouse"
                 />
 
-                <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+                <PullToRefresh onRefresh={refetchAlerts} className="p-4 sm:p-5 space-y-4">
 
                     {/* SUMMARY */}
                     <div className="grid grid-cols-3 gap-2 sm:gap-3">
                         {[
                             { label: "Total", fullLabel: "Total peringatan", value: totalCount, icon: Bell, bg: "bg-gray-50", color: "text-gray-500", valColor: "text-gray-800" },
-                            { label: "Aktif", fullLabel: "Aktif", value: activeCount, icon: TriangleAlert, bg: "bg-red-50", color: "text-red-600", valColor: "text-red-600" },
-                            { label: "Selesai", fullLabel: "Sudah ditangani", value: resolvedCount, icon: CheckCircle2, bg: "bg-green-50", color: "text-green-700", valColor: "text-green-700" },
+                            { label: "Belum dibaca", fullLabel: "Belum dibaca", value: unreadCount, icon: TriangleAlert, bg: "bg-red-50", color: "text-red-600", valColor: "text-red-600" },
+                            { label: "Selesai", fullLabel: "Sudah ditangani", value: resolvedCount, icon: CheckCircle2, bg: "bg-bl-surface-muted", color: "text-bl-primary", valColor: "text-bl-primary" },
                         ].map((s) => (
                             <div key={s.fullLabel} className="bg-white rounded-xl sm:rounded-2xl border border-gray-200 p-2.5 sm:p-4 flex flex-col items-center text-center sm:flex-row sm:items-center sm:gap-3 sm:text-left min-w-0">
                                 <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 ${s.bg}`}>
@@ -123,7 +141,7 @@ function NotifikasiPage() {
                             <button
                                 key={f.key}
                                 onClick={() => setFilter(f.key)}
-                                className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${filter === f.key ? "bg-[#1e4d2b] text-white" : "bg-white border border-gray-200 text-gray-500 hover:bg-gray-50"}`}
+                                className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${filter === f.key ? "bg-bl-primary text-white" : "bg-white border border-gray-200 text-gray-500 hover:bg-gray-50"}`}
                             >
                                 {f.label}
                             </button>
@@ -143,60 +161,101 @@ function NotifikasiPage() {
                                 <div className="text-sm">Tidak ada peringatan</div>
                             </div>
                         )}
-                        {filtered.map((alert) => (
+                        {filtered.map((alert) => {
+                            const autoHandled = isAutoHandledAlert(alert);
+                            const actionControl =
+                                alert.status === "active" ? (
+                                    autoHandled ? (
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-bl-surface-muted text-bl-dark text-xs font-medium">
+                                            <CheckCircle2 size={14} />
+                                            Ditangani otomatis
+                                        </span>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={() => resolveAlert(alert.id)}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-bl-primary hover:bg-bl-primary-hover text-white text-xs font-medium transition"
+                                        >
+                                            <CheckCircle2 size={14} />
+                                            Sudah ditangani
+                                        </button>
+                                    )
+                                ) : null;
+
+                            return (
                             <div
                                 key={alert.id}
                                 id={`alert-${alert.id}`}
                                 className={`bg-white rounded-2xl border border-gray-200 p-4 flex gap-3 items-start scroll-mt-24 ${
                                     alert.status === "active"
                                         ? "border-l-[3px] border-l-amber-400"
-                                        : "border-l-[3px] border-l-green-500"
+                                        : "border-l-[3px] border-l-bl-accent"
                                 } ${blinkId === alert.id ? "alert-highlight-blink" : ""}`}
                             >
 
-                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${alert.status === "active" ? "bg-amber-50" : "bg-green-50"}`}>
+                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${alert.status === "active" ? "bg-amber-50" : "bg-bl-surface-muted"}`}>
                                     {alert.status === "active"
                                         ? <TriangleAlert size={17} className="text-amber-600" />
-                                        : <CheckCircle2 size={17} className="text-green-700" />
+                                        : <CheckCircle2 size={17} className="text-bl-primary" />
                                     }
                                 </div>
 
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                                         <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 text-xs font-medium">Perhatian</span>
-                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${alert.status === "active" ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${alert.status === "active" ? "bg-red-50 text-red-700" : "bg-bl-surface-muted text-bl-primary"}`}>
                                             {alert.status === "active" ? "Aktif" : "Sudah ditangani"}
                                         </span>
                                     </div>
-                                    <div className="text-sm font-semibold text-gray-800">{alert.message}</div>
-                                    <div className="text-xs text-gray-500 mt-0.5">{alert.screenhouse_name}</div>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            navigate(`/petani/screenhouse/${alert.screenhouse_id}`)
+                                        }
+                                        className="text-sm font-semibold text-gray-800 text-left hover:text-bl-primary hover:underline"
+                                    >
+                                        {alert.message}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            navigate(`/petani/screenhouse/${alert.screenhouse_id}`)
+                                        }
+                                        className="text-xs text-gray-500 mt-0.5 hover:text-bl-primary hover:underline block text-left"
+                                    >
+                                        {alert.screenhouse_name}
+                                    </button>
                                     <div className="text-xs text-gray-400 mt-1">
                                         {new Date(alert.created_at).toLocaleString("id-ID")}
                                     </div>
 
                                     <AlertValueDetail alert={alert} />
 
+                                    {actionControl && (
+                                        <div className="mt-3 flex justify-end sm:hidden">
+                                            {actionControl}
+                                        </div>
+                                    )}
+
                                     {alert.status === "resolved" && alert.resolved_at && (
-                                        <div className="mt-2 text-xs text-green-700 flex items-center gap-1">
+                                        <div className="mt-2 text-xs text-bl-primary flex items-center gap-1">
                                             <CheckCircle2 size={12} />
                                             Ditangani pada {new Date(alert.resolved_at).toLocaleString("id-ID")}
                                         </div>
                                     )}
                                 </div>
 
-                                {alert.status === "active" && (
-                                    <button
-                                        onClick={() => resolveAlert(alert.id)}
-                                        className="shrink-0 px-3 py-1.5 rounded-xl bg-[#1e4d2b] hover:bg-[#2d6e3e] text-white text-xs font-medium flex items-center gap-1.5 transition"
-                                    >
-                                        <CheckCircle2 size={14} />Sudah ditangani
-                                    </button>
+                                {actionControl && (
+                                    <div className="hidden sm:block shrink-0 self-start">
+                                        {actionControl}
+                                    </div>
                                 )}
                             </div>
-                        ))}
+                            );
+                        })}
                     </div>
 
-                </div>
+                </PullToRefresh>
             </div>
         </div>
     );

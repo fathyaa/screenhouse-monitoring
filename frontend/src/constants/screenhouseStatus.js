@@ -4,9 +4,9 @@ export const SCREENHOUSE_STATUS = {
   healthy: {
     key: "healthy",
     label: "Sehat",
-    color: "#16a34a",
-    dotClass: "bg-green-500",
-    badgeClass: "bg-green-50 text-green-700",
+    color: "#40916c",
+    dotClass: "bg-bl-accent",
+    badgeClass: "bg-bl-surface-muted text-bl-primary",
   },
   warning: {
     key: "warning",

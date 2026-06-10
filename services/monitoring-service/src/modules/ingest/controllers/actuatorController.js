@@ -3,7 +3,7 @@ const { setActuators } = require("../actuatorService");
 async function postScreenhouseActuators(req, res) {
   try {
     const screenhouseId = Number(req.params.screenhouseId);
-    const { sensor_node_id, fan, irrigation, lamp, source, reason, user_id } = req.body ?? {};
+    const { fan, irrigation, lamp, source, reason, user_id } = req.body ?? {};
 
     if (!Number.isInteger(screenhouseId)) {
       return res.status(400).json({ message: "screenhouseId tidak valid" });
@@ -19,7 +19,6 @@ async function postScreenhouseActuators(req, res) {
 
     const result = await setActuators({
       screenhouseId,
-      sensorNodeId: sensor_node_id,
       fan,
       irrigation,
       lamp,

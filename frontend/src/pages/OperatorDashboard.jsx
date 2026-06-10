@@ -139,7 +139,7 @@ function OperatorDashboard() {
 
   return (
     // fixed inset-0 = fullscreen tanpa scroll, tidak terpengaruh elemen luar
-    <div className="app-shell fixed inset-0 flex bg-slate-100 overflow-hidden">
+    <div className="app-shell fixed inset-0 flex bg-bl-surface overflow-hidden">
       <Sidebar
         isOpen={sidebarOpen}
         onClose={closeSidebar}
@@ -189,7 +189,7 @@ function OperatorDashboard() {
                           <button
                             type="button"
                             onClick={() => navigate(`/operator/screenhouse/${sh.id}`)}
-                            className="text-base font-bold text-emerald-700 hover:text-emerald-900 hover:underline text-left"
+                            className="text-base font-bold text-bl-primary hover:text-bl-dark hover:underline text-left"
                           >
                             {sh.name}
                           </button>
@@ -199,9 +199,6 @@ function OperatorDashboard() {
                             {meta.label}
                           </span>
                         </div>
-                        <p className="text-[10px] text-emerald-600 mt-0.5">
-                          Klik nama untuk dashboard detail →
-                        </p>
 
                         {sh.owner_name && (
                           <p className="text-xs text-slate-500 mt-1">
@@ -242,7 +239,13 @@ function OperatorDashboard() {
                                     : `Update ${timeAgo(summary.last_seen)}`}
                                 </span>
                                 {summary.active_alerts > 0 && (
-                                  <span className="text-red-600 font-semibold">
+                                  <span
+                                    className={
+                                      summary.alerts_pending_review
+                                        ? "text-amber-600 font-semibold"
+                                        : "text-red-600 font-semibold"
+                                    }
+                                  >
                                     {summary.active_alerts} alert aktif
                                   </span>
                                 )}
@@ -273,10 +276,14 @@ function OperatorDashboard() {
                                     </span>
                                   ))}
                                 </div>
+                              ) : summary.alerts_pending_review ? (
+                                <p className="text-[11px] text-amber-700">
+                                  Sensor normal, alert menunggu ditinjau petani
+                                </p>
                               ) : (
                                 status !== "offline" &&
                                 summary.has_threshold && (
-                                  <p className="text-[11px] text-emerald-600">
+                                  <p className="text-[11px] text-bl-primary">
                                     ✓ Semua parameter dalam batas normal
                                   </p>
                                 )
@@ -348,12 +355,12 @@ function OperatorDashboard() {
                       flex items-center gap-3 p-3 rounded-xl cursor-pointer mb-1
                       border transition
                       ${selectedId === sh.id
-                        ? "bg-green-50 border-green-200"
+                        ? "bg-bl-surface-muted border-bl-accent/30"
                         : "border-transparent hover:bg-gray-50"
                       }
                     `}
                   >
-                    <div className="relative w-7 h-7 rounded-lg bg-[#1e4d2b] text-white text-xs font-medium flex items-center justify-center shrink-0">
+                    <div className="relative w-7 h-7 rounded-lg bg-bl-primary text-white text-xs font-medium flex items-center justify-center shrink-0">
                       {i + 1}
                       <span
                         className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white"

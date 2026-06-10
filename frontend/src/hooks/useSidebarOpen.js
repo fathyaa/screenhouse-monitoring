@@ -12,7 +12,11 @@ export function useSidebarOpen() {
 
   useEffect(() => {
     const media = window.matchMedia(DESKTOP_QUERY);
-    const onChange = (event) => setIsOpen(event.matches);
+    const onChange = (event) => {
+      // Tutup otomatis saat layar mengecil; jangan paksa buka lagi di desktop
+      // supaya toggle hide/show tetap jalan setelah user menutup sidebar.
+      if (!event.matches) setIsOpen(false);
+    };
     media.addEventListener("change", onChange);
     return () => media.removeEventListener("change", onChange);
   }, []);

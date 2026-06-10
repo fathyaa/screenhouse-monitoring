@@ -133,13 +133,26 @@ function RegisterScreenhousePage() {
           className="absolute inset-0 w-full h-full object-cover"
         />
 
-        <div className="absolute inset-0 bg-gradient-to-r from-[#0f2d18]/85 via-[#0f2d18]/50 to-[#0a2312]/15" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0a2312]/80 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-bl-forest/85 via-bl-forest/50 to-bl-darker/15" />
+        <div className="absolute inset-0 bg-gradient-to-t from-bl-darker/80 via-transparent to-transparent" />
+
+        <div className="absolute top-10 left-10 flex items-center gap-3">
+          <img
+            src="/logo-bibitlive.png"
+            alt=""
+            className="w-14 h-14 rounded-2xl object-cover ring-2 ring-white/20"
+          />
+          <div>
+            <div className="text-xl font-bold text-white">BibitLive</div>
+            <div className="text-sm text-bl-mint">Pantau bibit, langsung live</div>
+          </div>
+        </div>
 
         <div className="absolute bottom-0 left-0 p-10 max-w-4xl text-left">
           <div className="text-5xl font-bold text-white leading-snug mb-3">
-            Monitoring Screenhouse<br />
-            Pembibitan Padi UPTD Mektan
+            Daftar Screenhouse
+            <br />
+            di BibitLive
           </div>
 
           <div className="text-2xl text-white/60 leading-relaxed">
@@ -255,7 +268,7 @@ function RegisterScreenhousePage() {
             type="button"
             onClick={handleSubmit}
             disabled={loading || resolving}
-            className="w-full h-10 shrink-0 rounded-lg bg-[#1e4d2b] hover:bg-[#2d6e3e] text-white text-sm font-medium transition mb-3 disabled:opacity-50"
+            className="w-full h-10 shrink-0 rounded-lg btn-bl text-sm mb-3 disabled:opacity-50"
           >
             {loading ? "Mengirim pendaftaran..." : "Kirim pendaftaran"}
           </button>
@@ -269,7 +282,7 @@ function RegisterScreenhousePage() {
             <button
               type="button"
               onClick={() => navigate("/login")}
-              className="text-[#1e4d2b] font-medium hover:underline"
+              className="link-bl"
             >
               Masuk di sini
             </button>

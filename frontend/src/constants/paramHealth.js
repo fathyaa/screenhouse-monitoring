@@ -29,19 +29,19 @@ export const HEALTH_PARAM_KEYS = [
 ];
 
 export const STATUS_STYLE = {
-  ideal: { label: "Ideal", color: "#16a34a", badge: "bg-green-50 text-green-700", track: "#bbf7d0" },
+  ideal: { label: "Pas", color: "#40916c", badge: "bg-bl-surface-muted text-bl-primary", track: "#74c69d" },
   low: { label: "Kurang", color: "#d97706", badge: "bg-amber-50 text-amber-700", track: "#fde68a" },
   high: { label: "Berlebih", color: "#dc2626", badge: "bg-red-50 text-red-700", track: "#fecaca" },
-  unknown: { label: "—", color: "#94a3b8", badge: "bg-slate-100 text-slate-500", track: "#e2e8f0" },
+  unknown: { label: "Belum ada", color: "#94a3b8", badge: "bg-slate-100 text-slate-500", track: "#e2e8f0" },
 };
 
 // Rekomendasi tindakan per (parameter, arah penyimpangan).
 const ADVICE = {
   soil_moisture: { low: "Segera siram atau aktifkan irigasi.", high: "Kurangi penyiraman, pastikan drainase lancar." },
-  nitrogen: { low: "Tambah pupuk nitrogen (urea/ZA).", high: "Tunda pupuk N — risiko tumbuh daun berlebih." },
+  nitrogen: { low: "Tambah pupuk nitrogen (urea/ZA).", high: "Tunda pupuk N, risiko tumbuh daun berlebih." },
   phosphorus: { low: "Tambah pupuk fosfor (SP-36).", high: "Kurangi pupuk fosfor." },
   potassium: { low: "Tambah pupuk kalium (KCl).", high: "Kurangi pupuk kalium." },
-  soil_ph: { low: "Tanah terlalu asam — beri kapur dolomit.", high: "Tanah terlalu basa — beri belerang/pupuk asam." },
+  soil_ph: { low: "Tanah terlalu asam, beri kapur dolomit.", high: "Tanah terlalu basa, beri belerang/pupuk asam." },
   soil_temperature: { low: "Kurangi naungan agar tanah lebih hangat.", high: "Tambah naungan / siram untuk mendinginkan tanah." },
   air_temperature: { low: "Tutup ventilasi, jaga kehangatan (terutama malam).", high: "Buka ventilasi atau nyalakan kipas." },
   air_humidity: { low: "Naikkan kelembapan (pengabutan / siram lantai).", high: "Tingkatkan sirkulasi udara untuk cegah jamur." },
@@ -153,6 +153,9 @@ export function buildWorstCaseHealth(nodes, threshold, keys = HEALTH_PARAM_KEYS)
 /** Saran tindakan dari pesan peringatan sistem (alerts API). */
 export function getAdviceForAlert(alert) {
   const lower = alert?.message?.toLowerCase() ?? "";
+  if (lower.includes("tidak mengirim data sensor")) {
+    return "Periksa daya ESP/node, jarak ke gateway, atau koneksi jaringan WSN.";
+  }
   const row = ALERT_PARAM_MAP.find((r) => lower.includes(r.match));
   if (!row) return null;
   const status = lower.includes("maksimum") ? "high" : lower.includes("minimum") ? "low" : null;

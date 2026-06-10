@@ -40,16 +40,24 @@ const STATUS_BAR_COLORS = {
 
 function KpiCard({ label, value, hint, tone = "slate" }) {
   const tones = {
-    slate: "border-gray-200 bg-white text-gray-800",
-    green: "border-green-100 bg-green-50 text-green-800",
-    amber: "border-amber-100 bg-amber-50 text-amber-800",
-    red: "border-red-100 bg-red-50 text-red-800",
+    slate: "border-gray-200 bg-white text-gray-900",
+    green: "border-bl-primary/45 bg-[#e3f2ea] text-bl-dark",
+    amber: "border-amber-300 bg-amber-50 text-amber-950",
+    red: "border-red-300 bg-red-50 text-red-950",
+  };
+  const labelTones = {
+    slate: "text-gray-600",
+    green: "text-bl-primary",
+    amber: "text-amber-800",
+    red: "text-red-800",
   };
   return (
     <div className={`rounded-2xl border p-4 ${tones[tone] ?? tones.slate}`}>
-      <div className="text-[11px] uppercase tracking-wide text-gray-400 font-medium">{label}</div>
+      <div className={`text-[11px] uppercase tracking-wide font-semibold ${labelTones[tone] ?? labelTones.slate}`}>
+        {label}
+      </div>
       <div className="text-2xl font-bold mt-1 tabular-nums">{value}</div>
-      {hint && <div className="text-xs text-gray-500 mt-1">{hint}</div>}
+      {hint && <div className="text-xs text-gray-600 mt-1">{hint}</div>}
     </div>
   );
 }
@@ -135,8 +143,13 @@ function OperatorLaporanPage() {
     if (villageId) params.set("village_id", villageId);
 
     fetch(`${API_URL}/screenhouses/operator-reports?${params}`, { headers })
-      .then((r) => r.json())
-      .then((data) => {
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) {
+          console.error("[operator-reports]", data?.message ?? r.status);
+          setReport(null);
+          return;
+        }
         if (data?.regions) setReport(data);
         else setReport(null);
       })
@@ -198,7 +211,7 @@ function OperatorLaporanPage() {
   };
 
   return (
-    <div className="app-shell fixed inset-0 flex bg-slate-100 overflow-hidden">
+    <div className="app-shell fixed inset-0 flex bg-bl-surface overflow-hidden">
       <Sidebar
         isOpen={sidebarOpen}
         onClose={closeSidebar}
@@ -546,7 +559,7 @@ function OperatorLaporanPage() {
                         <tr key={row.region_id} className="border-t border-gray-100 hover:bg-slate-50/80">
                           <td className="px-4 py-3 font-medium text-gray-800">{row.region_name}</td>
                           <td className="px-4 py-3 text-center tabular-nums">{row.total}</td>
-                          <td className="px-4 py-3 text-center tabular-nums text-green-700">{row.healthy}</td>
+                          <td className="px-4 py-3 text-center tabular-nums text-bl-primary">{row.healthy}</td>
                           <td className="px-4 py-3 text-center tabular-nums text-amber-700">{row.warning}</td>
                           <td className="px-4 py-3 text-center tabular-nums text-red-700">{row.critical}</td>
                           <td className="px-4 py-3 text-center tabular-nums text-slate-500">{row.offline}</td>
@@ -555,12 +568,12 @@ function OperatorLaporanPage() {
                           <td className="px-4 py-3 text-right tabular-nums text-gray-600">
                             {row.sensor_avg?.soil_moisture != null
                               ? `${row.sensor_avg.soil_moisture}%`
-                              : "—"}
+                              : "Tidak ada"}
                           </td>
                           <td className="px-4 py-3 text-right tabular-nums text-gray-600">
                             {row.sensor_avg?.soil_temperature != null
                               ? `${row.sensor_avg.soil_temperature}°C`
-                              : "—"}
+                              : "Tidak ada"}
                           </td>
                         </tr>
                       ))}

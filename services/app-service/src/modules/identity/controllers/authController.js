@@ -427,13 +427,25 @@ async function getApprovalStats(req, res) {
     const result = await pool.query(
       `
         SELECT
-          COUNT(*) FILTER (WHERE status = 'pending' AND role = 'petani')::int AS pending,
-          COUNT(*) FILTER (WHERE status = 'approved' AND role = 'petani')::int AS approved,
-          COUNT(*) FILTER (WHERE status = 'rejected' AND role = 'petani')::int AS rejected
-        FROM users
+          (SELECT COUNT(*)::int FROM users WHERE status = 'pending' AND role = 'petani') AS farmers_pending,
+          (SELECT COUNT(*)::int
+             FROM screenhouses s
+             JOIN users u ON u.id = s.owner_user_id
+            WHERE s.status = 'pending' AND u.status = 'approved') AS screenhouses_pending,
+          (SELECT COUNT(*)::int FROM users WHERE status = 'approved' AND role = 'petani') AS approved,
+          (SELECT COUNT(*)::int FROM users WHERE status = 'rejected' AND role = 'petani') AS rejected
       `
     );
-    res.json(result.rows[0]);
+    const row = result.rows[0] || {};
+    const farmersPending = row.farmers_pending ?? 0;
+    const screenhousesPending = row.screenhouses_pending ?? 0;
+    res.json({
+      pending: farmersPending + screenhousesPending,
+      farmers_pending: farmersPending,
+      screenhouses_pending: screenhousesPending,
+      approved: row.approved ?? 0,
+      rejected: row.rejected ?? 0,
+    });
   } catch (err) {
     logAuth("get_approval_stats_error", { level: "error", message: err.message });
     res.status(500).json({ message: "Internal server error" });

@@ -1,8 +1,11 @@
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from "react";
 import socket, { authenticateSocket } from "../lib/socket";
 import toast from "react-hot-toast";
 import { TriangleAlert } from "lucide-react";
 import { ALERT_PARAM_MAP } from "../constants/sensorMetrics";
+import { getAutoHandledNotice, isAutoHandledAlert } from "../constants/actuatorRules";
+import { loadSeenAutoAlerts, markAutoAlertsSeen } from "../utils/seenAutoAlerts";
+import { installAlertSoundUnlock, playAlertSound } from "../utils/alertSound";
 import { API_URL } from "../config/api";
 
 const AlertContext = createContext(null);
@@ -31,13 +34,33 @@ function alertBelongsToCurrentUser(alert) {
   return Number(ownerId) === uid;
 }
 
+/** Alert yang belum dibaca — manual selalu unread sampai resolve; otomatis unread sampai halaman peringatan dibuka. */
+export function isUnreadAlert(alert, seenAutoAlertIds) {
+  if (alert.status !== "active") return false;
+  if (isAutoHandledAlert(alert) && seenAutoAlertIds.has(String(alert.id))) return false;
+  return true;
+}
+
 export function AlertProvider({ children }) {
   const [alerts, setAlerts] = useState([]);
   const [alertsLoading, setAlertsLoading] = useState(true);
+  const [seenAutoAlertIds, setSeenAutoAlertIds] = useState(() => loadSeenAutoAlerts());
+  const alertsRef = useRef(alerts);
+  alertsRef.current = alerts;
 
   const activeCount = alerts.filter((a) => a.status === "active").length;
   const resolvedCount = alerts.filter((a) => a.status === "resolved").length;
   const totalCount = alerts.length;
+
+  const unreadCount = useMemo(
+    () => alerts.filter((a) => isUnreadAlert(a, seenAutoAlertIds)).length,
+    [alerts, seenAutoAlertIds]
+  );
+
+  const unreadAlerts = useMemo(
+    () => alerts.filter((a) => isUnreadAlert(a, seenAutoAlertIds)),
+    [alerts, seenAutoAlertIds]
+  );
 
   const loadAlerts = useCallback(() => {
     const role = localStorage.getItem("role");
@@ -80,6 +103,11 @@ export function AlertProvider({ children }) {
   }, [loadAlerts]);
 
   useEffect(() => {
+    if (localStorage.getItem("role") !== "petani") return;
+    return installAlertSoundUnlock();
+  }, []);
+
+  useEffect(() => {
     const onConnect = () => {
       const userId = getCurrentUserId();
       if (userId && localStorage.getItem("role") === "petani") {
@@ -95,9 +123,7 @@ export function AlertProvider({ children }) {
         return;
       }
 
-      if (typeof window.__playAlertSound === "function") {
-        window.__playAlertSound();
-      }
+      playAlertSound();
 
       const isEnriched =
         newAlert.actual_nitrogen !== undefined ||
@@ -116,6 +142,7 @@ export function AlertProvider({ children }) {
       }
 
       toast.dismiss(TOAST_ID);
+      const autoNotice = getAutoHandledNotice(newAlert);
       toast.custom(
         (t) => (
           <div
@@ -128,6 +155,9 @@ export function AlertProvider({ children }) {
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-semibold text-gray-800">Peringatan baru</div>
                 <div className="text-xs text-gray-500 mt-1 truncate">{newAlert.message}</div>
+                {autoNotice && (
+                  <div className="text-xs text-bl-primary mt-1 font-medium">{autoNotice}</div>
+                )}
                 <div className="text-xs text-gray-400 mt-0.5">{newAlert.screenhouse_name}</div>
               </div>
               <button
@@ -144,9 +174,21 @@ export function AlertProvider({ children }) {
     };
 
     socket.on("alert-update", handleAlert);
+
+    const handleAlertResolved = (resolved) => {
+      if (!alertBelongsToCurrentUser(resolved)) return;
+      setAlerts((prev) =>
+        prev.map((a) =>
+          a.id === resolved.id ? { ...a, ...resolved, status: "resolved" } : a
+        )
+      );
+    };
+
+    socket.on("alert-resolved", handleAlertResolved);
     return () => {
       socket.off("connect", onConnect);
       socket.off("alert-update", handleAlert);
+      socket.off("alert-resolved", handleAlertResolved);
     };
   }, [loadAlerts]);
 
@@ -168,15 +210,32 @@ export function AlertProvider({ children }) {
     }
   };
 
+  /** Tandai alert otomatis sudah dilihat — badge berkurang, alert tetap aktif di daftar. */
+  const markAutoHandledAlertsSeen = useCallback(() => {
+    const ids = alertsRef.current
+      .filter((a) => a.status === "active" && isAutoHandledAlert(a))
+      .map((a) => String(a.id));
+    if (ids.length === 0) return;
+
+    setSeenAutoAlertIds((prev) => {
+      const newIds = ids.filter((id) => !prev.has(id));
+      if (newIds.length === 0) return prev;
+      return markAutoAlertsSeen(newIds);
+    });
+  }, []);
+
   return (
     <AlertContext.Provider
       value={{
         alerts,
         activeCount,
+        unreadCount,
+        unreadAlerts,
         resolvedCount,
         totalCount,
         alertsLoading,
         resolveAlert,
+        markAutoHandledAlertsSeen,
         refetchAlerts: loadAlerts,
       }}
     >
@@ -188,10 +247,13 @@ export function AlertProvider({ children }) {
 const defaultAlertsContext = {
   alerts: [],
   activeCount: 0,
+  unreadCount: 0,
+  unreadAlerts: [],
   resolvedCount: 0,
   totalCount: 0,
   alertsLoading: false,
   resolveAlert: async () => {},
+  markAutoHandledAlertsSeen: () => {},
   refetchAlerts: async () => {},
 };
 

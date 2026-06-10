@@ -146,7 +146,7 @@ function Navbar({ onToggleSidebar }) {
             relative
             p-2.5
             bg-slate-100
-            hover:bg-emerald-50
+            hover:bg-bl-surface-muted
             rounded-xl
             transition
             border

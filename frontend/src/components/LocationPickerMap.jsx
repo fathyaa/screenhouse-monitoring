@@ -87,7 +87,7 @@ export default function LocationPickerMap({
             type="button"
             onClick={runSearch}
             disabled={searching}
-            className="h-10 px-4 rounded-lg bg-[#1e4d2b] hover:bg-[#2d6e3e] text-white text-xs font-medium disabled:opacity-50"
+            className="h-10 px-4 rounded-lg bg-bl-primary hover:bg-bl-primary-hover text-white text-xs font-medium disabled:opacity-50"
           >
             {searching ? "..." : "Cari"}
           </button>

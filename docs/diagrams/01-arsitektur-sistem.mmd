@@ -1,0 +1,59 @@
+flowchart TB
+    subgraph Devices["Perangkat Lapangan (WSN)"]
+        SN["Sensor Node (tray)<br/>NPK, suhu, pH, dll."]
+        SK["Sink Node (gateway)<br/>relay fan / irigasi / lampu"]
+    end
+
+    subgraph Broker["Message Broker"]
+        MQTT["MQTT (Mosquitto)<br/>:1883"]
+    end
+
+    subgraph FE["Frontend (React/Vite PWA)"]
+        UI["Web App<br/>Petani / Operator / Admin"]
+    end
+
+    subgraph LB["Load Balancer"]
+        NGX["Nginx Reverse Proxy<br/>:80 / :443<br/>round-robin + health check"]
+    end
+
+    subgraph App["App Service :8000 (inst. 1..N)"]
+        IDN["Identity · auth"]
+        CAT["Catalog · screenhouse, threshold"]
+        PXY["Proxy · /sensor-data, /alerts"]
+    end
+
+    subgraph Mon["Monitoring Service :3001 (inst. 1..N)"]
+        ING["MQTT Ingest"]
+        ACT["Actuator Command"]
+        ALW["Alert Worker"]
+        RT["Socket.IO Server"]
+        MAPI["REST sensor-data & alerts"]
+    end
+
+    subgraph Data["Penyimpanan"]
+        DBA[("PostgreSQL screenhouse_app")]
+        DBM[("PostgreSQL screenhouse_monitoring")]
+        REDIS[("Redis Pub/Sub")]
+    end
+
+    SN -- radio WSN --> SK
+    SK -- publish --> MQTT
+    MQTT -- subscribe command --> SK
+    MQTT --> ING
+    ACT -- publish command --> MQTT
+
+    UI -- HTTP/HTTPS --> NGX
+    NGX -- "/api REST" --> App
+    NGX -- "WebSocket" --> RT
+
+    PXY -- proxy --> MAPI
+    IDN --- DBA
+    CAT --- DBA
+    ING --- DBM
+    ACT --- DBM
+    ALW --- DBM
+    MAPI --- DBM
+    CAT -- event --> REDIS
+    ING -- publish --> REDIS
+    ALW -- pub/sub --> REDIS
+    RT -- subscribe --> REDIS
