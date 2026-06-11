@@ -1,21 +1,45 @@
-version: '3.8'
-
+name: smartscreenhouse
 services:
-  postgres:
+  db-app:
     image: postgres:17
-    container_name: smartscreenhouse-postgres
+    container_name: smartscreenhouse-db-app
+    restart: always
+    environment:
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
+        POSTGRES_DB: smartscreenhouse_app
+    ports:
+      - "5432:5432"
+    networks:
+      - smartscreenhouse-net
+    volumes:
+      - postgres_app_data:/var/lib/postgresql/data
+      - ./database/app/schema.sql:/docker-entrypoint-initdb.d/1-schema.sql
+      - ./database/app/seed.sql:/docker-entrypoint-initdb.d/2-seed.sql
+      - ./database/app/push_subscriptions.sql:/docker-entrypoint-initdb.d/3-push_subscriptions.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  db-monitoring:
+    image: postgres:17
+    container_name: smartscreenhouse-db-monitoring
     restart: always
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: smartscreenhouse_monitoring
     ports:
-      - "5432:5432"
+      - "5433:5432"
     networks:
       - smartscreenhouse-net
     volumes:
-      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
-      - ./database/seed.sql:/docker-entrypoint-initdb.d/seed.sql
+      - postgres_monitoring_data:/var/lib/postgresql/data
+      - ./database/monitoring/schema.sql:/docker-entrypoint-initdb.d/1-schema.sql
+      - ./database/monitoring/seed.sql:/docker-entrypoint-initdb.d/2-seed.sql
+      - ./database/monitoring/data:/docker-entrypoint-initdb.d/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -24,8 +48,8 @@ services:
   
   redis:
     image: redis:7
-    container_name : smartscreenhouse-redis
-    restart : always
+    container_name: smartscreenhouse-redis
+    restart: always
     ports:
       - "6379:6379"
     networks:
@@ -35,7 +59,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-    
+
   mosquitto:
     image: eclipse-mosquitto:2
     container_name: smartscreenhouse-mqtt
@@ -53,118 +77,70 @@ services:
       timeout: 5s
       retries: 5
 
-  user-service:
+
+  app-service:
     build:
-      context: ./services/user-service
+      context: ./services/app-service
       dockerfile: Dockerfile
-    container_name: smartscreenhouse-user-service
+    container_name: smartscreenhouse-app-service
     restart: always
     ports:
-      - "3004:3004"
+      - "8000:8000"
     networks:
       - smartscreenhouse-net
     environment:
-      - NODE_ENV=staging
-      - PORT=3004
-      - DB_HOST=postgres
+      - NODE_ENV=production
+      - PORT=8000
+      - DB_HOST=db-app
       - DB_PORT=5432
       - DB_USER=postgres
       - DB_PASSWORD=postgres
-      - DB_NAME=smartscreenhouse_monitoring
-      - JWT_SECRET=YB4RY3PS8S3Dn8MSHCU3sc7uk8Kkmf22
+      - DB_NAME=smartscreenhouse_app
+      - JWT_SECRET=supersecret
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MONITORING_SERVICE_URL=http://monitoring-service:3001
+      - DB_MON_HOST=db-monitoring
+      - DB_MON_PORT=5432
+      - DB_MON_NAME=smartscreenhouse_monitoring
+      - VAPID_PUBLIC_KEY=BNJNuE0rZ1Y11APM6NjqiA_GXXJ9kwgaorVLx5mi8iFdNWEuEUZEQ6VE4TdZAgmivXm82ZrlkjKgcMrpcryedHo
+      - VAPID_PRIVATE_KEY=T1DIrC5KBvQvuFy9EVQDyiYAHr5YV6mKDBRJA6hQmpk
+      - VAPID_SUBJECT=mailto:admin@screenhouse.local
     depends_on:
-      postgres:
+      db-app:
+        condition: service_healthy
+      db-monitoring:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
-  screenhouse-service:
+  monitoring-service:
     build:
-      context: ./services/screenhouse-service
+      context: ./services/monitoring-service
       dockerfile: Dockerfile
-    container_name: smartscreenhouse-main-service
-    ports: 
-      - "3003:3003"
-    networks:
-      - smartscreenhouse-net
-    environment:
-      - NODE_ENV=staging
-      - PORT=3003
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres
-      - DB_NAME=smartscreenhouse_monitoring
-      - JWT_SECRET=YB4RY3PS8S3Dn8MSHCU3sc7uk8Kkmf22
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  data-service:
-    build:
-      context: ./services/data-service
-      dockerfile: Dockerfile
-    container_name: smartscreenhouse-data-service
+    container_name: smartscreenhouse-monitoring-service
+    restart: always
     ports:
       - "3001:3001"
     networks:
       - smartscreenhouse-net
     environment:
-      - NODE_ENV=staging
+      - NODE_ENV=production
       - PORT=3001
-      - DB_HOST=postgres
+      - DB_HOST=db-monitoring
       - DB_PORT=5432
       - DB_USER=postgres
       - DB_PASSWORD=postgres
       - DB_NAME=smartscreenhouse_monitoring
-      - JWT_SECRET=YB4RY3PS8S3Dn8MSHCU3sc7uk8Kkmf22
+      - JWT_SECRET=supersecret
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MQTT_BROKER_URL=mqtt://mosquitto:1883
     depends_on:
-      postgres:
+      db-monitoring:
         condition: service_healthy
       redis:
         condition: service_healthy
-  realtime-service:
-    build:
-      context: ./services/realtime-service
-      dockerfile: Dockerfile
-    container_name: smartscreenhouse-realtime-service
-    ports:
-      - "3002:3002"
-    networks:
-      - smartscreenhouse-net
-    environment:
-      - NODE_ENV=staging
-      - PORT=3002
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - MQTT_URL=mqtt://mosquitto:1883
-      - JWT_SECRET=YB4RY3PS8S3Dn8MSHCU3sc7uk8Kkmf22
-    depends_on:
-      redis:
-        condition: service_healthy
-      mosquitto: 
-        condition: service_healthy
-
-  alert-service:
-    build:
-      context: ./services/alert-service
-      dockerfile: Dockerfile
-    container_name: smartscreenhouse-alert-service
-    ports:
-      - "3005:3005"
-    networks:
-      - smartscreenhouse-net
-    environment:
-      - NODE_ENV=staging
-      - PORT=3005
-      - MQTT_URL=mqtt://mosquitto:1883
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=admin
-      - DB_PASSWORD=password
-      - DB_NAME=smartscreenhouse
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - JWT_SECRET=YB4RY3PS8S3Dn8MSHCU3sc7uk8Kkmf22
-    depends_on:
       mosquitto:
         condition: service_healthy
 
@@ -172,19 +148,22 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      args:
-        - VITE_API_USER_URL=http://localhost:3004
-        - VITE_API_SCREENHOUSE_URL=http://localhost:3003
-        - VITE_API_DATA_URL=http://localhost:3001
-        - VITE_API_REALTIME_URL=http://localhost:3002
     container_name: smartscreenhouse-fe-app
+    restart: always
     ports:
       - "8080:80"
+    networks:
+      - smartscreenhouse-net
     depends_on:
-      - user-service
-      - screenhouse-service
+      - app-service
+      - monitoring-service
 
 networks:
   smartscreenhouse-net:
     driver: bridge
+
+volumes:
+  postgres_app_data:
+  postgres_monitoring_data:
+
 
