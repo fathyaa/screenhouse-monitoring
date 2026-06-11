@@ -1,6 +1,6 @@
 # Screenhouse Monitoring System
 
-Sistem monitoring realtime screenhouse pembibitan padi untuk MCtan.
+Sistem monitoring realtime screenhouse pembibitan padi.
 
 ## Stack
 
@@ -31,21 +31,22 @@ Sistem monitoring realtime screenhouse pembibitan padi untuk MCtan.
 
 # Arsitektur Sistem
 
+Microservices dengan **bounded context** dan **2 database terpisah**:
+
+- **App Service** — identity (users) + catalog (screenhouses, wilayah, thresholds). DB: `screenhouse_app`.
+- **Monitoring Service** — ingest sensor (MQTT), alerting, realtime (WebSocket), stats. DB: `screenhouse_monitoring`.
+
+App Service membaca data monitoring lewat HTTP (`MONITORING_SERVICE_URL`); Monitoring Service punya read-model tersinkron (`screenhouse_registry`, `threshold_snapshots`) yang di-sync dari App DB.
+
 ```txt
-Sensor ESP32
-    ↓
-MQTT Broker (Mosquitto)
-    ↓
-Data Service
-    ↓
-Redis Event Bus
-    ↓
-┌───────────────────────┐
-│ Alert Service         │
-│ Realtime Service      │
-└───────────────────────┘
-    ↓
-Frontend Dashboard
+Sensor Node (tray) ──radio WSN──► Sink Node (gateway)
+                                      ↓ MQTT publish
+                                 Mosquitto Broker
+                                      ↓ subscribe
+Monitoring Service ──→ screenhouse_monitoring
+  (sink_nodes, sensor_nodes, sensor_data, actuator_logs, alerts)
+    ↓ Redis event bus + WebSocket
+Frontend Dashboard ←── App Service ──→ screenhouse_app (users, screenhouses, thresholds)
 ```
 
 ---
@@ -55,27 +56,22 @@ Frontend Dashboard
 ```txt
 screenhouse-monitoring/
 │
-├── frontend/
+├── frontend/                 # React + Vite
 │
 ├── services/
-│   ├── user-service/
-│   ├── screenhouse-service/
-│   ├── data-service/
-│   ├── realtime-service/
-│   └── alert-service/
+│   ├── app-service/          # identity + catalog (DB: screenhouse_app)
+│   ├── monitoring-service/   # ingest + alerting + realtime (DB: screenhouse_monitoring)
+│   └── _archive/             # microservices lama (referensi migrasi)
 │
 ├── database/
-│   ├── schema.sql
-│   └── seed.sql
+│   ├── app/                  # schema.sql + seed.sql  (screenhouse_app)
+│   ├── monitoring/           # schema.sql + seed.sql  (screenhouse_monitoring)
+│   ├── scripts/              # import wilayah, sync registry, seed peta
+│   └── README.md
 │
 ├── docker/
-│   └── mosquitto/
-│       └── config/
-│           └── mosquitto.conf
-│
-├── docker-compose.yml
-│
-├── .gitignore
+│   ├── docker-compose.yaml
+│   └── mosquitto/config/mosquitto.conf
 │
 └── README.md
 ```
@@ -105,83 +101,64 @@ cd screenhouse-monitoring
 
 # Setup Environment Variables
 
-Buat file `.env` di masing-masing service.
+Buat file `.env` di masing-masing service. Perhatikan port DB **host** sesuai `docker/docker-compose.yaml`: App DB `5434`, Monitoring DB `5433`.
 
-Contoh:
-
-## services/user-service/.env
+## services/app-service/.env
 
 ```env
-PORT=3004
+PORT=8000
 
 DB_HOST=localhost
-DB_PORT=5432
+DB_PORT=5434
 DB_USER=postgres
 DB_PASSWORD=postgres
-DB_NAME=screenhouse_monitoring
+DB_NAME=screenhouse_app
 
 JWT_SECRET=supersecret
+
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# Web Push (PWA notifikasi saat app tertutup) — generate dengan:
+#   cd services/app-service && npx web-push generate-vapid-keys
+VAPID_PUBLIC_KEY=your_vapid_public_key
+VAPID_PRIVATE_KEY=your_vapid_private_key
+VAPID_SUBJECT=mailto:admin@screenhouse.local
+
+# Baca data monitoring lewat HTTP + koneksi read-only stats
+MONITORING_SERVICE_URL=http://localhost:3001
+DB_MON_PORT=5433
+DB_MON_NAME=screenhouse_monitoring
 ```
 
 ---
 
-## services/screenhouse-service/.env
+## frontend/.env
 
 ```env
-PORT=3003
-
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=postgres
-DB_NAME=screenhouse_monitoring
-
-JWT_SECRET=supersecret
+VITE_API_URL=http://localhost:8000
+VITE_MONITORING_URL=http://localhost:3001
+VITE_VAPID_PUBLIC_KEY=your_vapid_public_key
 ```
+
+(`VITE_VAPID_PUBLIC_KEY` harus sama dengan `VAPID_PUBLIC_KEY` di app-service.)
 
 ---
 
-## services/data-service/.env
+## services/monitoring-service/.env
 
 ```env
 PORT=3001
 
+MQTT_BROKER_URL=mqtt://localhost:1883
+
 DB_HOST=localhost
-DB_PORT=5432
+DB_PORT=5433
 DB_USER=postgres
 DB_PASSWORD=postgres
 DB_NAME=screenhouse_monitoring
 
-MQTT_HOST=localhost
-MQTT_PORT=1883
-
-REDIS_HOST=localhost
-REDIS_PORT=6379
-```
-
----
-
-## services/realtime-service/.env
-
-```env
-PORT=3002
-
-REDIS_HOST=localhost
-REDIS_PORT=6379
-```
-
----
-
-## services/alert-service/.env
-
-```env
-PORT=3005
-
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=postgres
-DB_NAME=screenhouse_monitoring
+JWT_SECRET=supersecret
 
 REDIS_HOST=localhost
 REDIS_PORT=6379
@@ -191,154 +168,69 @@ REDIS_PORT=6379
 
 # Install Dependency
 
-## Frontend
-
 ```bash
-cd frontend
-npm install
-```
-
----
-
-## User Service
-
-```bash
-cd services/user-service
-npm install
-```
-
----
-
-## Screenhouse Service
-
-```bash
-cd services/screenhouse-service
-npm install
-```
-
----
-
-## Data Service
-
-```bash
-cd services/data-service
-npm install
-```
-
----
-
-## Realtime Service
-
-```bash
-cd services/realtime-service
-npm install
-```
-
----
-
-## Alert Service
-
-```bash
-cd services/alert-service
-npm install
+cd frontend && npm install && cd ..
+cd services/app-service && npm install && cd ../..
+cd services/monitoring-service && npm install && cd ../..
 ```
 
 ---
 
 # Menjalankan Infrastructure Docker
 
-Jalankan:
+Jalankan dari folder `docker/`:
 
 ```bash
-docker compose up -d
+cd docker && docker compose up -d && cd ..
 ```
 
 Container yang akan berjalan:
 
-* PostgreSQL
-* Redis
-* Mosquitto MQTT Broker
+* `screenhouse-postgres-app` — PostgreSQL App DB (host port 5434)
+* `screenhouse-postgres-monitoring` — PostgreSQL Monitoring DB (host port 5433)
+* `screenhouse-redis` — Redis (6379)
+* `screenhouse-mqtt` — Mosquitto MQTT Broker (1883 / 9001)
 
 ---
 
 # Setup Database
 
-## Masuk PostgreSQL
+Dua container Postgres dijalankan oleh Docker (lihat `docker/docker-compose.yaml`): `screenhouse_app` di host port **5434** dan `screenhouse_monitoring` di host port **5433**. Database sudah dibuat otomatis oleh container, tinggal import schema + seed dari **root project**:
 
 ```bash
-docker exec -it screenhouse-postgres psql -U postgres
+# App DB (identity + catalog)
+psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/schema.sql
+psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/seed.sql
+
+# Jika DB app sudah ada sebelumnya, tambah tabel push:
+psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/push_subscriptions.sql
+
+# Monitoring DB (ingest + alerting)
+psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring -f database/monitoring/schema.sql
+psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring -f database/monitoring/seed.sql
 ```
 
----
+Wilayah Indonesia lengkap + 30+ screenhouse peta + sync registry — lihat [`database/README.md`](database/README.md).
 
-## Buat Database
-
-```sql
-CREATE DATABASE screenhouse_monitoring;
-```
-
----
-
-## Import Schema
-
-Keluar dari PostgreSQL lalu jalankan:
-
-```bash
-psql -U postgres -d screenhouse_monitoring -f database/schema.sql
-```
-
----
-
-## Import Seed Data
-
-```bash
-psql -U postgres -d screenhouse_monitoring -f database/seed.sql
-```
+Password demo: `123456`
 
 ---
 
 # Menjalankan Services
 
-## User Service
+## App Service
 
 ```bash
-cd services/user-service
+cd services/app-service
 node src/index.js
 ```
 
 ---
 
-## Screenhouse Service
+## Monitoring Service
 
 ```bash
-cd services/screenhouse-service
-node src/index.js
-```
-
----
-
-## Data Service
-
-```bash
-cd services/data-service
-node src/index.js
-```
-
----
-
-## Realtime Service
-
-```bash
-cd services/realtime-service
-node src/index.js
-```
-
----
-
-## Alert Service
-
-```bash
-cd services/alert-service
+cd services/monitoring-service
 node src/index.js
 ```
 
@@ -359,23 +251,129 @@ http://localhost:5173
 
 ---
 
-# MQTT Testing
+# MQTT — Telemetry & Aktuator
 
-## Publish Dummy Sensor Data
+## Alur singkat
+
+```txt
+Tray (sensor node) → Sink node → MQTT cloud
+Petani toggle / Alert otomatis
+    → monitoring-service publish command ke sink node
+    → Sink nyalakan relay
+    → Sink publish telemetry balik
+    → monitoring-service simpan sensor_data (tray) + actuator_logs (sink)
+```
+
+## Topic MQTT
+
+| Arah | Topic | Keterangan |
+| ---- | ----- | ---------- |
+| Server → Sink | `screenhouse/{id}/sink/{sink_code}/command` | Perintah ON/OFF relay |
+| Server → Sink (broadcast) | `screenhouse/{id}/actuator` | Sama + `node_id` / `destination_id` |
+| Sink → Server | `screenhouse/{id}/sink/{sink_code}/sensor` | Telemetry tray atau status relay |
+| Legacy | `screenhouse/{id}/node/{code}/sensor` | Masih didukung |
+
+| Field payload | DB |
+| ------------- | -- |
+| `node_id` | `sensor_nodes.node_code` (tray pengirim) |
+| `destination_id` | `sink_nodes.node_code` (sink penerima) |
+
+## Payload command (server → sink)
+
+```json
+{
+  "node_id": "SH01-SINK",
+  "destination_id": "SH01-SINK",
+  "fan_status": true,
+  "irrigation_status": false,
+  "lamp_status": false,
+  "source": "manual",
+  "reason": null
+}
+```
+
+## Payload telemetry tray (sink → server)
+
+```json
+{
+  "node_id": "SH01-T01",
+  "destination_id": "SH01-SINK",
+  "nitrogen": 24,
+  "soil_moisture": 68,
+  "soil_temperature": 26.5
+}
+```
+
+Status relay disimpan di `sink_nodes` + `actuator_logs`, **bukan** di `sensor_data`.
+
+Migrasi DB lama: `database/monitoring/migrations/001_sink_nodes_actuators.sql` (lihat `database/monitoring/README.md`).
+
+Setelah menerima command, sink **wajib publish ulang** status relay ke topic sensor.
+
+## Otomatis dari alert
+
+| Kondisi | Aktuator |
+| ------- | -------- |
+| Kelembapan tanah rendah | Irigasi ON |
+| Kelembapan tanah tinggi | Irigasi OFF |
+| Suhu / kelembapan udara tinggi | Kipas ON |
+| Suhu tanah rendah | Lampu ON |
+| Intensitas cahaya rendah | Lampu ON |
+
+## Contoh firmware ESP32
+
+Sketch lengkap ada di [`docs/hardware/esp32-actuator-mqtt.ino`](docs/hardware/esp32-actuator-mqtt.ino).
+
+Ringkasannya: subscribe topic `command`, apply relay, publish ke topic `sensor`.
+
+## Tes tanpa hardware
+
+**Dengarkan command dari web (topic sink — terbaru):**
 
 ```bash
-mosquitto_pub \
--h localhost \
--t screenhouse/1/sensor \
--m '{
-  "npk":{
-    "nitrogen":10,
-    "phosphorus":15,
-    "potassium":18
-  },
-  "moisture":40
-}'
+mosquitto_sub -h localhost -t 'screenhouse/+/sink/+/command' -v
 ```
+
+Toggle irigasi/kipas/lampu dari dashboard petani — pesan harus muncul di terminal.
+
+**Publish telemetry tray (via sink — format terbaru):**
+
+```bash
+mosquitto_pub -h localhost \
+  -t screenhouse/1/sink/SH01-SINK/sensor \
+  -m '{
+    "node_id": "SH01-T01",
+    "destination_id": "SH01-SINK",
+    "nitrogen": 30,
+    "phosphorus": 20,
+    "potassium": 30,
+    "soil_moisture": 65,
+    "soil_temperature": 27.0,
+    "soil_ph": 6.3,
+    "conductivity": 450,
+    "air_temperature": 28,
+    "air_humidity": 70,
+    "light_intensity": 20000
+  }'
+```
+
+**Simulasi balasan relay dari sink (setelah toggle web):**
+
+```bash
+mosquitto_pub -h localhost \
+  -t screenhouse/1/sink/SH01-SINK/sensor \
+  -m '{
+    "node_id": "SH01-SINK",
+    "destination_id": "SH01-SINK",
+    "fan_status": true,
+    "irrigation_status": false,
+    "lamp_status": false
+  }'
+```
+
+Script lengkap (alert, loop 10×, dll.): [`docs/evaluasi-kualitas/mqtt-simulasi.sh`](docs/evaluasi-kualitas/mqtt-simulasi.sh)
+
+**Legacy** — topic `screenhouse/{id}/node/{code}/sensor` + field `node_code` masih didukung, tapi **jangan pakai `SH01-N01`** (sudah diganti `SH01-T01` / `SH01-SINK`).
 
 ---
 
@@ -401,17 +399,15 @@ Password: 123456
 
 # Services Port
 
-| Service             | Port |
-| ------------------- | ---- |
-| Frontend            | 5173 |
-| Data Service        | 3001 |
-| Realtime Service    | 3002 |
-| Screenhouse Service | 3003 |
-| User Service        | 3004 |
-| Alert Service       | 3005 |
-| PostgreSQL          | 5432 |
-| Redis               | 6379 |
-| MQTT                | 1883 |
+| Service                       | Port |
+| ----------------------------- | ---- |
+| Frontend                      | 5173 |
+| Monitoring Service            | 3001 |
+| App Service                   | 8000 |
+| PostgreSQL App (host)         | 5434 |
+| PostgreSQL Monitoring (host)  | 5433 |
+| Redis                         | 6379 |
+| MQTT                          | 1883 |
 
 ---
 
@@ -421,7 +417,10 @@ Password: 123456
 
 * Login
 * Monitoring sensor realtime
-* Receive alert
+* Receive alert (WebSocket + toast saat app terbuka)
+* **PWA**: install ke home screen
+* **Push notification** saat app ditutup (Web Push)
+* Kontrol aktuator manual (kipas, irigasi, lampu)
 * Melihat data screenhouse milik sendiri
 
 ## Operator
@@ -436,14 +435,63 @@ Password: 123456
 * MQTT realtime ingestion
 * Redis event bus
 * WebSocket realtime frontend
-* Alert automation
+* Alert automation + aktuator otomatis
 * Realtime map dashboard
+
+---
+
+# PWA & Push Notification
+
+Aplikasi petani bisa **diinstall ke home screen** dan menerima **notifikasi push** walau browser ditutup.
+
+## Cara install (petani)
+
+1. Buka app di **Chrome Android** atau **Safari iOS**
+2. Login sebagai petani
+3. Banner bawah layar → **Install app** (Android) atau ikuti petunjuk **Add to Home Screen** (iOS)
+4. Tap **Aktifkan notifikasi** → izinkan notifikasi browser
+
+## Setup server (sekali)
+
+```bash
+cd services/app-service
+npx web-push generate-vapid-keys
+```
+
+Salin public/private key ke:
+
+* `services/app-service/.env` → `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`
+* `frontend/.env` → `VITE_VAPID_PUBLIC_KEY` (public key saja)
+
+Jalankan migrasi push (jika DB app sudah ada):
+
+```bash
+psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/push_subscriptions.sql
+```
+
+Restart **app-service** (push worker subscribe channel Redis `alert-created`).
+
+## Cara kerja
+
+| Kondisi app | Mekanisme notifikasi |
+| ----------- | -------------------- |
+| Terbuka | Socket.IO + toast + suara |
+| Tertutup / background | **Web Push** via service worker |
+
+Service worker custom: `frontend/src/pwa/sw.js` (push handler + notification click → buka `/petani/peringatan`).
+
+## Catatan platform
+
+* **HTTPS wajib** untuk push di production (localhost OK untuk dev)
+* **iOS**: push hanya bekerja setelah app di-Add to Home Screen (iOS 16.4+)
+* **Android Chrome**: install + push didukung penuh
 
 ---
 
 # Notes
 
 * Sistem masih tahap development.
-* Threshold saat ini masih global sederhana.
-* Device ESP32 + RS485 NPK sensor akan menjadi publisher MQTT utama.
-* Sistem fokus monitoring, belum ada aktuator otomatis.
+* Threshold per screenhouse via halaman admin/kelola-threshold.
+* Device WSN: **Sensor Node** (1 tray) + **Sink Node** (1 gateway/screenhouse) = publisher MQTT; lihat `docs/hardware/` dan `database/monitoring/README.md`.
+* Kontrol aktuator: manual (petani via web) + otomatis saat alert threshold.
+* PWA + Web Push untuk petani — butuh VAPID keys di app-service.

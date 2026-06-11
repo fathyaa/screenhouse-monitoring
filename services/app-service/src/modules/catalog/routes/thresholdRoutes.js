@@ -1,0 +1,42 @@
+const express = require("express");
+const authMiddleware = require("../../../shared/middlewares/authMiddleware");
+const roleMiddleware = require("../../../shared/middlewares/roleMiddleware");
+const {
+  listThresholds,
+  getThreshold,
+  upsertThreshold,
+  bulkUpsertThreshold,
+} = require("../controllers/thresholdController");
+
+const router = express.Router();
+const adminRoles = ["super_admin"];
+
+router.get(
+  "/",
+  authMiddleware,
+  roleMiddleware(adminRoles),
+  listThresholds
+);
+
+router.put(
+  "/bulk",
+  authMiddleware,
+  roleMiddleware(adminRoles),
+  bulkUpsertThreshold
+);
+
+router.get(
+  "/:screenhouseId",
+  authMiddleware,
+  roleMiddleware(adminRoles),
+  getThreshold
+);
+
+router.put(
+  "/:screenhouseId",
+  authMiddleware,
+  roleMiddleware(adminRoles),
+  upsertThreshold
+);
+
+module.exports = router;

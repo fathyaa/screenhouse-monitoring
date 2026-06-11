@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <title>Wireframe Mobile — Screenhouse Monitoring</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #e5e7eb;
+      padding: 32px;
+      color: #374151;
+    }
+    h1 { font-size: 1.25rem; margin-bottom: 8px; color: #166534; }
+    .intro { font-size: 0.85rem; color: #6b7280; margin-bottom: 24px; max-width: 720px; }
+    .section-title {
+      width: 100%;
+      flex-basis: 100%;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #166534;
+      margin: 8px 0 4px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #bbf7d0;
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start; }
+    .phone-wrap { text-align: center; }
+    .phone-label { font-size: 0.75rem; font-weight: 600; color: #166534; margin-bottom: 8px; }
+    .phone {
+      width: 390px;
+      height: 844px;
+      background: #fff;
+      border: 2px solid #9ca3af;
+      border-radius: 32px;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 8px 24px rgba(0,0,0,.12);
+    }
+    .topbar { height: 52px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; padding: 0 12px; gap: 8px; }
+    .icon-btn { width: 28px; height: 28px; background: #e5e7eb; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+    .topbar h2 { font-size: 15px; color: #166534; flex: 1; text-align: left; }
+    .badge { background: #dc2626; color: #fff; font-size: 9px; width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; position: absolute; top: -4px; right: -4px; }
+    .bell-wrap { position: relative; }
+    .content { padding: 16px; text-align: left; overflow: hidden; height: calc(844px - 52px); }
+    .content--auth { height: 844px; }
+    .field { height: 48px; border: 1px solid #d1d5db; border-radius: 10px; background: #fff; margin-bottom: 12px; display: flex; align-items: center; padding: 0 12px; font-size: 11px; color: #9ca3af; }
+    .btn { height: 48px; background: #166534; color: #fff; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; margin-top: 8px; }
+    .btn-outline { background: #fff; color: #166534; border: 1px solid #166534; }
+    .title-lg { font-size: 18px; font-weight: 700; color: #166534; margin-bottom: 4px; }
+    .subtitle { font-size: 10px; color: #6b7280; margin-bottom: 20px; }
+    .card { border: 1px solid #d1d5db; border-radius: 12px; padding: 14px; margin-bottom: 12px; background: #fff; }
+    .card h3 { font-size: 14px; color: #166534; margin-bottom: 4px; }
+    .chip { display: inline-block; background: #dcfce7; color: #166534; font-size: 9px; font-weight: 600; padding: 3px 8px; border-radius: 999px; margin: 6px 0; }
+    .chip-warn { background: #fef3c7; color: #b45309; }
+    .chip-danger { background: #fee2e2; color: #b91c1c; }
+    .param { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+    .param strong { font-size: 13px; color: #166534; }
+    .param span { font-size: 10px; color: #6b7280; display: block; }
+    .chart { height: 200px; border: 1px solid #d1d5db; border-radius: 10px; background: linear-gradient(180deg, #f0fdf4 40%, #fff 40%); display: flex; align-items: center; justify-content: center; font-size: 10px; color: #9ca3af; margin: 12px 0; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+    .tab { padding: 6px 14px; border-radius: 8px; font-size: 10px; border: 1px solid #d1d5db; }
+    .tab.active { background: #166534; color: #fff; border-color: #166534; }
+    .alert-card { border: 1px solid #fecaca; border-radius: 10px; padding: 12px; margin-bottom: 10px; background: #fff; }
+    .alert-card h4 { font-size: 12px; color: #b91c1c; margin-bottom: 4px; }
+    .alert-card p { font-size: 9px; color: #6b7280; }
+    .btn-sm { height: 28px; font-size: 9px; width: auto; padding: 0 14px; margin-top: 8px; display: inline-flex; }
+    .pwa { position: absolute; bottom: 16px; left: 16px; right: 16px; background: #f0fdf4; border: 1px solid #86efac; border-radius: 10px; padding: 12px; font-size: 10px; color: #166534; text-align: center; }
+    .drawer-bg { position: absolute; inset: 52px 0 0 0; background: rgba(0,0,0,.35); }
+    .drawer { position: absolute; top: 52px; left: 0; bottom: 0; width: 280px; background: #fff; border-right: 1px solid #e5e7eb; padding: 16px; text-align: left; }
+    .drawer a { display: block; padding: 10px 0; font-size: 12px; color: #374151; text-decoration: none; border-bottom: 1px solid #f3f4f6; }
+    .drawer a.active { color: #166534; font-weight: 600; }
+    .actuators { display: flex; gap: 8px; margin-top: 8px; }
+    .act { flex: 1; height: 48px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 9px; display: flex; align-items: center; justify-content: center; background: #f9fafb; }
+    .act.on { background: #dcfce7; border-color: #86efac; color: #166534; font-weight: 600; }
+    .toast { position: absolute; bottom: 80px; left: 16px; right: 16px; background: #fff7ed; border: 1px solid #fdba74; border-radius: 10px; padding: 12px; font-size: 10px; color: #9a3412; text-align: left; }
+    .map { height: 280px; border: 1px solid #d1d5db; border-radius: 10px; background: linear-gradient(135deg, #dcfce7, #ecfdf5); display: flex; align-items: center; justify-content: center; font-size: 10px; color: #6b7280; margin-bottom: 12px; position: relative; }
+    .map-pin { position: absolute; width: 14px; height: 18px; background: #16a34a; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); }
+    .list-item { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; font-size: 10px; background: #fff; }
+    .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .kpi { border: 1px solid #d1d5db; border-radius: 10px; padding: 10px; background: #fff; }
+    .kpi span { display: block; font-size: 9px; color: #6b7280; }
+    .kpi strong { font-size: 18px; color: #166534; }
+    .btn-row { display: flex; gap: 8px; margin-top: 10px; }
+    .btn-row .btn { flex: 1; margin-top: 0; height: 40px; font-size: 11px; }
+    .btn-danger { background: #fff; color: #b91c1c; border: 1px solid #fecaca; }
+    .row-item { display: flex; justify-content: space-between; align-items: center; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; font-size: 10px; }
+    .status-pill { font-size: 8px; padding: 2px 8px; border-radius: 999px; background: #dcfce7; color: #166534; font-weight: 600; }
+    .status-pill.pending { background: #fef3c7; color: #b45309; }
+    .form-label { font-size: 10px; font-weight: 600; color: #374151; margin: 8px 0 4px; }
+    .mini-chart { height: 100px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f9fafb; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #9ca3af; margin: 8px 0; }
+    @media print { body { background: #fff; } .phone { break-inside: avoid; page-break-inside: avoid; } }
+  </style>
+</head>
+<body>
+  <h1>Wireframe Mobile (390×844) — Screenhouse Monitoring</h1>
+  <p class="intro">Wireframe mobile 390×844 px — export PNG via <code>docs/scripts/export-wireframes-mobile.mjs</code> atau screenshot manual dari browser.</p>
+
+  <div class="row">
+    <h2 class="section-title">Autentikasi</h2>
+    <div class="phone-wrap">
+      <div class="phone-label">M-01 Login</div>
+      <div class="phone">
+        <div class="content content--auth" style="padding-top: 40px;">
+          <div class="title-lg" style="text-align:center">🌱 Screenhouse</div>
+          <div class="subtitle" style="text-align:center">Screenhouse Monitoring</div>
+          <div class="field">Nomor HP</div>
+          <div class="field">Password</div>
+          <div class="btn">Masuk</div>
+          <p style="text-align:center;font-size:10px;margin-top:16px;color:#6b7280">Belum punya akun? Daftar</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- M-02 Register -->
+    <div class="phone-wrap">
+      <div class="phone-label">M-02 Register Akun</div>
+      <div class="phone">
+        <div class="content content--auth">
+          <div class="title-lg">Daftar Akun Petani</div>
+          <div class="field">Nama lengkap</div>
+          <div class="field">Nomor HP</div>
+          <div class="field">Password (min 6 karakter)</div>
+          <div class="btn">Lanjut → Data Screenhouse</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- M-03 Register SH -->
+    <div class="phone-wrap">
+      <div class="phone-label">M-03 Register Screenhouse</div>
+      <div class="phone">
+        <div class="content content--auth">
+          <div class="title-lg">Data Screenhouse</div>
+          <div class="field">Nama screenhouse</div>
+          <div class="field">Alamat detail</div>
+          <div class="field">Provinsi ▾</div>
+          <div class="field">Kabupaten/Kota ▾</div>
+          <div class="field">Kecamatan ▾</div>
+          <div class="field">Desa ▾</div>
+          <div class="field">Latitude, Longitude</div>
+          <div class="btn">Kirim Pendaftaran</div>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="section-title">Petani</h2>
+
+    <!-- M-04 Dashboard -->
+    <div class="phone-wrap">
+      <div class="phone-label">M-04 Dashboard Petani</div>
+      <div class="phone">
+        <div class="topbar">
+          <div class="icon-btn">≡</div>
+          <h2>Dashboard</h2>
+          <div class="bell-wrap"><div class="icon-btn">🔔</div><span class="badge">2</span></div>
+        </div>
+        <div class="content">
+          <p style="font-size:10px;margin-bottom:12px">3 Screenhouse · 5 Node aktif</p>
+          <div class="field" style="height:40px;margin-bottom:16px">Cari screenhouse...</div>
+          <div class="card">
+            <h3>Screenhouse A</h3>
+            <p style="font-size:9px;color:#6b7280">Desa Sukamaju, Kec. Cibinong</p>
+            <span class="chip">Sehat</span>
+            <p style="font-size:10px;margin-top:8px">N: 24 mg/kg · Kelembapan: 65%</p>
+            <div class="btn btn-sm">Lihat Detail</div>
+          </div>
+          <div class="card">
+            <h3>Screenhouse B</h3>
+            <p style="font-size:9px;color:#6b7280">Desa Mekar, Kec. Jonggol</p>
+            <span class="chip chip-warn">Perlu perhatian</span>
+            <p style="font-size:10px;margin-top:8px">N: 45 mg/kg · Alert aktif</p>
+            <div class="btn btn-sm">Lihat Detail</div>
+          </div>
+        </div>
+        <div class="pwa">📲 Install app ke home screen (PWA)</div>
+      </div>
+    </div>
+
+    <!-- M-05 Detail -->
+    <div class="phone-wrap">
+      <div class="phone-label">M-05 Detail Screenhouse</div>
+      <div class="phone">
+        <div class="topbar">
+          <div class="icon-btn">≡</div>
+          <h2>Detail SH</h2>
+          <div class="bell-wrap"><div class="icon-btn">🔔</div><span class="badge">2</span></div>
+        </div>
+        <div class="content">
+          <p style="font-size:9px;margin-bottom:8px">← Kembali</p>
+          <div class="title-lg">Screenhouse A</div>
+          <div class="param"><span>Nitrogen (N)</span><strong>24 mg/kg · Ideal</strong></div>
+          <div class="param"><span>Fosfor (P)</span><strong>18 mg/kg · Ideal</strong></div>
+          <div class="param"><span>Kalium (K)</span><strong>22 mg/kg · Ideal</strong></div>
+          <div class="param"><span>Kelembapan tanah</span><strong>65% · Ideal</strong></div>
+          <div class="param"><span>Suhu tanah</span><strong>28°C · Ideal</strong></div>
+          <div class="param"><span>pH tanah</span><strong>6.2 · Ideal</strong></div>
+          <div class="param"><span>Konduktivitas</span><strong>1.2 mS/cm · Ideal</strong></div>
+          <div class="param"><span>Suhu udara</span><strong>29°C · Ideal</strong></div>
+          <div class="param"><span>Kelembapan udara</span><strong>72% · Ideal</strong></div>
+          <div class="mini-chart">Grafik NPK & kelembapan 24 jam</div>
+          <p style="font-size:11px;font-weight:600;color:#166534;margin:12px 0 6px">Kontrol Aktuator</p>
+          <div class="actuators">
+            <div class="act">Kipas OFF</div>
+            <div class="act on">Irigasi ON</div>
+            <div class="act">Lampu OFF</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- M-06 Tren -->
+    <div class="phone-wrap">
+      <div class="phone-label">M-06 Tren Tanah</div>
+      <div class="phone">
+        <div class="topbar">
+          <div class="icon-btn">≡</div>
+          <h2>Tren Tanah</h2>
+          <div class="bell-wrap"><div class="icon-btn">🔔</div></div>
+        </div>
+        <div class="content">
+          <div class="field" style="height:40px">Screenhouse A ▾</div>
+          <div class="chart">Grafik line chart + zona threshold</div>
+          <div class="card"><h3>Nitrogen — Ideal</h3><p style="font-size:9px">Tambah pupuk N jika kurang</p></div>
+          <div class="card"><h3 style="color:#b45309">Kelembapan — Kurang</h3><p style="font-size:9px">Segera siram atau aktifkan irigasi</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- M-07 Peringatan -->
+    <div class="phone-wrap">
+      <div class="phone-label">M-07 Peringatan</div>
+      <div class="phone">
+        <div class="topbar">
+          <div class="icon-btn">≡</div>
+          <h2>Peringatan</h2>
+        </div>
+        <div class="content">
+          <div class="tabs">
+            <span class="tab active">Semua</span>
+            <span class="tab">Aktif</span>
+            <span class="tab">Selesai</span>
+          </div>
+          <div class="alert-card">
+            <h4>Nitrogen berlebih</h4>
+            <p>Screenhouse A · 50 mg/kg (max 40) · 2 jam lalu</p>
+            <div class="btn btn-sm">Tandai Selesai</div>
+          </div>
+          <div class="alert-card">
+            <h4>Kelembapan kurang</h4>
+            <p>Screenhouse B · 18% (min 30) · 5 jam lalu</p>
+            <div class="btn btn-sm">Tandai Selesai</div>
+          </div>
+        </div>
+        <div class="toast">⚠ Alert baru: nitrogen berlebih di Screenhouse A</div>
+      </div>
+    </div>
+
+    <!-- M-08 Drawer -->
+    <div class="phone-wrap">
+      <div class="phone-label">M-08 Menu Sidebar (drawer)</div>
+      <div class="phone">
+        <div class="topbar">
+          <div class="icon-btn">≡</div>
+          <h2>Dashboard</h2>
+          <div class="bell-wrap"><div class="icon-btn">🔔</div></div>
+        </div>
+        <div class="drawer-bg"></div>
+        <div class="drawer">
+          <p style="font-size:13px;font-weight:700;color:#166534;margin-bottom:12px">Menu Petani</p>
+          <a href="#" class="active">● Dashboard</a>
+          <a href="#">Tren Tanah</a>
+          <a href="#">Peringatan</a>
+          <a href="#">Keluar</a>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="section-title">Operator</h2>
+
+    <!-- M-09 Operator Dashboard -->
+    <div class="phone-wrap">
+      <div class="phone-label">M-09 Dashboard Operator</div>
+      <div class="phone">
+        <div class="topbar">
+          <div class="icon-btn">≡</div>
+          <h2>Monitoring Wilayah</h2>
+        </div>
+        <div class="content">
+          <div class="field" style="height:40px;margin-bottom:10px">Filter provinsi ▾</div>
+          <div class="map">
+            Peta screenhouse
+            <span class="map-pin" style="top:60px;left:80px"></span>
+            <span class="map-pin" style="top:100px;left:160px;background:#eab308"></span>
+            <span class="map-pin" style="top:140px;left:220px;background:#dc2626"></span>
+          </div>
+          <div class="list-item"><strong>Screenhouse A</strong> · Sehat · Desa Sukamaju</div>
+          <div class="list-item"><strong>Screenhouse B</strong> · Waspada · Desa Mekar</div>
+          <div class="list-item"><strong>Screenhouse C</strong> · Offline · Desa Harapan</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- M-10 Approval -->
+    <div class="phone-wrap">
+      <div class="phone-label">M-10 Approval Petani</div>
+      <div class="phone">
+        <div class="topbar">
+          <div class="icon-btn">≡</div>
+          <h2>Approval Petani</h2>
+        </div>
+        <div class="content">
+          <div class="card">
+            <h3>Budi Santoso</h3>
+            <p style="font-size:9px;color:#6b7280">081234567890 · <span class="status-pill pending">Pending</span></p>
+            <p style="font-size:9px;margin-top:8px"><strong>Screenhouse:</strong> SH Budi<br/>Desa Sukamaju, Kec. Cibinong<br/>Koordinat: -6.123, 106.789</p>
+            <div class="map" style="height:100px;margin-top:10px">Preview peta lokasi</div>
+            <div class="btn-row">
+              <div class="btn">Setujui</div>
+              <div class="btn btn-danger">Tolak</div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Siti Rahayu</h3>
+            <p style="font-size:9px;color:#6b7280">081987654321 · <span class="status-pill pending">Pending</span></p>
+            <p style="font-size:9px;margin-top:8px"><strong>Screenhouse:</strong> SH Siti</p>
+            <div class="btn-row">
+              <div class="btn">Setujui</div>
+              <div class="btn btn-danger">Tolak</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- M-11 Laporan -->
+    <div class="phone-wrap">
+      <div class="phone-label">M-11 Laporan Wilayah</div>
+      <div class="phone">
+        <div class="topbar">
+          <div class="icon-btn">≡</div>
+          <h2>Laporan Wilayah</h2>
+        </div>
+        <div class="content">
+          <div style="display:flex;gap:8px;margin-bottom:10px">
+            <div class="field" style="flex:1;height:36px;margin:0">24 jam ▾</div>
+            <div class="field" style="flex:1;height:36px;margin:0">Kab/Kota ▾</div>
+          </div>
+          <div class="btn" style="height:36px;margin-bottom:12px;font-size:11px">Unduh PDF</div>
+          <div class="kpi-grid">
+            <div class="kpi"><span>Total SH</span><strong>42</strong></div>
+            <div class="kpi"><span>Sehat</span><strong>35</strong></div>
+            <div class="kpi"><span>Waspada</span><strong>5</strong></div>
+            <div class="kpi"><span>Kritis/Offline</span><strong>2</strong></div>
+          </div>
+          <div class="chart" style="height:140px">Grafik distribusi status</div>
+          <div class="chart" style="height:120px;margin-top:8px">Grafik rata-rata parameter</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- M-12 Detail Operator -->
+    <div class="phone-wrap">
+      <div class="phone-label">M-12 Detail Screenhouse (Operator)</div>
+      <div class="phone">
+        <div class="topbar">
+          <div class="icon-btn">≡</div>
+          <h2>Detail SH</h2>
+        </div>
+        <div class="content">
+          <p style="font-size:9px;margin-bottom:4px">← Kembali ke peta</p>
+          <div class="title-lg">Screenhouse A</div>
+          <p style="font-size:9px;color:#6b7280;margin-bottom:8px">Pemilik: Budi Santoso · Desa Sukamaju</p>
+          <span class="chip">Device online</span>
+          <div class="param" style="margin-top:10px"><span>Nitrogen</span><strong>24 mg/kg · Ideal</strong></div>
+          <div class="param"><span>Kelembapan tanah</span><strong>65% · Ideal</strong></div>
+          <div class="mini-chart">Grafik historis sensor 24 jam</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- M-13 Operator Drawer -->
+    <div class="phone-wrap">
+      <div class="phone-label">M-13 Menu Sidebar Operator</div>
+      <div class="phone">
+        <div class="topbar">
+          <div class="icon-btn">≡</div>
+          <h2>Monitoring Wilayah</h2>
+        </div>
+        <div class="drawer-bg"></div>
+        <div class="drawer">
+          <p style="font-size:13px;font-weight:700;color:#166534;margin-bottom:12px">Menu Operator</p>
+          <a href="#" class="active">● Dashboard</a>
+          <a href="#">Laporan Wilayah</a>
+          <a href="#">Approval Petani <span class="status-pill pending" style="margin-left:4px">3</span></a>
+          <a href="#">Keluar</a>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="section-title">Admin</h2>
+
+    <!-- M-14 Kelola User -->
+    <div class="phone-wrap">
+      <div class="phone-label">M-14 Kelola User</div>
+      <div class="phone">
+        <div class="topbar">
+          <div class="icon-btn">≡</div>
+          <h2>Kelola User</h2>
+        </div>
+        <div class="content">
+          <div class="field" style="height:40px;margin-bottom:12px">Cari nama / nomor HP...</div>
+          <div class="row-item"><span><strong>Budi Santoso</strong><br/>081234 · Petani</span><span class="status-pill">Approved</span></div>
+          <div class="row-item"><span><strong>Siti Rahayu</strong><br/>081987 · Petani</span><span class="status-pill pending">Pending</span></div>
+          <div class="row-item"><span><strong>Operator</strong><br/>089999 · Operator</span><span class="status-pill">Active</span></div>
+          <div class="row-item"><span><strong>Super Admin</strong><br/>088888 · Admin</span><span class="status-pill">Active</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- M-15 Kelola Screenhouse -->
+    <div class="phone-wrap">
+      <div class="phone-label">M-15 Kelola Screenhouse</div>
+      <div class="phone">
+        <div class="topbar">
+          <div class="icon-btn">≡</div>
+          <h2>Kelola Screenhouse</h2>
+        </div>
+        <div class="content">
+          <div class="field" style="height:40px;margin-bottom:8px">Filter wilayah ▾</div>
+          <div class="field" style="height:40px;margin-bottom:12px">Cari screenhouse...</div>
+          <div class="row-item"><span><strong>SH Budi</strong><br/>Desa Sukamaju</span><span class="status-pill">Active</span></div>
+          <div class="row-item"><span><strong>SH Siti</strong><br/>Desa Mekar</span><span class="status-pill">Active</span></div>
+          <div class="row-item"><span><strong>SH Demo</strong><br/>Desa Harapan</span><span class="status-pill pending">Inactive</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- M-16 Kelola Threshold -->
+    <div class="phone-wrap">
+      <div class="phone-label">M-16 Kelola Threshold</div>
+      <div class="phone">
+        <div class="topbar">
+          <div class="icon-btn">≡</div>
+          <h2>Kelola Threshold</h2>
+        </div>
+        <div class="content">
+          <div class="field" style="height:40px;margin-bottom:10px">Pilih screenhouse ▾</div>
+          <p class="form-label">Nitrogen (N) — mg/kg</p>
+          <div style="display:flex;gap:8px">
+            <div class="field" style="flex:1;margin:0">Min: 10</div>
+            <div class="field" style="flex:1;margin:0">Max: 40</div>
+          </div>
+          <p class="form-label">Kelembapan tanah — %</p>
+          <div style="display:flex;gap:8px">
+            <div class="field" style="flex:1;margin:0">Min: 30</div>
+            <div class="field" style="flex:1;margin:0">Max: 70</div>
+          </div>
+          <p class="form-label">pH tanah</p>
+          <div style="display:flex;gap:8px">
+            <div class="field" style="flex:1;margin:0">Min: 5.5</div>
+            <div class="field" style="flex:1;margin:0">Max: 7.0</div>
+          </div>
+          <p style="font-size:9px;color:#6b7280;margin:8px 0">+ 7 parameter lainnya...</p>
+          <div class="btn" style="margin-top:12px">Simpan Threshold</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- M-17 Konfigurasi -->
+    <div class="phone-wrap">
+      <div class="phone-label">M-17 Konfigurasi Sistem</div>
+      <div class="phone">
+        <div class="topbar">
+          <div class="icon-btn">≡</div>
+          <h2>Konfigurasi</h2>
+        </div>
+        <div class="content">
+          <div class="card">
+            <h3>Sinkronisasi Registry</h3>
+            <p style="font-size:9px;color:#6b7280">Sync screenhouse & threshold ke Monitoring DB</p>
+            <div class="btn btn-sm" style="margin-top:8px">Jalankan Sync</div>
+          </div>
+          <div class="card">
+            <h3>Status Layanan</h3>
+            <p style="font-size:9px;color:#6b7280">App Service · Monitoring Service · Redis · MQTT</p>
+            <span class="chip" style="margin-top:6px">Semua online</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- M-18 Admin Drawer -->
+    <div class="phone-wrap">
+      <div class="phone-label">M-18 Menu Sidebar Admin</div>
+      <div class="phone">
+        <div class="topbar">
+          <div class="icon-btn">≡</div>
+          <h2>Kelola User</h2>
+        </div>
+        <div class="drawer-bg"></div>
+        <div class="drawer">
+          <p style="font-size:13px;font-weight:700;color:#166534;margin-bottom:12px">Menu Admin</p>
+          <a href="#" class="active">● Kelola User</a>
+          <a href="#">Kelola Screenhouse</a>
+          <a href="#">Kelola Threshold</a>
+          <a href="#">Konfigurasi</a>
+          <a href="#">Dashboard Operator</a>
+          <a href="#">Keluar</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

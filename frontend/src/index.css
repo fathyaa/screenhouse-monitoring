@@ -1,1 +1,137 @@
 @import "tailwindcss";
+
+/* BibitLive brand palette — selaras dengan logo (hijau bibit + live red) */
+@theme {
+  --color-bl-forest: #0f2d18;
+  --color-bl-dark: #1b4332;
+  --color-bl-darker: #0a2312;
+  --color-bl-primary: #40916c;
+  --color-bl-primary-hover: #2d6a4f;
+  --color-bl-accent: #52b788;
+  --color-bl-mint: #74c69d;
+  --color-bl-surface: #f1f5f9;
+  --color-bl-surface-muted: #f0f5f1;
+  --color-bl-live: #e63946;
+}
+
+/* Fullscreen app shell — aman di mobile browser & PWA */
+html,
+body,
+#root {
+  height: 100%;
+  min-height: 100dvh;
+}
+
+body {
+  margin: 0;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#root {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  text-align: initial;
+}
+
+.app-shell {
+  min-height: 100dvh;
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.app-topbar {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+
+/* BibitLive reusable UI patterns */
+.btn-bl {
+  @apply bg-bl-primary hover:bg-bl-primary-hover text-white font-medium transition disabled:opacity-50;
+}
+
+.link-bl {
+  @apply text-bl-primary font-medium hover:underline;
+}
+
+.input-bl {
+  @apply border border-gray-200 rounded-lg bg-gray-50 focus-within:border-bl-primary transition;
+}
+
+.live-badge {
+  @apply inline-flex items-center gap-2 bg-bl-surface-muted text-bl-dark text-xs font-medium px-3 py-1.5 rounded-full;
+}
+
+.live-badge-dot {
+  @apply w-2 h-2 rounded-full bg-bl-live animate-pulse;
+}
+
+.overscroll-y-contain {
+  overscroll-behavior-y: contain;
+}
+
+/* Leaflet pakai z-index tinggi (400–800) — jangan timpa sidebar / topbar app */
+.leaflet-container {
+  z-index: 0;
+}
+
+.dashboard-map {
+  isolation: isolate;
+  z-index: 0;
+}
+
+/* Tipografi lebih compact di HP — skala rem Tailwind ikut mengecil */
+@media (max-width: 1023px) {
+  html {
+    font-size: 14px;
+  }
+}
+
+@keyframes alertHighlightBlink {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    border-color: rgb(229 231 235);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.35);
+    border-color: rgb(248 113 113);
+  }
+}
+
+@keyframes alertAttentionPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.82;
+  }
+}
+
+.alert-highlight-blink {
+  animation: alertHighlightBlink 0.75s ease-in-out 5;
+}
+
+.alert-attention-pulse {
+  animation: alertAttentionPulse 2.2s ease-in-out infinite;
+}
+
+/* Pulse untuk marker status kritis di peta operator */
+@keyframes shPulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  70% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}

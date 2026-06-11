@@ -1,0 +1,49 @@
+/** Label aktuator yang direkomendasikan otomatis saat alert (mirror backend rules). */
+export const ACTUATOR_HINTS = {
+  soil_moisture: { low: "Irigasi dinyalakan otomatis", high: "Irigasi dimatikan otomatis" },
+  air_temperature: { high: "Kipas dinyalakan otomatis", low: "Kipas dimatikan otomatis" },
+  air_humidity: { high: "Kipas dinyalakan otomatis", low: "Kipas dimatikan otomatis" },
+  soil_temperature: { high: "Kipas dinyalakan otomatis", low: "Lampu dinyalakan otomatis" },
+  light_intensity: { low: "Lampu dinyalakan otomatis", high: "Lampu dimatikan otomatis" },
+};
+
+export function getActuatorHintForAlert(alert) {
+  const lower = alert?.message?.toLowerCase() ?? "";
+  const direction = lower.includes("maksimum") || lower.includes("melebihi")
+    ? "high"
+    : lower.includes("minimum") || lower.includes("bawah")
+    ? "low"
+    : null;
+  if (!direction) return null;
+
+  const param =
+    lower.includes("kelembapan tanah") ? "soil_moisture"
+    : lower.includes("suhu udara") ? "air_temperature"
+    : lower.includes("kelembapan udara") ? "air_humidity"
+    : lower.includes("suhu tanah") ? "soil_temperature"
+    : lower.includes("intensitas cahaya") ? "light_intensity"
+    : null;
+
+  return param ? ACTUATOR_HINTS[param]?.[direction] ?? null : null;
+}
+
+/** True jika alert ini ditangani sistem (kipas/irigasi/lampu), bukan manual petani. */
+export function isAutoHandledAlert(alert) {
+  return getActuatorHintForAlert(alert) != null;
+}
+
+/** Teks notifikasi bila kondisi ditangani aktuator otomatis (kipas/irigasi/lampu). */
+export function getAutoHandledNotice(alert) {
+  const hint = getActuatorHintForAlert(alert);
+  return hint ? `Ditangani otomatis: ${hint}` : null;
+}
+
+/** Override status aktuator dari teks hint otomatis (mis. "Kipas dinyalakan otomatis" → fan ON). */
+export function getActuatorStatusFromHint(hint) {
+  if (!hint) return {};
+  const isOn = hint.includes("dinyalakan");
+  if (hint.startsWith("Kipas")) return { fan_status: isOn };
+  if (hint.startsWith("Irigasi")) return { irrigation_status: isOn };
+  if (hint.startsWith("Lampu")) return { lamp_status: isOn };
+  return {};
+}

@@ -1,0 +1,23 @@
+{
+  "name": "monitoring-service",
+  "version": "1.0.0",
+  "description": "MQTT ingest, sensor data, alerts",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "mqtt": "^5.15.1",
+    "pg": "^8.20.0",
+    "redis": "^5.12.1",
+    "socket.io": "^4.8.1"
+  }
+}
