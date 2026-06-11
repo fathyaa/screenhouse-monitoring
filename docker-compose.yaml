@@ -7,7 +7,7 @@ services:
     environment:
         POSTGRES_USER: postgres
         POSTGRES_PASSWORD: postgres
-        POSTGRES_DB: smartscreenhouse_app
+        POSTGRES_DB: screenhouse_app
     ports:
       - "5432:5432"
     networks:
@@ -30,7 +30,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: smartscreenhouse_monitoring
+      POSTGRES_DB: screenhouse_monitoring
     ports:
       - "5433:5432"
     networks:
@@ -95,14 +95,14 @@ services:
       - DB_PORT=5432
       - DB_USER=postgres
       - DB_PASSWORD=postgres
-      - DB_NAME=smartscreenhouse_app
+      - DB_NAME=screenhouse_app
       - JWT_SECRET=supersecret
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - MONITORING_SERVICE_URL=http://monitoring-service:3001
       - DB_MON_HOST=db-monitoring
       - DB_MON_PORT=5432
-      - DB_MON_NAME=smartscreenhouse_monitoring
+      - DB_MON_NAME=screenhouse_monitoring
       - VAPID_PUBLIC_KEY=BNJNuE0rZ1Y11APM6NjqiA_GXXJ9kwgaorVLx5mi8iFdNWEuEUZEQ6VE4TdZAgmivXm82ZrlkjKgcMrpcryedHo
       - VAPID_PRIVATE_KEY=T1DIrC5KBvQvuFy9EVQDyiYAHr5YV6mKDBRJA6hQmpk
       - VAPID_SUBJECT=mailto:admin@screenhouse.local
@@ -131,7 +131,7 @@ services:
       - DB_PORT=5432
       - DB_USER=postgres
       - DB_PASSWORD=postgres
-      - DB_NAME=smartscreenhouse_monitoring
+      - DB_NAME=screenhouse_monitoring
       - JWT_SECRET=supersecret
       - REDIS_HOST=redis
       - REDIS_PORT=6379
