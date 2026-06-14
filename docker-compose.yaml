@@ -103,8 +103,8 @@ services:
       - DB_MON_HOST=db-monitoring
       - DB_MON_PORT=5433
       - DB_MON_NAME=screenhouse_monitoring
-      - VAPID_PUBLIC_KEY=BNJNuE0rZ1Y11APM6NjqiA_GXXJ9kwgaorVLx5mi8iFdNWEuEUZEQ6VE4TdZAgmivXm82ZrlkjKgcMrpcryedHo
-      - VAPID_PRIVATE_KEY=T1DIrC5KBvQvuFy9EVQDyiYAHr5YV6mKDBRJA6hQmpk
+      - VAPID_PUBLIC_KEY=
+      - VAPID_PRIVATE_KEY=
       - VAPID_SUBJECT=mailto:admin@screenhouse.local
     depends_on:
       db-app:
@@ -157,7 +157,7 @@ services:
     environment:
       - VITE_API_URL=http://localhost:8000
       - VITE_MONITORING_URL=http://localhost:3001
-      - VITE_VAPID_PUBLIC_KEY=BNJNuE0rZ1Y11APM6NjqiA_GXXJ9kwgaorVLx5mi8iFdNWEuEUZEQ6VE4TdZAgmivXm82ZrlkjKgcMrpcryedHo
+      - VITE_VAPID_PUBLIC_KEY=
     depends_on:
       - app-service
       - monitoring-service
