@@ -101,7 +101,7 @@ services:
       - REDIS_PORT=6379
       - MONITORING_SERVICE_URL=http://monitoring-service:3001
       - DB_MON_HOST=db-monitoring
-      - DB_MON_PORT=5432
+      - DB_MON_PORT=5433
       - DB_MON_NAME=screenhouse_monitoring
       - VAPID_PUBLIC_KEY=BNJNuE0rZ1Y11APM6NjqiA_GXXJ9kwgaorVLx5mi8iFdNWEuEUZEQ6VE4TdZAgmivXm82ZrlkjKgcMrpcryedHo
       - VAPID_PRIVATE_KEY=T1DIrC5KBvQvuFy9EVQDyiYAHr5YV6mKDBRJA6hQmpk
