@@ -11,9 +11,9 @@ RUN npm install
 
 COPY . .
 
-RUN echo "VITE_API_URL=__VITE_API_URL__" > .env && \
-    echo "VITE_MONITORING_URL=__VITE_MONITORING_URL__" >> .env && \
-    echo "VITE_VAPID_PUBLIC_KEY=__VITE_VAPID_PUBLIC_KEY__" >> .env
+ENV VITE_API_URL=__VITE_API_URL__
+ENV VITE_MONITORING_URL=__VITE_MONITORING_URL__
+ENV VITE_VAPID_PUBLIC_KEY=__VITE_VAPID_PUBLIC_KEY__
 
 RUN npm run build
 
@@ -33,4 +33,4 @@ COPY --from=builder /app/dist .
 
 EXPOSE 80
 
-CMD ["/bin/sh", "-c", "sed -i \"s|__VITE_API_URL__|$VITE_API_URL|g\" ./assets/*.js && sed -i \"s|__VITE_MONITORING_URL__|$VITE_MONITORING_URL|g\" ./assets/*.js && sed -i \"s|__VITE_VAPID_PUBLIC_KEY__|$VITE_VAPID_PUBLIC_KEY|g\" ./assets/*.js && nginx -g 'daemon off;'"]
+CMD ["/bin/sh", "-c", "sed -i 's|__VITE_API_URL__|'\"$VITE_API_URL\"'|g' ./assets/*.js && sed -i 's|__VITE_MONITORING_URL__|'\"$VITE_MONITORING_URL\"'|g' ./assets/*.js && sed -i 's|__VITE_VAPID_PUBLIC_KEY__|'\"$VITE_VAPID_PUBLIC_KEY\"'|g' ./assets/*.js && nginx -g 'daemon off;'"]

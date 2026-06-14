@@ -154,6 +154,10 @@ services:
       - "8080:80"
     networks:
       - smartscreenhouse-net
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - VITE_MONITORING_URL=http://localhost:3001
+      - VITE_VAPID_PUBLIC_KEY=BNJNuE0rZ1Y11APM6NjqiA_GXXJ9kwgaorVLx5mi8iFdNWEuEUZEQ6VE4TdZAgmivXm82ZrlkjKgcMrpcryedHo
     depends_on:
       - app-service
       - monitoring-service
