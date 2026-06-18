@@ -1,4 +1,0 @@
-increment,pass_rate_pct,error_rate_pct,completeness_pct,availability_pct,security_pass_pct,reliability_pct
-1,90,2,100,99.2,100,98
-2,80,8,100,99.2,100,96
-3,100,0,100,99.5,100,96
