@@ -24,9 +24,12 @@ import {
   PETANI_TREN_CHART_GUIDES,
   aggregateHourlyTrend,
   buildNpkFromLatest,
+  getPkChartYDomain,
+  PkThresholdBands,
 } from "../constants/chartGuide";
 import { API_URL } from "../config/api";
 import PullToRefresh from "../components/PullToRefresh";
+import { formatSnapshotTime } from "../constants/screenhouseStatus";
 
 function PetaniTrenPage() {
   const [screenhouses, setScreenhouses] = useState([]);
@@ -40,7 +43,7 @@ function PetaniTrenPage() {
 
   const user = JSON.parse(localStorage.getItem("user"));
   const token = localStorage.getItem("token");
-  const headers = { Authorization: `Bearer ${token}` };
+  const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
 
   const refreshPage = useCallback(async () => {
     setRefreshKey((k) => k + 1);
@@ -51,7 +54,7 @@ function PetaniTrenPage() {
       .then((res) => res.json())
       .then((data) => setScreenhouses(Array.isArray(data) ? data : []))
       .catch(console.error);
-  }, [refreshKey]);
+  }, [refreshKey, headers]);
 
   useEffect(() => {
     fetch(`${API_URL}/sensor-data/latest`, { headers })
@@ -65,7 +68,7 @@ function PetaniTrenPage() {
         setLatestSensorData(mapped);
       })
       .catch(console.error);
-  }, [refreshKey]);
+  }, [refreshKey, headers]);
 
   useEffect(() => {
     if (!screenhouses.length || !token) {
@@ -99,7 +102,7 @@ function PetaniTrenPage() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [screenhouses, token, refreshKey]);
+  }, [screenhouses, token, refreshKey, headers]);
 
   const trendChartData = useMemo(
     () => aggregateHourlyTrend(chartDashboards, chartHistories),
@@ -124,6 +127,15 @@ function PetaniTrenPage() {
       out[k] = vals.length ? vals.reduce((a, c) => a + c, 0) / vals.length : null;
     });
     return out;
+  }, [latestSensorData]);
+
+  const latestSnapshotAt = useMemo(() => {
+    const times = Object.values(latestSensorData)
+      .map((r) => r?.created_at)
+      .filter(Boolean)
+      .map((d) => new Date(d).getTime())
+      .filter((t) => !Number.isNaN(t));
+    return times.length ? new Date(Math.max(...times)).toISOString() : null;
   }, [latestSensorData]);
 
   const npkColored = useMemo(() => {
@@ -168,7 +180,11 @@ function PetaniTrenPage() {
               latest={aggregateLatest}
               threshold={chartThreshold}
               title="Kondisi rata-rata saat ini"
-              subtitle="Snapshot terbaru, bukan tren historis"
+              subtitle={
+                latestSnapshotAt
+                  ? `Rata-rata ${screenhouses.length} screenhouse · terakhir diperbarui ${formatSnapshotTime(latestSnapshotAt)}`
+                  : `Rata-rata ${screenhouses.length} screenhouse`
+              }
             />
           )}
 
@@ -304,7 +320,7 @@ function PetaniTrenPage() {
 
               <div className="bg-white rounded-2xl border border-gray-200 p-4 text-left">
                 <div className="text-sm font-semibold text-gray-800 mb-1">
-                  Tren phosphorus & potassium (24 jam)
+                  Tren fosfor & kalium (24 jam)
                 </div>
                 <div className="text-xs text-gray-400 mb-2">
                   Rata-rata semua tray sensor · pantau kebutuhan pupuk P dan K
@@ -316,30 +332,16 @@ function PetaniTrenPage() {
                       <XAxis dataKey="label" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
                       <YAxis
                         tick={{ fontSize: 10 }}
+                        domain={getPkChartYDomain(trendChartData, chartThreshold)}
                         label={{ value: "mg/kg", angle: -90, position: "insideLeft", fontSize: 10 }}
                       />
-                      {chartThreshold?.min_phosphorus != null && chartThreshold?.max_phosphorus != null && (
-                        <ReferenceArea
-                          y1={chartThreshold.min_phosphorus}
-                          y2={chartThreshold.max_phosphorus}
-                          fill="#2563eb"
-                          fillOpacity={0.05}
-                        />
-                      )}
-                      {chartThreshold?.min_potassium != null && chartThreshold?.max_potassium != null && (
-                        <ReferenceArea
-                          y1={chartThreshold.min_potassium}
-                          y2={chartThreshold.max_potassium}
-                          fill="#ca8a04"
-                          fillOpacity={0.05}
-                        />
-                      )}
+                      <PkThresholdBands threshold={chartThreshold} />
                       <Tooltip content={<ChartTooltip />} />
                       <Legend {...CHART_LEGEND} />
                       <Line
                         type="monotone"
                         dataKey="phosphorus"
-                        name="Phosphorus"
+                        name="Fosfor (P)"
                         stroke="#2563eb"
                         strokeWidth={2}
                         dot={{ r: 2 }}
@@ -347,7 +349,7 @@ function PetaniTrenPage() {
                       <Line
                         type="monotone"
                         dataKey="potassium"
-                        name="Potassium"
+                        name="Kalium (K)"
                         stroke="#ca8a04"
                         strokeWidth={2}
                         dot={{ r: 2 }}

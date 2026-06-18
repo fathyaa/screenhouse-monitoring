@@ -1,5 +1,5 @@
 const pool = require("../../../config/db");
-const { THRESHOLD_METRICS } = require("../../../shared/thresholdMetrics");
+const { HEALTH_STATUS_METRICS } = require("../../../shared/thresholdMetrics");
 
 const SENSOR_DATA_JOIN = `
   FROM sensor_data sd
@@ -18,7 +18,7 @@ function buildInsight(latest, threshold) {
     return "Belum ada data sensor atau threshold.";
   }
 
-  for (const m of THRESHOLD_METRICS) {
+  for (const m of HEALTH_STATUS_METRICS) {
     const value = latest[m.key];
     const min = threshold[m.minCol];
     const max = threshold[m.maxCol];
@@ -39,7 +39,7 @@ function collectAbnormal(latest, threshold) {
   if (!latest || !threshold) return [];
 
   const abnormal = [];
-  for (const m of THRESHOLD_METRICS) {
+  for (const m of HEALTH_STATUS_METRICS) {
     const value = latest[m.key];
     const min = threshold[m.minCol];
     const max = threshold[m.maxCol];
@@ -87,6 +87,31 @@ function pickLatestNodeRow(nodeRows) {
   }, null);
 }
 
+function isScreenhouseOfflineFromNodes(nodeRows, now = Date.now()) {
+  const activeNodes = (nodeRows || []).filter((n) => n.is_active !== false);
+  if (activeNodes.length === 0) return true;
+
+  return activeNodes.every((node) => {
+    const lastSeen = node.last_reading_at ?? node.created_at;
+    if (!lastSeen) return true;
+    const intervalSec = Math.max(Number(node.send_interval_seconds) || 60, 60);
+    const staleMs = Math.max(intervalSec * 3, 900) * 1000;
+    const ageMs = now - new Date(lastSeen).getTime();
+    return Number.isNaN(ageMs) || ageMs > staleMs;
+  });
+}
+
+function buildOfflineInsight(nodeRows) {
+  const timestamps = (nodeRows || [])
+    .map((n) => n.last_reading_at ?? n.created_at)
+    .filter(Boolean)
+    .map((d) => new Date(d).getTime())
+    .filter((t) => !Number.isNaN(t));
+  return timestamps.length
+    ? "Perangkat tidak mengirim data terbaru."
+    : "Belum ada data sensor dari perangkat.";
+}
+
 // Ringkasan status seluruh screenhouse untuk pewarnaan marker peta operator.
 async function getMapSummary(req, res) {
   try {
@@ -96,17 +121,30 @@ async function getMapSummary(req, res) {
       ),
       pool.query(
         `
-        SELECT DISTINCT ON (sn.id)
+        SELECT
           sn.screenhouse_id,
           sn.id AS sensor_node_id,
           sn.node_name,
           sn.send_interval_seconds,
-          sd.nitrogen, sd.phosphorus, sd.potassium,
-          sd.soil_moisture, sd.soil_temperature, sd.soil_ph, sd.conductivity,
-          sd.air_temperature, sd.air_humidity, sd.light_intensity,
-          sd.created_at
-        ${SENSOR_DATA_JOIN}
-        ORDER BY sn.id, sd.created_at DESC
+          latest.nitrogen, latest.phosphorus, latest.potassium,
+          latest.soil_moisture, latest.soil_temperature, latest.soil_ph, latest.conductivity,
+          latest.air_temperature, latest.air_humidity, latest.light_intensity,
+          latest.created_at
+        FROM sensor_nodes sn
+        INNER JOIN screenhouse_registry sr
+          ON sr.screenhouse_id = sn.screenhouse_id AND sr.status = 'active'
+        LEFT JOIN LATERAL (
+          SELECT
+            nitrogen, phosphorus, potassium,
+            soil_moisture, soil_temperature, soil_ph, conductivity,
+            air_temperature, air_humidity, light_intensity,
+            created_at
+          FROM sensor_data sd
+          WHERE sd.sensor_node_id = sn.id
+          ORDER BY sd.created_at DESC
+          LIMIT 1
+        ) latest ON true
+        WHERE sn.is_active = true
         `
       ),
       pool.query(`SELECT * FROM threshold_snapshots`),
@@ -446,6 +484,7 @@ async function getScreenhouseDashboardSummary(req, res) {
             sn.node_name,
             sn.location,
             sn.is_active,
+            sn.send_interval_seconds,
             CASE WHEN sn.is_active THEN 'active' ELSE 'inactive' END AS status,
             latest.nitrogen,
             latest.phosphorus,
@@ -506,6 +545,20 @@ async function getScreenhouseDashboardSummary(req, res) {
     const thresholdRow = threshold.rows[0] ?? null;
     const nodes = sensorNodes.rows;
 
+    const nodeReadings = nodes
+      .filter((n) => n.last_reading_at)
+      .map((n) => ({ ...n, created_at: n.last_reading_at }));
+    const abnormal = collectAbnormalAllNodes(nodeReadings, thresholdRow);
+    const insightSource =
+      abnormal.length > 0
+        ? nodeReadings.find((row) => collectAbnormal(row, thresholdRow).length > 0) ??
+          latestRow
+        : nodeReadings[0] ?? latestRow;
+
+    const insight = isScreenhouseOfflineFromNodes(nodes)
+      ? buildOfflineInsight(nodes)
+      : buildInsight(insightSource, thresholdRow);
+
     res.json({
       latest: latestRow,
       sensorNodes: nodes,
@@ -513,7 +566,7 @@ async function getScreenhouseDashboardSummary(req, res) {
       sinkNode: sinkNode.rows[0] ?? null,
       hourlyTrend: hourlyTrend.rows,
       threshold: thresholdRow,
-      insight: buildInsight(latestRow, thresholdRow),
+      insight,
     });
   } catch (err) {
     console.log(err);

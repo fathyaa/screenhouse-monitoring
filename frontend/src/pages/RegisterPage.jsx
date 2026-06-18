@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { User, Phone, Lock } from "lucide-react";
 import AuthHero from "../components/AuthHero";
 import BrandBar from "../components/BrandBar";
+
+const PENDING_KEY = "pendingRegister";
 
 function RegisterPage() {
 
@@ -13,6 +15,21 @@ function RegisterPage() {
         phone_number: "",
         password: "",
     });
+
+    useEffect(() => {
+        try {
+            const raw = sessionStorage.getItem(PENDING_KEY);
+            if (!raw) return;
+            const saved = JSON.parse(raw);
+            setForm({
+                name: saved.name || "",
+                phone_number: saved.phone_number || "",
+                password: saved.password || "",
+            });
+        } catch {
+            // abaikan data rusak
+        }
+    }, []);
 
     const handleChange = (e) => {
         setForm({
@@ -32,11 +49,22 @@ function RegisterPage() {
             return;
         }
 
-        sessionStorage.setItem("pendingRegister", JSON.stringify({
+        let payload = {
             name: form.name.trim(),
             phone_number: form.phone_number.trim(),
             password: form.password,
-        }));
+        };
+
+        try {
+            const existing = JSON.parse(sessionStorage.getItem(PENDING_KEY) || "{}");
+            if (existing.screenhouseDraft) {
+                payload.screenhouseDraft = existing.screenhouseDraft;
+            }
+        } catch {
+            // abaikan
+        }
+
+        sessionStorage.setItem(PENDING_KEY, JSON.stringify(payload));
 
         navigate("/register/screenhouse");
     };
@@ -134,11 +162,11 @@ function RegisterPage() {
                     onClick={handleContinue}
                     className="btn-bl w-full h-10 rounded-lg text-sm mt-5 mb-3"
                 >
-                    Daftar sekarang → isi screenhouse
+                    Daftar sekarang
                 </button>
 
                 <p className="text-center text-xs text-gray-400 mb-4 leading-relaxed">
-                    Setelah data akun, lanjut isi lokasi screenhouse. Keduanya dikirim ke server di langkah terakhir.
+                    Akun akan diverifikasi oleh operator terlebih dahulu.
                 </p>
 
                 <div className="text-center text-xs text-gray-400">

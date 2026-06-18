@@ -11,6 +11,8 @@ cd docker && docker compose up -d && cd ..
 # 2. App DB (identity + catalog) — port 5434
 psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/schema.sql
 psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/seed.sql
+# DB lama (sudah punya schema): tambah kolom tray_count
+# psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/migrations/001_tray_count.sql
 
 # 3. Monitoring DB (ingest + alerting) — port 5433
 psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring -f database/monitoring/schema.sql

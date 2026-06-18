@@ -1,66 +1,56 @@
 const pool = require("../../../config/db");
 const monitoringPool = require("../../../config/monitoringDb");
 const { monitoringGet } = require("../../../shared/monitoringClient");
+const {
+  parseTrayCount,
+  activateScreenhouseRecord,
+  postActivationProvisioning,
+} = require("../../../shared/provisionScreenhouse");
 
-const DEFAULT_THRESHOLD = [
-  20, 45, 10, 30, 15, 50, 50, 80, 20, 35, 5.5, 7.0, 200, 800, 22, 35, 40, 85, 5000, 50000,
-];
-
-async function insertDefaultThreshold(client, screenhouseId) {
-  await client.query(
-    `
-    INSERT INTO thresholds (
-      screenhouse_id,
-      min_nitrogen, max_nitrogen,
-      min_phosphorus, max_phosphorus,
-      min_potassium, max_potassium,
-      min_soil_moisture, max_soil_moisture,
-      min_soil_temperature, max_soil_temperature,
-      min_soil_ph, max_soil_ph,
-      min_conductivity, max_conductivity,
-      min_air_temperature, max_air_temperature,
-      min_air_humidity, max_air_humidity,
-      min_light_intensity, max_light_intensity
-    )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
-    ON CONFLICT (screenhouse_id) DO NOTHING
-    `,
-    [screenhouseId, ...DEFAULT_THRESHOLD]
-  );
+async function activateScreenhouse(client, screenhouseId, trayCountOverride = null) {
+  return activateScreenhouseRecord(client, screenhouseId, trayCountOverride);
 }
 
-async function activateScreenhouse(client, screenhouseId) {
-  const result = await client.query(
-    `
-    UPDATE screenhouses
-    SET status = 'active'
-    WHERE id = $1 AND status = 'pending'
-    RETURNING id
-    `,
-    [screenhouseId]
-  );
+const ONLINE_SINK_EXISTS = `
+  EXISTS (
+    SELECT 1
+    FROM sensor_nodes sn
+    INNER JOIN sensor_data sd ON sd.sensor_node_id = sn.id
+    WHERE sn.screenhouse_id = sk.screenhouse_id
+      AND sn.is_active = true
+      AND sd.created_at >= NOW() - (
+        GREATEST(GREATEST(COALESCE(sn.send_interval_seconds, 60), 60) * 3, 900)
+        || ' seconds'
+      )::interval
+  )
+`;
 
-  if (result.rows[0]) {
-    await insertDefaultThreshold(client, screenhouseId);
-  }
+async function getOperatorMonitoringStats() {
+  const query = `
+    SELECT
+      (SELECT COUNT(*)::int FROM sink_nodes WHERE is_active = true) AS sink_node_count,
+      (SELECT COUNT(*)::int
+         FROM sink_nodes sk
+         INNER JOIN screenhouse_registry sr
+           ON sr.screenhouse_id = sk.screenhouse_id AND sr.status = 'active'
+         WHERE sk.is_active = true
+           AND ${ONLINE_SINK_EXISTS}) AS online_sink_node_count
+  `;
 
-  return result.rows[0] ?? null;
-}
-
-async function countActiveDevices() {
   if (monitoringPool) {
     try {
-      const result = await monitoringPool.query(
-        `SELECT COUNT(*)::int AS device_count FROM sensor_nodes WHERE is_active = true`
-      );
-      return result.rows[0]?.device_count ?? 0;
+      const result = await monitoringPool.query(query);
+      return result.rows[0] ?? { sink_node_count: 0, online_sink_node_count: 0 };
     } catch (err) {
       console.error("[operator-stats] monitoring DB:", err.message);
     }
   }
 
   const stats = await monitoringGet("/stats/operator");
-  return stats?.device_count ?? 0;
+  return {
+    sink_node_count: stats?.sink_node_count ?? 0,
+    online_sink_node_count: stats?.online_sink_node_count ?? 0,
+  };
 }
 
 async function createScreenhouse(req, res) {
@@ -328,11 +318,12 @@ async function getOperatorStats(req, res) {
       `SELECT COUNT(*)::int AS screenhouse_count FROM screenhouses WHERE status = 'active'`
     );
 
-    const deviceCount = await countActiveDevices();
+    const sinkStats = await getOperatorMonitoringStats();
 
     res.json({
       screenhouse_count: shResult.rows[0]?.screenhouse_count ?? 0,
-      device_count: deviceCount,
+      sink_node_count: sinkStats.sink_node_count ?? 0,
+      online_sink_node_count: sinkStats.online_sink_node_count ?? 0,
     });
   } catch (err) {
     console.error("[operator-stats]", err);
@@ -396,7 +387,13 @@ async function submitMyScreenhouse(req, res) {
       address_detail,
       latitude,
       longitude,
+      tray_count,
     } = req.body;
+
+    const parsedTrayCount = parseTrayCount(tray_count, 1);
+    if (parsedTrayCount == null) {
+      return res.status(400).json({ message: "Jumlah tray harus bilangan bulat antara 1 dan 20" });
+    }
 
     if (!name?.trim()) {
       return res.status(400).json({ message: "Nama screenhouse wajib diisi" });
@@ -424,10 +421,11 @@ async function submitMyScreenhouse(req, res) {
         address_detail,
         latitude,
         longitude,
+        tray_count,
         status
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')
-      RETURNING id, name, status, created_at
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending')
+      RETURNING id, name, status, tray_count, created_at
       `,
       [
         name.trim(),
@@ -439,6 +437,7 @@ async function submitMyScreenhouse(req, res) {
         address_detail?.trim() || null,
         Number(latitude),
         Number(longitude),
+        parsedTrayCount,
       ]
     );
 
@@ -463,6 +462,7 @@ async function getPendingScreenhouses(req, res) {
         s.latitude,
         s.longitude,
         s.status,
+        s.tray_count,
         s.created_at,
         u.id AS owner_id,
         u.name AS owner_name,
@@ -512,12 +512,16 @@ async function approveScreenhouse(req, res) {
 
   try {
     const { id } = req.params;
+    const trayOverride = req.body?.tray_count != null ? parseTrayCount(req.body.tray_count) : null;
+    if (req.body?.tray_count != null && trayOverride == null) {
+      return res.status(400).json({ message: "Jumlah tray harus bilangan bulat antara 1 dan 20" });
+    }
 
     await client.query("BEGIN");
 
     const check = await client.query(
       `
-      SELECT s.id, u.status AS owner_status
+      SELECT s.id, s.tray_count, u.status AS owner_status
       FROM screenhouses s
       JOIN users u ON u.id = s.owner_user_id
       WHERE s.id = $1 AND s.status = 'pending'
@@ -537,7 +541,8 @@ async function approveScreenhouse(req, res) {
       });
     }
 
-    const activated = await activateScreenhouse(client, id);
+    const effectiveTray = trayOverride ?? check.rows[0].tray_count ?? 1;
+    const activated = await activateScreenhouse(client, id, effectiveTray);
 
     if (!activated) {
       await client.query("ROLLBACK");
@@ -546,7 +551,13 @@ async function approveScreenhouse(req, res) {
 
     await client.query("COMMIT");
 
-    res.json({ message: "Screenhouse disetujui dan aktif", screenhouse_id: id });
+    await postActivationProvisioning(activated);
+
+    res.json({
+      message: "Screenhouse disetujui dan aktif",
+      screenhouse_id: id,
+      tray_count: activated.tray_count,
+    });
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("[approve-screenhouse]", err);

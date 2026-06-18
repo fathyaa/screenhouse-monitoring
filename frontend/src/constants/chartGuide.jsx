@@ -1,3 +1,6 @@
+/* eslint-disable react-refresh/only-export-components */
+import { ReferenceArea } from "recharts";
+
 export const CHART_LEGEND = {
   align: "left",
   verticalAlign: "bottom",
@@ -64,6 +67,60 @@ export function ChartTooltip({ active, payload, label }) {
         </div>
       ))}
     </div>
+  );
+}
+
+/** Skala Y grafik P/K mencakup kedua batas threshold agar blok kuning kalium terlihat. */
+export function getPkChartYDomain(trendData, threshold) {
+  const dataVals = (trendData || [])
+    .flatMap((d) => [d.phosphorus, d.potassium])
+    .filter((v) => v != null && !Number.isNaN(Number(v)))
+    .map(Number);
+  const mins = [threshold?.min_phosphorus, threshold?.min_potassium].filter(
+    (v) => v != null
+  );
+  const maxs = [threshold?.max_phosphorus, threshold?.max_potassium].filter(
+    (v) => v != null
+  );
+  const lo = Math.floor(Math.min(0, ...mins, ...(dataVals.length ? dataVals : [0])) - 2);
+  const hi = Math.ceil(Math.max(...maxs, ...(dataVals.length ? dataVals : [0])) + 2);
+  return [lo, hi];
+}
+
+/** Zona aman fosfor (biru) & kalium (kuning) — kalium digambar dulu, fosfor di atas. */
+export function PkThresholdBands({ threshold }) {
+  if (!threshold) return null;
+  const hasP =
+    threshold.min_phosphorus != null && threshold.max_phosphorus != null;
+  const hasK =
+    threshold.min_potassium != null && threshold.max_potassium != null;
+  return (
+    <>
+      {hasK && (
+        <ReferenceArea
+          y1={threshold.min_potassium}
+          y2={threshold.max_potassium}
+          fill="#eab308"
+          fillOpacity={0.14}
+          stroke="#ca8a04"
+          strokeOpacity={0.55}
+          strokeWidth={1}
+          ifOverflow="extendDomain"
+        />
+      )}
+      {hasP && (
+        <ReferenceArea
+          y1={threshold.min_phosphorus}
+          y2={threshold.max_phosphorus}
+          fill="#2563eb"
+          fillOpacity={0.1}
+          stroke="#2563eb"
+          strokeOpacity={0.45}
+          strokeWidth={1}
+          ifOverflow="extendDomain"
+        />
+      )}
+    </>
   );
 }
 

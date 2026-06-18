@@ -36,11 +36,11 @@ INSERT INTO users (id, name, phone_number, password, role, status) VALUES
 -- ─── 3. Screenhouse inti (3) + thresholds ───
 INSERT INTO screenhouses (
     id, name, province_id, regency_id, district_id, village_id,
-    owner_user_id, address_detail, latitude, longitude, status
+    owner_user_id, address_detail, latitude, longitude, tray_count, status
 ) VALUES
-(1, 'Screenhouse Sukabumi 01', 1, 1, 1, 1, 1, 'Dekat irigasi timur', -6.9175, 106.9287, 'active'),
-(2, 'Screenhouse Sukabumi 02', 1, 1, 1, 2, 1, 'Area pembibitan selatan', -6.9200, 106.9310, 'active'),
-(3, 'Screenhouse Kadudampit 01', 1, 1, 2, 3, 1, 'Dekat jalan desa', -6.8900, 106.9500, 'active');
+(1, 'Screenhouse Sukabumi 01', 1, 1, 1, 1, 1, 'Dekat irigasi timur', -6.9175, 106.9287, 2, 'active'),
+(2, 'Screenhouse Sukabumi 02', 1, 1, 1, 2, 1, 'Area pembibitan selatan', -6.9200, 106.9310, 1, 'active'),
+(3, 'Screenhouse Kadudampit 01', 1, 1, 2, 3, 1, 'Dekat jalan desa', -6.8900, 106.9500, 1, 'active');
 
 INSERT INTO thresholds (
     id, screenhouse_id,

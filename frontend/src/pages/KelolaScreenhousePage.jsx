@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { Search, Leaf, ExternalLink } from "lucide-react";
@@ -35,7 +35,10 @@ function formatWilayah(row) {
 export default function KelolaScreenhousePage() {
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
-  const authHeaders = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const authHeaders = useMemo(
+    () => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" }),
+    [token]
+  );
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +63,7 @@ export default function KelolaScreenhousePage() {
     } finally {
       setLoading(false);
     }
-  }, [wilayah, status, search, token]);
+  }, [wilayah, status, search, authHeaders]);
 
   useEffect(() => {
     loadData();

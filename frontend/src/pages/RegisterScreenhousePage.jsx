@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Leaf, MapPin, ArrowLeft } from "lucide-react";
+import { Leaf, MapPin, ArrowLeft, Layers } from "lucide-react";
 import LocationPickerMap from "../components/LocationPickerMap";
 
 import { API_URL } from "../config/api";
@@ -17,10 +17,12 @@ function RegisterScreenhousePage() {
     address_detail: "",
     latitude: null,
     longitude: null,
+    tray_count: 1,
   });
 
   const [wilayah, setWilayah] = useState(null);
   const [wilayahError, setWilayahError] = useState("");
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     try {
@@ -29,11 +31,44 @@ function RegisterScreenhousePage() {
         navigate("/register", { replace: true });
         return;
       }
-      setAccount(JSON.parse(raw));
+      const data = JSON.parse(raw);
+      setAccount({
+        name: data.name,
+        phone_number: data.phone_number,
+        password: data.password,
+      });
+
+      if (data.screenhouseDraft) {
+        const draft = data.screenhouseDraft;
+        setScreenhouse({
+          name: draft.name || "",
+          address_detail: draft.address_detail || "",
+          latitude: draft.latitude ?? null,
+          longitude: draft.longitude ?? null,
+          tray_count: draft.tray_count ?? 1,
+        });
+        if (draft.wilayah) setWilayah(draft.wilayah);
+      }
     } catch {
       navigate("/register", { replace: true });
+    } finally {
+      setHydrated(true);
     }
   }, [navigate]);
+
+  useEffect(() => {
+    if (!hydrated || !account) return;
+
+    try {
+      const raw = sessionStorage.getItem(PENDING_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      data.screenhouseDraft = { ...screenhouse, wilayah };
+      sessionStorage.setItem(PENDING_KEY, JSON.stringify(data));
+    } catch {
+      // abaikan
+    }
+  }, [hydrated, account, screenhouse, wilayah]);
 
   const resolveWilayah = async (lat, lng) => {
     setResolving(true);
@@ -81,6 +116,12 @@ function RegisterScreenhousePage() {
       return;
     }
 
+    const trayCount = Number(screenhouse.tray_count);
+    if (!Number.isInteger(trayCount) || trayCount < 1 || trayCount > 20) {
+      alert("Jumlah tray harus antara 1 dan 20");
+      return;
+    }
+
     try {
       setLoading(true);
 
@@ -98,6 +139,7 @@ function RegisterScreenhousePage() {
             village_id: wilayah.village_id,
             latitude: screenhouse.latitude,
             longitude: screenhouse.longitude,
+            tray_count: trayCount,
           },
         }),
       });
@@ -123,161 +165,147 @@ function RegisterScreenhousePage() {
   if (!account) return null;
 
   return (
-    <div className="fixed inset-0 flex">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-10 overflow-y-auto">
+      <div className="w-full max-w-xl">
 
-      {/* KIRI */}
-      <div className="flex-1 relative overflow-hidden">
-        <img
-          src="https://images.unsplash.com/photo-1625246333195-78d9c38ad449?q=80&w=1974&auto=format&fit=crop"
-          alt="Sawah"
-          className="absolute inset-0 w-full h-full object-cover"
-        />
+        <button
+          type="button"
+          onClick={() => navigate("/register")}
+          className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 mb-8"
+        >
+          <ArrowLeft size={16} />
+          Kembali ke data akun
+        </button>
 
-        <div className="absolute inset-0 bg-gradient-to-r from-bl-forest/85 via-bl-forest/50 to-bl-darker/15" />
-        <div className="absolute inset-0 bg-gradient-to-t from-bl-darker/80 via-transparent to-transparent" />
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm px-8 py-10 sm:px-10 sm:py-12">
 
-        <div className="absolute top-10 left-10 flex items-center gap-3">
-          <img
-            src="/logo-bibitlive.png"
-            alt=""
-            className="w-14 h-14 rounded-2xl object-cover ring-2 ring-white/20"
-          />
-          <div>
-            <div className="text-xl font-bold text-white">BibitLive</div>
-            <div className="text-sm text-bl-mint">Pantau bibit, langsung live</div>
-          </div>
-        </div>
-
-        <div className="absolute bottom-0 left-0 p-10 max-w-4xl text-left">
-          <div className="text-5xl font-bold text-white leading-snug mb-3">
-            Daftar Screenhouse
-            <br />
-            di BibitLive
-          </div>
-
-          <div className="text-2xl text-white/60 leading-relaxed">
-            Pantau kondisi NPK, kelembaban, dan suhu langsung dari genggaman tangan.
-          </div>
-        </div>
-      </div>
-
-      {/* KANAN */}
-      <div className="w-[410px] shrink-0 bg-white flex flex-col h-full min-h-0 text-left">
-
-        <div className="shrink-0 px-8 pt-10 pb-4">
-          <button
-            type="button"
-            onClick={() => navigate("/register")}
-            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 mb-4"
-          >
-            <ArrowLeft size={14} />
-            Kembali ke data akun
-          </button>
-
-          <div className="text-lg font-semibold text-gray-800">
-            Daftar screenhouse
-          </div>
-
-          <div className="text-xs text-gray-400 mt-1">
-            Lengkapi lokasi screenhouse untuk {account.name}
-          </div>
-        </div>
-
-        <div className="flex-1 min-h-0 overflow-y-auto px-8">
-        <div className="space-y-3 pb-4">
-
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">
-              Nama screenhouse
-            </label>
-            <div className="flex items-center gap-2 h-10 px-3 border border-gray-200 rounded-lg bg-gray-50">
-              <Leaf size={14} className="text-gray-400 shrink-0" />
-              <input
-                type="text"
-                value={screenhouse.name}
-                onChange={(e) =>
-                  setScreenhouse({ ...screenhouse, name: e.target.value })
-                }
-                placeholder="Contoh: Screenhouse Sukabumi 01"
-                className="flex-1 bg-transparent outline-none text-sm text-gray-800"
-              />
+          <div className="text-center mb-10">
+            <div className="text-2xl font-semibold text-gray-800">
+              Daftar screenhouse
             </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">
-              Detail alamat (opsional)
-            </label>
-            <div className="flex items-start gap-2 min-h-10 px-3 py-2 border border-gray-200 rounded-lg bg-gray-50">
-              <MapPin size={14} className="text-gray-400 shrink-0 mt-0.5" />
-              <textarea
-                value={screenhouse.address_detail}
-                onChange={(e) =>
-                  setScreenhouse({ ...screenhouse, address_detail: e.target.value })
-                }
-                placeholder="Contoh: Dekat irigasi timur, blok A"
-                rows={2}
-                className="flex-1 bg-transparent outline-none text-sm text-gray-800 resize-none"
-              />
-            </div>
-          </div>
-
-          <LocationPickerMap
-            latitude={screenhouse.latitude}
-            longitude={screenhouse.longitude}
-            onChange={handleMapPick}
-            className="h-48 w-full rounded-lg overflow-hidden border border-gray-200 z-0"
-          />
-
-          {screenhouse.latitude != null && (
-            <p className="text-[11px] text-gray-500">
-              Koordinat: {screenhouse.latitude}, {screenhouse.longitude}
+            <p className="text-sm text-gray-400 mt-2">
+              Lengkapi lokasi screenhouse untuk {account.name}
             </p>
-          )}
-
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-1.5">
-            <div className="text-xs font-medium text-gray-600">Wilayah (otomatis dari peta)</div>
-            {resolving && (
-              <p className="text-xs text-gray-400">Membaca wilayah...</p>
-            )}
-            {!resolving && wilayah && (
-              <>
-                <p className="text-xs text-gray-700">
-                  {[wilayah.village, wilayah.district, wilayah.regency, wilayah.province]
-                    .filter(Boolean)
-                    .join(", ")}
-                </p>
-                {wilayah.display_name && (
-                  <p className="text-[11px] text-gray-400">{wilayah.display_name}</p>
-                )}
-              </>
-            )}
-            {!resolving && !wilayah && wilayahError && (
-              <p className="text-xs text-amber-700">{wilayahError}</p>
-            )}
-            {!resolving && !wilayah && !wilayahError && (
-              <p className="text-xs text-gray-400">Pilih titik di peta untuk mengisi wilayah</p>
-            )}
           </div>
 
-        </div>
-        </div>
+          <div className="space-y-6">
 
-        <div className="shrink-0 px-8 pb-10 pt-4 border-t border-gray-100 bg-white">
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-2">
+                Nama screenhouse
+              </label>
+              <div className="flex items-center gap-3 h-12 px-4 border border-gray-200 rounded-xl bg-gray-50">
+                <Leaf size={16} className="text-gray-400 shrink-0" />
+                <input
+                  type="text"
+                  value={screenhouse.name}
+                  onChange={(e) =>
+                    setScreenhouse({ ...screenhouse, name: e.target.value })
+                  }
+                  placeholder="Contoh: Screenhouse Sukabumi 01"
+                  className="flex-1 bg-transparent outline-none text-sm text-gray-800"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-2">
+                Detail alamat (opsional)
+              </label>
+              <div className="flex items-start gap-3 min-h-12 px-4 py-3 border border-gray-200 rounded-xl bg-gray-50">
+                <MapPin size={16} className="text-gray-400 shrink-0 mt-0.5" />
+                <textarea
+                  value={screenhouse.address_detail}
+                  onChange={(e) =>
+                    setScreenhouse({ ...screenhouse, address_detail: e.target.value })
+                  }
+                  placeholder="Contoh: Dekat irigasi timur, blok A"
+                  rows={2}
+                  className="flex-1 bg-transparent outline-none text-sm text-gray-800 resize-none"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-2">
+                Jumlah tray terpasang
+              </label>
+              <div className="flex items-center gap-3 h-12 px-4 border border-gray-200 rounded-xl bg-gray-50">
+                <Layers size={16} className="text-gray-400 shrink-0" />
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={screenhouse.tray_count}
+                  onChange={(e) =>
+                    setScreenhouse({ ...screenhouse, tray_count: e.target.value })
+                  }
+                  className="flex-1 bg-transparent outline-none text-sm text-gray-800"
+                />
+              </div>
+              <p className="text-xs text-gray-400 mt-2">
+                Satu tray = satu sensor node. Operator dapat menyesuaikan saat verifikasi.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-2">
+                Lokasi di peta
+              </label>
+              <LocationPickerMap
+                latitude={screenhouse.latitude}
+                longitude={screenhouse.longitude}
+                onChange={handleMapPick}
+                className="h-56 w-full rounded-xl overflow-hidden border border-gray-200 z-0"
+              />
+              {screenhouse.latitude != null && (
+                <p className="text-xs text-gray-500 mt-2">
+                  Koordinat: {screenhouse.latitude}, {screenhouse.longitude}
+                </p>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-2">
+              <div className="text-sm font-medium text-gray-600">Wilayah (otomatis dari peta)</div>
+              {resolving && (
+                <p className="text-sm text-gray-400">Membaca wilayah...</p>
+              )}
+              {!resolving && wilayah && (
+                <>
+                  <p className="text-sm text-gray-700">
+                    {[wilayah.village, wilayah.district, wilayah.regency, wilayah.province]
+                      .filter(Boolean)
+                      .join(", ")}
+                  </p>
+                  {wilayah.display_name && (
+                    <p className="text-xs text-gray-400">{wilayah.display_name}</p>
+                  )}
+                </>
+              )}
+              {!resolving && !wilayah && wilayahError && (
+                <p className="text-sm text-amber-700">{wilayahError}</p>
+              )}
+              {!resolving && !wilayah && !wilayahError && (
+                <p className="text-sm text-gray-400">Pilih titik di peta untuk mengisi wilayah</p>
+              )}
+            </div>
+
+          </div>
+
           <button
             type="button"
             onClick={handleSubmit}
             disabled={loading || resolving}
-            className="w-full h-10 shrink-0 rounded-lg btn-bl text-sm mb-3 disabled:opacity-50"
+            className="w-full h-12 rounded-xl btn-bl text-sm mt-10 disabled:opacity-50"
           >
             {loading ? "Mengirim pendaftaran..." : "Kirim pendaftaran"}
           </button>
 
-          <p className="text-center text-xs text-gray-400 mb-4 leading-relaxed">
+          <p className="text-center text-xs text-gray-400 mt-5 leading-relaxed">
             Data akun dan screenhouse akan diverifikasi operator sebelum akun aktif
           </p>
 
-          <div className="text-center text-xs text-gray-400">
+          <div className="text-center text-xs text-gray-400 mt-6">
             Sudah punya akun?{" "}
             <button
               type="button"
@@ -287,8 +315,8 @@ function RegisterScreenhousePage() {
               Masuk di sini
             </button>
           </div>
-        </div>
 
+        </div>
       </div>
     </div>
   );

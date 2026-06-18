@@ -1,7 +1,5 @@
 import { Bell, CloudSun, Menu } from "lucide-react";
 
-import { motion } from "framer-motion";
-
 function Navbar({ onToggleSidebar }) {
   return (
     <header
