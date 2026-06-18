@@ -32,3 +32,5 @@ coverage/
 # misc
 tmp/
 temp/
+# dokumentasi lokal (tidak di-push ke GitHub)
+docs/
