@@ -814,7 +814,7 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
                 </ResponsiveContainer>
               ) : (
                 <div className="h-[280px] flex items-start justify-start p-4 text-sm text-gray-400 text-left">
-                  Belum ada data historis. Jalankan seed_sensor_history.sql
+                  Belum ada data historis. Jalankan database/monitoring/seed.sql
                 </div>
               )}
               <ChartGuideToggle

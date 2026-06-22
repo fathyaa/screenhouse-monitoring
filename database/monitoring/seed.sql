@@ -1,7 +1,8 @@
 -- =========================================
 -- MONITORING DATABASE — SEED DATA (screenhouse_monitoring)
--- Isi: registry + threshold 3 screenhouse, sink node, sensor node per tray,
---      histori sensor 24 jam + 1 alert demo.
+-- Isi: registry + threshold 3 screenhouse, sink node, sensor node per tray
+--       (sesuai tray_count di App DB: SH01=2, SH02=1, SH03=1),
+--       histori sensor 24 jam + status peta demo (Sehat/Peringatan/Kritis).
 --
 -- Jalankan dari root project (setelah App DB seed + schema monitoring):
 --   psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring -f database/monitoring/seed.sql
@@ -42,7 +43,7 @@ INSERT INTO sink_nodes (
 (2, 2, 'SH02-SINK', 'Sink Node SH02', 3, false, false, false, true),
 (3, 3, 'SH03-SINK', 'Sink Node SH03', 3, false, false, false, true);
 
--- ─── 4. Sensor nodes (1 tray = 1 node) ───
+-- ─── 4. Sensor nodes (1 tray = 1 node, mirror tray_count App DB) ───
 INSERT INTO sensor_nodes (
     id, screenhouse_id, node_code, node_name, location, send_interval_seconds, is_active
 ) VALUES
@@ -51,7 +52,7 @@ INSERT INTO sensor_nodes (
 (3, 2, 'SH02-T01', 'Tray A1', 'Pusat pembibitan', 60, true),
 (4, 3, 'SH03-T01', 'Tray A1', 'Dekat jalan desa', 120, true);
 
--- ─── 5. Histori sensor 24 jam + alert demo ───
+-- ─── 5. Histori sensor 24 jam + alert demo + reading live peta ───
 \ir data/seed_sensor_history.sql
 
 -- ─── 6. Reset sequences ───

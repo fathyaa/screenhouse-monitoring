@@ -1,6 +1,7 @@
 -- =========================================
 -- APP DATABASE — SEED DATA (screenhouse_app)
--- Isi: wilayah minimal, user demo, 3 screenhouse inti + thresholds.
+-- Isi: wilayah minimal, user demo, 3 screenhouse inti (tray_count) + thresholds.
+-- push_subscriptions kosong — diisi otomatis saat petani mengaktifkan notif PWA.
 --
 -- Jalankan dari root project (setelah schema):
 --   psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/seed.sql
@@ -34,6 +35,7 @@ INSERT INTO users (id, name, phone_number, password, role, status) VALUES
 (3, 'Super Admin', '088888888888', '$2b$10$CpSrK0m24PkChDP3crnSjuarCH3OFl9m2tr3f.fPmD7J7GO3c4biS', 'super_admin', 'approved');
 
 -- ─── 3. Screenhouse inti (3) + thresholds ───
+-- tray_count → jumlah sensor node di Monitoring DB (SH01: 2 tray, SH02/SH03: 1 tray)
 INSERT INTO screenhouses (
     id, name, province_id, regency_id, district_id, village_id,
     owner_user_id, address_detail, latitude, longitude, tray_count, status
@@ -67,5 +69,6 @@ SELECT setval('villages_id_seq',     (SELECT COALESCE(MAX(id), 1) FROM villages)
 SELECT setval('users_id_seq',        (SELECT COALESCE(MAX(id), 1) FROM users));
 SELECT setval('screenhouses_id_seq', (SELECT COALESCE(MAX(id), 1) FROM screenhouses));
 SELECT setval('thresholds_id_seq',   (SELECT COALESCE(MAX(id), 1) FROM thresholds));
+SELECT setval('push_subscriptions_id_seq', (SELECT COALESCE(MAX(id), 1) FROM push_subscriptions));
 
 COMMIT;
