@@ -2,7 +2,7 @@
 -- APP DATABASE — screenhouse_app (port 5434)
 -- Bounded context: Identity + Catalog
 --   users, wilayah (provinces/regencies/districts/villages),
---   screenhouses, thresholds
+--   screenhouses (tray_count), thresholds, push_subscriptions
 --
 -- Jalankan dari root project:
 --   psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/schema.sql

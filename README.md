@@ -202,9 +202,6 @@ Dua container Postgres dijalankan oleh Docker (lihat `docker/docker-compose.yaml
 psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/schema.sql
 psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/seed.sql
 
-# Jika DB app sudah ada sebelumnya, tambah tabel push:
-psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/push_subscriptions.sql
-
 # Monitoring DB (ingest + alerting)
 psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring -f database/monitoring/schema.sql
 psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring -f database/monitoring/seed.sql
@@ -306,7 +303,7 @@ Petani toggle / Alert otomatis
 
 Status relay disimpan di `sink_nodes` + `actuator_logs`, **bukan** di `sensor_data`.
 
-Migrasi DB lama: `database/monitoring/migrations/001_sink_nodes_actuators.sql` (lihat `database/monitoring/README.md`).
+Fresh install: `database/monitoring/schema.sql` + `seed.sql` (lihat [`database/monitoring/README.md`](database/monitoring/README.md)).
 
 Setelah menerima command, sink **wajib publish ulang** status relay ke topic sensor.
 
@@ -373,7 +370,7 @@ mosquitto_pub -h localhost \
 
 Script lengkap (alert, loop 10×, dll.): [`docs/evaluasi-kualitas/mqtt-simulasi.sh`](docs/evaluasi-kualitas/mqtt-simulasi.sh)
 
-**Legacy** — topic `screenhouse/{id}/node/{code}/sensor` + field `node_code` masih didukung, tapi **jangan pakai `SH01-N01`** (sudah diganti `SH01-T01` / `SH01-SINK`).
+Kode node demo inti: tray `SH01-T01`, sink `SH01-SINK`. Topic alternatif `screenhouse/{id}/node/{code}/sensor` masih didukung backend, tetapi simulasi dan seed memakai model tray + sink di atas.
 
 ---
 
@@ -463,11 +460,7 @@ Salin public/private key ke:
 * `services/app-service/.env` → `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`
 * `frontend/.env` → `VITE_VAPID_PUBLIC_KEY` (public key saja)
 
-Jalankan migrasi push (jika DB app sudah ada):
-
-```bash
-psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/push_subscriptions.sql
-```
+Tabel `push_subscriptions` sudah ada di `database/app/schema.sql` (fresh install tidak perlu migrasi terpisah).
 
 Restart **app-service** (push worker subscribe channel Redis `alert-created`).
 
