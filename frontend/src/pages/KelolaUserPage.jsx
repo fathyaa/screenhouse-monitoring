@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { Search, Pencil, KeyRound, Users } from "lucide-react";
 import AdminPageShell from "../components/AdminPageShell";
@@ -50,7 +50,10 @@ function formatDate(value) {
 
 export default function KelolaUserPage() {
   const token = localStorage.getItem("token");
-  const authHeaders = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const authHeaders = useMemo(
+    () => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" }),
+    [token]
+  );
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -77,7 +80,7 @@ export default function KelolaUserPage() {
     } finally {
       setLoading(false);
     }
-  }, [filters.role, filters.status, filters.search, token]);
+  }, [filters.role, filters.status, filters.search, authHeaders]);
 
   useEffect(() => {
     loadUsers();

@@ -6,9 +6,9 @@ Bounded context: **identity + catalog bisnis**
 
 - `users`
 - `provinces`, `regencies`, `districts`, `villages`
-- `screenhouses`
+- `screenhouses` (kolom `tray_count`: jumlah tray/sensor node terpasang, 1–20)
 - `thresholds`
-- `push_subscriptions` (PWA Web Push — ada di `schema.sql`; migrasi terpisah di `push_subscriptions.sql` untuk DB lama)
+- `push_subscriptions` (PWA Web Push — subscription endpoint per petani)
 
 ## Setup
 
@@ -18,15 +18,15 @@ Port host **5434** (lihat `docker/docker-compose.yaml`):
 # Fresh install
 psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/schema.sql
 psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/seed.sql
-
-# DB app sudah ada sebelum push_subscriptions ditambahkan:
-psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/push_subscriptions.sql
 ```
 
 ## Seed demo inti (`seed.sql`)
 
 - 3 user: Pak Eko (petani), Operator, Super Admin — password `123456`
 - 3 screenhouse inti di Sukabumi + threshold default
+  - SH01 `tray_count = 2` (SH01-T01, SH01-T02 di Monitoring DB)
+  - SH02 & SH03 `tray_count = 1`
+- `push_subscriptions` kosong sampai petani mengaktifkan notifikasi di PWA
 - Wilayah minimal (Jawa Barat / Kab. Sukabumi); dilengkapi `npm run import`
 
 ## Seed tambahan (peta + wilayah)
@@ -41,5 +41,3 @@ npm run seed:map      # 30+ screenhouse demo di peta (App DB + Monitoring DB)
 ```
 
 Lihat [`database/scripts/README.md`](../scripts/README.md) dan [`database/README.md`](../README.md).
-
-Rencana migrasi lengkap: [`docs/migration-app-monitoring-service.md`](../../docs/migration-app-monitoring-service.md)

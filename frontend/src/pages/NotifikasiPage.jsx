@@ -20,7 +20,6 @@ function NotifikasiPage() {
     const {
         alerts,
         activeCount,
-        unreadCount,
         resolvedCount,
         totalCount,
         alertsLoading,
@@ -110,7 +109,7 @@ function NotifikasiPage() {
                     <div className="grid grid-cols-3 gap-2 sm:gap-3">
                         {[
                             { label: "Total", fullLabel: "Total peringatan", value: totalCount, icon: Bell, bg: "bg-gray-50", color: "text-gray-500", valColor: "text-gray-800" },
-                            { label: "Belum dibaca", fullLabel: "Belum dibaca", value: unreadCount, icon: TriangleAlert, bg: "bg-red-50", color: "text-red-600", valColor: "text-red-600" },
+                            { label: "Belum ditangani", fullLabel: "Belum ditangani", value: activeCount, icon: TriangleAlert, bg: "bg-red-50", color: "text-red-600", valColor: "text-red-600" },
                             { label: "Selesai", fullLabel: "Sudah ditangani", value: resolvedCount, icon: CheckCircle2, bg: "bg-bl-surface-muted", color: "text-bl-primary", valColor: "text-bl-primary" },
                         ].map((s) => (
                             <div key={s.fullLabel} className="bg-white rounded-xl sm:rounded-2xl border border-gray-200 p-2.5 sm:p-4 flex flex-col items-center text-center sm:flex-row sm:items-center sm:gap-3 sm:text-left min-w-0">

@@ -1,11 +1,13 @@
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import L from "leaflet";
+import { RefreshCw } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
 import OperatorTopbar from "../layouts/OperatorTopbar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import { API_URL } from "../config/api";
+import socket from "../lib/socket";
 import { THRESHOLD_METRICS } from "../constants/thresholdMetrics";
 import {
   getStatusMeta,
@@ -17,6 +19,11 @@ import {
 const METRIC_UNIT = Object.fromEntries(
   THRESHOLD_METRICS.map((m) => [m.key, m.unit])
 );
+
+/** Cadangan polling — offline baru terdeteksi setelah ~15 menit. */
+const MAP_SUMMARY_POLL_MS = 5 * 60 * 1000;
+/** Debounce refetch saat ada event realtime. */
+const MAP_SUMMARY_DEBOUNCE_MS = 10 * 1000;
 
 // Cache divIcon per warna agar tidak dibuat ulang tiap render.
 const ICON_CACHE = {};
@@ -59,47 +66,93 @@ function OperatorDashboard() {
   const [selectedId, setSelectedId] = useState(null);
   const [search, setSearch] = useState("");
   const [mapSummary, setMapSummary] = useState({});
+  const [summaryRefreshing, setSummaryRefreshing] = useState(false);
   const mapRef = useRef(null);
   const markerRefs = useRef({});
 
+  const loadMapSummary = useCallback(async () => {
+    try {
+      setSummaryRefreshing(true);
+      const res = await fetch(`${API_URL}/sensor-data/map-summary`);
+      const data = await res.json();
+      if (!Array.isArray(data)) return;
+      setMapSummary(
+        Object.fromEntries(data.map((item) => [item.screenhouse_id, item]))
+      );
+    } catch (err) {
+      console.log(err);
+    } finally {
+      setSummaryRefreshing(false);
+    }
+  }, []);
+
   useEffect(() => {
-    const token =
-      localStorage.getItem("token");
+    const token = localStorage.getItem("token");
 
     fetch(`${API_URL}/screenhouses`, {
-        headers: {
-          Authorization:
-            `Bearer ${token}`,
-        },
-      }
-    )
+      headers: { Authorization: `Bearer ${token}` },
+    })
       .then((res) => res.json())
       .then(setScreenhouses);
   }, []);
 
   useEffect(() => {
     let active = true;
+    let pollTimer = null;
+    let debounceTimer = null;
 
-    const loadSummary = async () => {
-      try {
-        const res = await fetch(`${API_URL}/sensor-data/map-summary`);
-        const data = await res.json();
-        if (!active || !Array.isArray(data)) return;
-        setMapSummary(
-          Object.fromEntries(data.map((item) => [item.screenhouse_id, item]))
-        );
-      } catch (err) {
-        console.log(err);
+    const loadSummary = () => {
+      if (!active) return;
+      loadMapSummary();
+    };
+
+    const stopPolling = () => {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    };
+
+    const startPolling = () => {
+      stopPolling();
+      pollTimer = setInterval(loadSummary, MAP_SUMMARY_POLL_MS);
+    };
+
+    const scheduleRefresh = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(loadSummary, MAP_SUMMARY_DEBOUNCE_MS);
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        loadSummary();
+        startPolling();
+      } else {
+        stopPolling();
+        clearTimeout(debounceTimer);
       }
     };
 
     loadSummary();
-    const interval = setInterval(loadSummary, 30000);
+    if (document.visibilityState === "visible") {
+      startPolling();
+    }
+
+    socket.on("sensor-update", scheduleRefresh);
+    socket.on("alert-update", scheduleRefresh);
+    socket.on("alert-resolved", scheduleRefresh);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
     return () => {
       active = false;
-      clearInterval(interval);
+      stopPolling();
+      clearTimeout(debounceTimer);
+      socket.off("sensor-update", scheduleRefresh);
+      socket.off("alert-update", scheduleRefresh);
+      socket.off("alert-resolved", scheduleRefresh);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, []);
+  }, [loadMapSummary]);
 
   const statusCounts = useMemo(() => {
     const counts = { healthy: 0, warning: 0, critical: 0, offline: 0 };
@@ -306,8 +359,23 @@ function OperatorDashboard() {
 
             {/* LEGEND */}
             <div className="absolute bottom-3 left-3 sm:bottom-4 sm:left-4 z-[500] bg-white/95 backdrop-blur rounded-xl shadow-lg border border-gray-200 px-3 py-2.5 max-w-[calc(100%-1.5rem)]">
-              <div className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-1.5">
-                Status screenhouse
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <div className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">
+                  Status screenhouse
+                </div>
+                <button
+                  type="button"
+                  onClick={loadMapSummary}
+                  disabled={summaryRefreshing}
+                  className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+                  aria-label="Refresh status peta"
+                  title="Refresh status peta"
+                >
+                  <RefreshCw
+                    size={14}
+                    className={summaryRefreshing ? "animate-spin" : undefined}
+                  />
+                </button>
               </div>
               <div className="space-y-1">
                 {STATUS_ORDER.map((key) => {

@@ -43,12 +43,14 @@ import {
   isNodeOnline,
   isScreenhouseMonitorOffline,
 } from "../utils/nodeOnline";
-import { getStatusMeta, timeAgo } from "../constants/screenhouseStatus";
+import { getStatusMeta, timeAgo, formatSnapshotTime } from "../constants/screenhouseStatus";
 import {
   SCREENHOUSE_CHART_GUIDE,
   CHART_LEGEND,
   ChartTooltip,
   ChartGuideToggle,
+  getPkChartYDomain,
+  PkThresholdBands,
 } from "../constants/chartGuide";
 
 const PARAM_GROUPS = [
@@ -56,8 +58,8 @@ const PARAM_GROUPS = [
     label: "Unsur hara tanah",
     params: [
       { key: "nitrogen", label: "Nitrogen", unit: "mg/kg" },
-      { key: "phosphorus", label: "Phosphorus", unit: "mg/kg" },
-      { key: "potassium", label: "Potassium", unit: "mg/kg" },
+      { key: "phosphorus", label: "Fosfor (P)", unit: "mg/kg" },
+      { key: "potassium", label: "Kalium (K)", unit: "mg/kg" },
     ],
   },
   {
@@ -239,11 +241,11 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [screenhouses, setScreenhouses] = useState([]);
-  const [onlineTick, setOnlineTick] = useState(0);
+  const [onlineTick, setOnlineTick] = useState(() => Date.now());
 
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const token = localStorage.getItem("token");
-  const headers = { Authorization: `Bearer ${token}` };
+  const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
 
   useEffect(() => {
     const listUrl =
@@ -255,7 +257,7 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
       .then((res) => res.json())
       .then((data) => setScreenhouses(Array.isArray(data) ? data : []))
       .catch(console.error);
-  }, [user.role]);
+  }, [user.role, headers]);
 
   const loadScreenhouseData = useCallback(() => {
     if (!id || !token) return Promise.resolve();
@@ -283,7 +285,7 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
         setHistory(Array.isArray(hist) ? hist : []);
       })
       .catch(console.error);
-  }, [id, token]);
+  }, [id, token, headers]);
 
   useEffect(() => {
     if (!id || !token) return;
@@ -301,7 +303,7 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
   }, [id, token, loadScreenhouseData]);
 
   useEffect(() => {
-    const tickId = setInterval(() => setOnlineTick((n) => n + 1), 60000);
+    const tickId = setInterval(() => setOnlineTick(Date.now()), 60000);
     return () => clearInterval(tickId);
   }, []);
 
@@ -461,12 +463,12 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
   const threshold = dashboard?.threshold;
 
   const onlineNodes = useMemo(
-    () => nodes.filter((n) => isNodeOnline(n)),
+    () => nodes.filter((n) => isNodeOnline(n, onlineTick)),
     [nodes, onlineTick]
   );
   const onlineCount = onlineNodes.length;
   const screenhouseOffline = useMemo(
-    () => isScreenhouseMonitorOffline(nodes),
+    () => isScreenhouseMonitorOffline(nodes, onlineTick),
     [nodes, onlineTick]
   );
 
@@ -479,10 +481,18 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
     return timestamps.length ? new Date(Math.max(...timestamps)).toISOString() : null;
   }, [nodes]);
 
-  // Roll-up kondisi terburuk antar node yang online (1 node → langsung node itu).
+  // Online: kondisi terburuk dari tray yang masih live. Offline: snapshot terakhir yang tersimpan.
+  const healthSourceNodes = useMemo(
+    () =>
+      screenhouseOffline
+        ? nodes.filter((n) => n.latest_data || n.last_seen)
+        : onlineNodes,
+    [screenhouseOffline, nodes, onlineNodes]
+  );
+
   const rollupHealth = useMemo(
-    () => buildWorstCaseHealth(onlineNodes, threshold),
-    [onlineNodes, threshold]
+    () => buildWorstCaseHealth(healthSourceNodes, threshold),
+    [healthSourceNodes, threshold]
   );
 
   const flaggedRollup = rollupHealth.filter(
@@ -501,6 +511,12 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
     monitorStatus === "none" ? "offline" : monitorStatus
   );
   const activeNodeCount = nodes.filter((n) => n.is_active).length;
+
+  const displayInsight = screenhouseOffline
+    ? latestLastSeen
+      ? `Perangkat tidak mengirim data terbaru · terakhir ${timeAgo(latestLastSeen)}`
+      : "Belum ada data sensor dari perangkat."
+    : dashboard?.insight;
 
   if (loading) {
     return (
@@ -592,9 +608,13 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
                   {nodes.length} tray sensor
                 </div>
               </div>
-              {dashboard?.insight && (
-                <p className="text-sm text-bl-primary mt-2 font-semibold text-left leading-relaxed">
-                  {dashboard.insight}
+              {displayInsight && (
+                <p
+                  className={`text-sm mt-2 font-semibold text-left leading-relaxed ${
+                    screenhouseOffline ? "text-red-700" : "text-bl-primary"
+                  }`}
+                >
+                  {displayInsight}
                 </p>
               )}
             </div>
@@ -623,13 +643,13 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
 
           {/* Banner offline — seluruh screenhouse tidak ada node online */}
           {screenhouseOffline && (
-            <div className="rounded-2xl px-5 py-5 flex items-center gap-4 bg-bl-surface-muted border border-bl-accent/20">
-              <div className="w-12 h-12 rounded-full flex items-center justify-center shrink-0 bg-slate-200">
-                <WifiOff size={24} className="text-slate-500" />
+            <div className="rounded-2xl px-5 py-5 flex items-center gap-4 border border-red-300 bg-red-50">
+              <div className="w-12 h-12 rounded-full flex items-center justify-center shrink-0 bg-red-100">
+                <WifiOff size={24} className="text-red-600" />
               </div>
               <div className="min-w-0">
-                <div className="text-lg font-bold text-slate-700">Offline</div>
-                <div className="text-base text-slate-600 mt-1 leading-relaxed">
+                <div className="text-lg font-bold text-red-950">Offline</div>
+                <div className="text-base text-red-800 mt-1 leading-relaxed">
                   {latestLastSeen
                     ? `Perangkat tidak mengirim data terbaru · terakhir ${timeAgo(latestLastSeen)}`
                     : "Belum ada data sensor dari perangkat."}
@@ -714,6 +734,14 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
 
           {(!isPetani || showDetail) && (
             <>
+          {screenhouseOffline && (
+            <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+              Grafik di bawah menampilkan riwayat 24 jam.
+              {latestLastSeen
+                ? ` Pembacaan live terakhir ${formatSnapshotTime(latestLastSeen)} (${timeAgo(latestLastSeen)}).`
+                : " Belum ada pembacaan live tersimpan."}
+            </p>
+          )}
           {/* Grafik */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <div className="bg-white rounded-2xl border border-gray-200 p-4 text-left">
@@ -786,7 +814,7 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
                 </ResponsiveContainer>
               ) : (
                 <div className="h-[280px] flex items-start justify-start p-4 text-sm text-gray-400 text-left">
-                  Belum ada data historis. Jalankan seed_sensor_history.sql
+                  Belum ada data historis. Jalankan database/monitoring/seed.sql
                 </div>
               )}
               <ChartGuideToggle
@@ -837,39 +865,28 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
 
           <div className="bg-white rounded-2xl border border-gray-200 p-4 text-left">
             <div className="text-sm font-semibold text-gray-800 mb-1 text-left">
-              Tren phosphorus & potassium (24 jam)
+              Tren fosfor & kalium (24 jam)
             </div>
             <div className="text-xs text-gray-400 mb-4 text-left">
-              Perubahan fosfor dan kalium per jam. Cek kebutuhan pupuk.
+              Perubahan fosfor (P) dan kalium (K) per jam · Cek kebutuhan pupuk.
             </div>
             {trendChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height={240}>
                 <LineChart data={trendChartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis dataKey="label" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 10 }} label={{ value: "mg/kg", angle: -90, position: "insideLeft", fontSize: 10 }} />
-                  {threshold?.min_phosphorus != null && threshold?.max_phosphorus != null && (
-                    <ReferenceArea
-                      y1={threshold.min_phosphorus}
-                      y2={threshold.max_phosphorus}
-                      fill="#2563eb"
-                      fillOpacity={0.05}
-                    />
-                  )}
-                  {threshold?.min_potassium != null && threshold?.max_potassium != null && (
-                    <ReferenceArea
-                      y1={threshold.min_potassium}
-                      y2={threshold.max_potassium}
-                      fill="#ca8a04"
-                      fillOpacity={0.05}
-                    />
-                  )}
+                  <YAxis
+                    tick={{ fontSize: 10 }}
+                    domain={getPkChartYDomain(trendChartData, threshold)}
+                    label={{ value: "mg/kg", angle: -90, position: "insideLeft", fontSize: 10 }}
+                  />
+                  <PkThresholdBands threshold={threshold} />
                   <Tooltip content={<ChartTooltip />} />
                   <Legend {...CHART_LEGEND} />
                   <Line
                     type="monotone"
                     dataKey="phosphorus"
-                    name="Phosphorus"
+                    name="Fosfor (P)"
                     stroke="#2563eb"
                     strokeWidth={2}
                     dot={{ r: 2 }}
@@ -877,7 +894,7 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
                   <Line
                     type="monotone"
                     dataKey="potassium"
-                    name="Potassium"
+                    name="Kalium (K)"
                     stroke="#ca8a04"
                     strokeWidth={2}
                     dot={{ r: 2 }}
@@ -904,10 +921,15 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
               threshold={threshold}
               title="Ringkasan kondisi screenhouse"
               subtitle={
-                onlineCount > 1
+                screenhouseOffline
+                  ? latestLastSeen
+                    ? `Snapshot terakhir ${formatSnapshotTime(latestLastSeen)} · perangkat offline`
+                    : "Perangkat offline · belum ada data tersimpan"
+                  : onlineCount > 1
                   ? "Ambil kondisi paling buruk dari semua tray · detail per tray ada di bawah"
                   : "Hijau = pas · oranye = kurang · merah = berlebih"
               }
+              showActions={!screenhouseOffline}
             />
           )}
 

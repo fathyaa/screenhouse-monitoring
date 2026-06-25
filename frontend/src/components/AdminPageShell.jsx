@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Menu } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";

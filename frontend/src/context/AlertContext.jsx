@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from "react";
 import socket, { authenticateSocket } from "../lib/socket";
 import toast from "react-hot-toast";

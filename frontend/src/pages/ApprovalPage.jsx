@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { ClipboardCheck, Phone, UserCheck, UserX, Menu, Leaf, MapPin, Map } from "lucide-react";
+import { ClipboardCheck, Phone, UserCheck, UserX, Menu, Leaf, MapPin, Map, Layers } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import MapPointPreview from "../components/MapPointPreview";
@@ -18,7 +18,26 @@ function formatCoordinates(farmer) {
     return `${Number(farmer.latitude).toFixed(5)}, ${Number(farmer.longitude).toFixed(5)}`;
 }
 
-function ScreenhouseInfo({ farmer, onViewMap }) {
+function TrayCountField({ value, onChange, disabled }) {
+    return (
+        <div className="flex items-center gap-2 text-sm text-gray-600">
+            <Layers size={16} className="shrink-0 text-gray-400" />
+            <span className="font-semibold text-gray-700">Tray terpasang:</span>
+            <input
+                type="number"
+                min={1}
+                max={20}
+                value={value}
+                disabled={disabled}
+                onChange={(e) => onChange(Number(e.target.value))}
+                className="w-16 h-8 px-2 border border-gray-200 rounded-lg text-sm text-gray-800 bg-white disabled:opacity-50"
+            />
+            <span className="text-xs text-gray-400">(1 tray = 1 sensor node)</span>
+        </div>
+    );
+}
+
+function ScreenhouseInfo({ farmer, trayCount, onTrayCountChange, onViewMap, busy }) {
     const wilayah = formatWilayah(farmer);
     const hasScreenhouse = Boolean(farmer.screenhouse_id || farmer.screenhouse_name);
 
@@ -41,6 +60,11 @@ function ScreenhouseInfo({ farmer, onViewMap }) {
                         <span className="font-semibold text-gray-700">Wilayah:</span>{" "}
                         {wilayah || "-"}
                     </div>
+                    <TrayCountField
+                        value={trayCount}
+                        onChange={onTrayCountChange}
+                        disabled={busy}
+                    />
                     <div className="flex items-center flex-wrap gap-2 text-sm text-gray-600">
                         <div className="flex items-center gap-1.5">
                             <MapPin size={16} className="shrink-0 text-gray-400" />
@@ -79,10 +103,11 @@ function ApprovalPage() {
     const [actionId, setActionId] = useState(null);
     const [shActionId, setShActionId] = useState(null);
     const [mapPreview, setMapPreview] = useState(null);
+    const [trayCounts, setTrayCounts] = useState({});
     const user = JSON.parse(localStorage.getItem("user"));
     const token = localStorage.getItem("token");
 
-    const authHeaders = { Authorization: `Bearer ${token}` };
+    const authHeaders = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
 
     const loadData = useCallback(async () => {
         try {
@@ -101,6 +126,16 @@ function ApprovalPage() {
             setPendingUsers(Array.isArray(pendingData) ? pendingData : []);
             setPendingScreenhouses(Array.isArray(pendingShData) ? pendingShData : []);
             setFarmers(Array.isArray(farmersData) ? farmersData : []);
+
+            const nextTrayCounts = {};
+            (Array.isArray(pendingData) ? pendingData : []).forEach((f) => {
+                nextTrayCounts[`u-${f.id}`] = f.tray_count ?? 1;
+            });
+            (Array.isArray(pendingShData) ? pendingShData : []).forEach((sh) => {
+                nextTrayCounts[`s-${sh.id}`] = sh.tray_count ?? 1;
+            });
+            setTrayCounts(nextTrayCounts);
+
             setStats({
                 pending: statsData.pending ?? 0,
                 approved: statsData.approved ?? 0,
@@ -110,11 +145,17 @@ function ApprovalPage() {
         } catch (err) {
             console.error(err);
         }
-    }, [token]);
+    }, [authHeaders]);
 
     useEffect(() => {
         loadData();
     }, [loadData]);
+
+    const getTrayCount = (key, fallback = 1) => {
+        const val = trayCounts[key] ?? fallback;
+        const n = Number(val);
+        return Number.isInteger(n) && n >= 1 && n <= 20 ? n : fallback;
+    };
 
     const approveUser = async (farmer) => {
         if (!farmer.screenhouse_id && !farmer.screenhouse_name) {
@@ -122,13 +163,16 @@ function ApprovalPage() {
             return;
         }
 
-        if (!window.confirm(`Setujui pendaftaran ${farmer.name}?`)) return;
+        const trayCount = getTrayCount(`u-${farmer.id}`, farmer.tray_count ?? 1);
+
+        if (!window.confirm(`Setujui pendaftaran ${farmer.name} dengan ${trayCount} tray?`)) return;
 
         setActionId(farmer.id);
         try {
             const response = await fetch(`${API_URL}/auth/${farmer.id}/approve`, {
                 method: "PATCH",
-                headers: authHeaders,
+                headers: { ...authHeaders, "Content-Type": "application/json" },
+                body: JSON.stringify({ tray_count: trayCount }),
             });
             const data = await response.json();
 
@@ -172,13 +216,16 @@ function ApprovalPage() {
     };
 
     const approveScreenhouse = async (sh) => {
-        if (!window.confirm(`Setujui screenhouse "${sh.name}" milik ${sh.owner_name}?`)) return;
+        const trayCount = getTrayCount(`s-${sh.id}`, sh.tray_count ?? 1);
+
+        if (!window.confirm(`Setujui screenhouse "${sh.name}" milik ${sh.owner_name} dengan ${trayCount} tray?`)) return;
 
         setShActionId(sh.id);
         try {
             const response = await fetch(`${API_URL}/screenhouses/${sh.id}/approve`, {
                 method: "PATCH",
-                headers: authHeaders,
+                headers: { ...authHeaders, "Content-Type": "application/json" },
+                body: JSON.stringify({ tray_count: trayCount }),
             });
             const data = await response.json();
 
@@ -328,6 +375,13 @@ function ApprovalPage() {
                                                             <span className="font-semibold text-gray-700">Wilayah:</span>{" "}
                                                             {wilayah || "-"}
                                                         </div>
+                                                        <TrayCountField
+                                                            value={getTrayCount(`s-${sh.id}`, sh.tray_count ?? 1)}
+                                                            onChange={(n) =>
+                                                                setTrayCounts((prev) => ({ ...prev, [`s-${sh.id}`]: n }))
+                                                            }
+                                                            disabled={busy}
+                                                        />
                                                         <div className="flex items-center flex-wrap gap-2 text-sm text-gray-600">
                                                             <div className="flex items-center gap-1.5">
                                                                 <MapPin size={16} className="shrink-0 text-gray-400" />
@@ -404,6 +458,11 @@ function ApprovalPage() {
                                                     </div>
                                                     <ScreenhouseInfo
                                                         farmer={farmer}
+                                                        trayCount={getTrayCount(`u-${farmer.id}`, farmer.tray_count ?? 1)}
+                                                        onTrayCountChange={(n) =>
+                                                            setTrayCounts((prev) => ({ ...prev, [`u-${farmer.id}`]: n }))
+                                                        }
+                                                        busy={busy}
                                                         onViewMap={(f) =>
                                                             setMapPreview({
                                                                 latitude: Number(f.latitude),

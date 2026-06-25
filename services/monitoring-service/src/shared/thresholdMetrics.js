@@ -12,4 +12,21 @@ const THRESHOLD_METRICS = [
   { key: "light_intensity", label: "Intensitas cahaya", minCol: "min_light_intensity", maxCol: "max_light_intensity" },
 ];
 
-module.exports = { THRESHOLD_METRICS };
+// Parameter yang menentukan status/insight screenhouse (selaras frontend paramHealth).
+// Cahaya & konduktivitas tetap dipakai alert worker, tapi tidak memicu banner "tidak sehat".
+const HEALTH_STATUS_KEYS = new Set([
+  "nitrogen",
+  "phosphorus",
+  "potassium",
+  "soil_moisture",
+  "soil_temperature",
+  "soil_ph",
+  "air_temperature",
+  "air_humidity",
+]);
+
+const HEALTH_STATUS_METRICS = THRESHOLD_METRICS.filter((m) =>
+  HEALTH_STATUS_KEYS.has(m.key)
+);
+
+module.exports = { THRESHOLD_METRICS, HEALTH_STATUS_METRICS };

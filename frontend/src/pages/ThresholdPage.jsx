@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { RotateCcw, Save, Search, SlidersHorizontal } from "lucide-react";
 import AdminPageShell from "../components/AdminPageShell";
@@ -18,7 +18,10 @@ function rowToForm(row) {
 
 export default function ThresholdPage() {
   const token = localStorage.getItem("token");
-  const authHeaders = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const authHeaders = useMemo(
+    () => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" }),
+    [token]
+  );
 
   const [wilayah, setWilayah] = useState({ regency_id: "", district_id: "", village_id: "" });
   const [search, setSearch] = useState("");
@@ -53,10 +56,13 @@ export default function ThresholdPage() {
       } else {
         const validIds = new Set(rows.map((r) => r.screenhouse_id));
         setCheckedIds((prev) => new Set([...prev].filter((id) => validIds.has(id))));
-        if (!rows.some((r) => r.screenhouse_id === selectedId)) {
-          setSelectedId(rows[0].screenhouse_id);
+        setSelectedId((currentId) => {
+          if (rows.some((r) => r.screenhouse_id === currentId)) {
+            return currentId;
+          }
           setForm(rowToForm(rows[0]));
-        }
+          return rows[0].screenhouse_id;
+        });
       }
     } catch (err) {
       console.error(err);
@@ -64,7 +70,7 @@ export default function ThresholdPage() {
     } finally {
       setLoading(false);
     }
-  }, [wilayah, search, token]);
+  }, [wilayah, search, authHeaders]);
 
   useEffect(() => {
     loadList();

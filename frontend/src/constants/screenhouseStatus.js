@@ -55,3 +55,16 @@ export function timeAgo(dateStr) {
   const day = Math.floor(hour / 24);
   return `${day} hari lalu`;
 }
+
+/** Waktu snapshot untuk label "terakhir diperbarui 16 Jun, 22.15" */
+export function formatSnapshotTime(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString("id-ID", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}

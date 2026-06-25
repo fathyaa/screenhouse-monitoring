@@ -1,6 +1,11 @@
 const pool = require("../../../config/db");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const {
+  parseTrayCount,
+  activateScreenhouseRecord,
+  postActivationProvisioning,
+} = require("../../../shared/provisionScreenhouse");
 
 function logAuth(event, detail = {}) {
   const payload = { event, ...detail, at: new Date().toISOString() };
@@ -41,6 +46,11 @@ async function register(req, res) {
 
     if (screenhouse.latitude == null || screenhouse.longitude == null) {
       return res.status(400).json({ message: "Titik lokasi screenhouse wajib dipilih di peta" });
+    }
+
+    const trayCount = parseTrayCount(screenhouse.tray_count, 1);
+    if (trayCount == null) {
+      return res.status(400).json({ message: "Jumlah tray harus bilangan bulat antara 1 dan 20" });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -100,10 +110,11 @@ async function register(req, res) {
             address_detail,
             latitude,
             longitude,
+            tray_count,
             status
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')
-          RETURNING id, name, latitude, longitude, status
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending')
+          RETURNING id, name, latitude, longitude, tray_count, status
         `,
         [
           screenhouse.name.trim(),
@@ -115,6 +126,7 @@ async function register(req, res) {
           screenhouse.address_detail?.trim() || null,
           Number(screenhouse.latitude),
           Number(screenhouse.longitude),
+          trayCount,
         ]
       );
 
@@ -147,10 +159,11 @@ async function register(req, res) {
             address_detail,
             latitude,
             longitude,
+            tray_count,
             status
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')
-          RETURNING id, name, latitude, longitude, status
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending')
+          RETURNING id, name, latitude, longitude, tray_count, status
         `,
         [
           screenhouse.name.trim(),
@@ -162,6 +175,7 @@ async function register(req, res) {
           screenhouse.address_detail?.trim() || null,
           Number(screenhouse.latitude),
           Number(screenhouse.longitude),
+          trayCount,
         ]
       );
 
@@ -306,6 +320,10 @@ async function approveUser(req, res) {
 
   try {
     const userId = req.params.id;
+    const trayOverride = req.body?.tray_count != null ? parseTrayCount(req.body.tray_count) : null;
+    if (req.body?.tray_count != null && trayOverride == null) {
+      return res.status(400).json({ message: "Jumlah tray harus bilangan bulat antara 1 dan 20" });
+    }
 
     await client.query("BEGIN");
 
@@ -322,51 +340,36 @@ async function approveUser(req, res) {
       return res.status(404).json({ message: "User tidak ditemukan atau sudah diproses" });
     }
 
-    const activated = await client.query(
+    const pendingScreenhouses = await client.query(
       `
-        UPDATE screenhouses
-        SET status = 'active'
+        SELECT id, name, owner_user_id, tray_count
+        FROM screenhouses
         WHERE owner_user_id = $1 AND status = 'pending'
-        RETURNING id
         `,
       [userId]
     );
 
-    for (const row of activated.rows) {
-      await client.query(
-        `
-          INSERT INTO thresholds (
-            screenhouse_id,
-            min_nitrogen, max_nitrogen,
-            min_phosphorus, max_phosphorus,
-            min_potassium, max_potassium,
-            min_soil_moisture, max_soil_moisture,
-            min_soil_temperature, max_soil_temperature,
-            min_soil_ph, max_soil_ph,
-            min_conductivity, max_conductivity,
-            min_air_temperature, max_air_temperature,
-            min_air_humidity, max_air_humidity,
-            min_light_intensity, max_light_intensity
-          )
-          VALUES ($1, 20, 45, 10, 30, 15, 50, 50, 80, 20, 35, 5.5, 7.0, 200, 800, 22, 35, 40, 85, 5000, 50000)
-          ON CONFLICT (screenhouse_id) DO NOTHING
-          `,
-        [row.id]
-      );
+    const activated = [];
+    for (const row of pendingScreenhouses.rows) {
+      const effectiveTray = trayOverride ?? row.tray_count ?? 1;
+      const sh = await activateScreenhouseRecord(client, row.id, effectiveTray);
+      if (sh) activated.push(sh);
     }
 
     await client.query("COMMIT");
 
+    await postActivationProvisioning(activated);
+
     logAuth("user_approved", {
       userId,
       by: req.user?.id,
-      screenhousesActivated: activated.rows.length,
+      screenhousesActivated: activated.length,
     });
 
     res.json({
       message: "User berhasil diapprove",
       user: result.rows[0],
-      screenhousesActivated: activated.rows.length,
+      screenhousesActivated: activated.length,
     });
   } catch (err) {
     await client.query("ROLLBACK");
@@ -467,6 +470,7 @@ async function getPendingUsers(req, res) {
           sh.address_detail,
           sh.latitude,
           sh.longitude,
+          sh.tray_count,
           p.name AS province,
           r.name AS regency,
           d.name AS district,

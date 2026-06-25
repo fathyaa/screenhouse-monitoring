@@ -2,7 +2,7 @@
 -- APP DATABASE — screenhouse_app (port 5434)
 -- Bounded context: Identity + Catalog
 --   users, wilayah (provinces/regencies/districts/villages),
---   screenhouses, thresholds
+--   screenhouses (tray_count), thresholds, push_subscriptions
 --
 -- Jalankan dari root project:
 --   psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/schema.sql
@@ -61,6 +61,7 @@ CREATE TABLE screenhouses (
     address_detail TEXT,
     latitude       DOUBLE PRECISION,
     longitude      DOUBLE PRECISION,
+    tray_count     INTEGER NOT NULL DEFAULT 1 CHECK (tray_count >= 1 AND tray_count <= 20),
     status         VARCHAR(50) DEFAULT 'active',
     created_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

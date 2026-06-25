@@ -18,33 +18,33 @@ import { disconnectSocket } from "../lib/socket";
 
 import { API_URL } from "../config/api";
 
+const MENUS_BY_ROLE = {
+  operator: [
+    { icon: <LayoutDashboard size={17} />, label: "Dashboard", path: "/operator" },
+    { icon: <FileBarChart size={17} />, label: "Laporan Wilayah", path: "/operator/laporan" },
+    { icon: <Map size={17} />, label: "Approval Petani", path: "/operator/approval" },
+  ],
+  petani: [
+    { icon: <LayoutDashboard size={17} />, label: "Dashboard", path: "/petani" },
+    { icon: <Plus size={17} />, label: "Ajukan Screenhouse", path: "/petani/ajukan-screenhouse" },
+    { icon: <TrendingUp size={17} />, label: "Tren Tanah", path: "/petani/tren" },
+  ],
+  super_admin: [
+    { icon: <User size={17} />, label: "Kelola User", path: "/admin/kelola-user" },
+    { icon: <Leaf size={17} />, label: "Kelola Screenhouse", path: "/admin/kelola-screenhouse" },
+    { icon: <SlidersHorizontal size={17} />, label: "Kelola Threshold", path: "/admin/kelola-threshold" },
+    { icon: <Radio size={17} />, label: "Konfigurasi", path: "/admin/konfigurasi" },
+    { icon: <LayoutDashboard size={17} />, label: "Dashboard Operator", path: "/operator" },
+    { icon: <FileBarChart size={17} />, label: "Laporan Wilayah", path: "/operator/laporan" },
+    { icon: <Map size={17} />, label: "Approval Petani", path: "/operator/approval" },
+  ],
+};
+
 function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [footerStats, setFooterStats] = useState({ screenhouseCount: 0, deviceCount: 0 });
+  const [footerStats, setFooterStats] = useState({ screenhouseCount: 0, sinkNodeCount: 0 });
   const [pendingApprovals, setPendingApprovals] = useState(0);
-
-  const menusByRole = {
-    operator: [
-      { icon: <LayoutDashboard size={17} />, label: "Dashboard", path: "/operator" },
-      { icon: <FileBarChart size={17} />, label: "Laporan Wilayah", path: "/operator/laporan" },
-      { icon: <Map size={17} />, label: "Approval Petani", path: "/operator/approval" },
-    ],
-    petani: [
-      { icon: <LayoutDashboard size={17} />, label: "Dashboard", path: "/petani" },
-      { icon: <Plus size={17} />, label: "Ajukan Screenhouse", path: "/petani/ajukan-screenhouse" },
-      { icon: <TrendingUp size={17} />, label: "Tren Tanah", path: "/petani/tren" },
-    ],
-    super_admin: [
-      { icon: <User size={17} />, label: "Kelola User", path: "/admin/kelola-user" },
-      { icon: <Leaf size={17} />, label: "Kelola Screenhouse", path: "/admin/kelola-screenhouse" },
-      { icon: <SlidersHorizontal size={17} />, label: "Kelola Threshold", path: "/admin/kelola-threshold" },
-      { icon: <Radio size={17} />, label: "Konfigurasi", path: "/admin/konfigurasi" },
-      { icon: <LayoutDashboard size={17} />, label: "Dashboard Operator", path: "/operator" },
-      { icon: <FileBarChart size={17} />, label: "Laporan Wilayah", path: "/operator/laporan" },
-      { icon: <Map size={17} />, label: "Approval Petani", path: "/operator/approval" },
-    ],
-  };
 
   const fetchPendingApprovals = useCallback(() => {
     if (role !== "operator" && role !== "super_admin") {
@@ -65,7 +65,7 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
   }, [role]);
 
   const menus = useMemo(() => {
-    const base = menusByRole[role] || menusByRole.operator;
+    const base = MENUS_BY_ROLE[role] || MENUS_BY_ROLE.operator;
     return base.map((item) =>
       item.path === "/operator/approval"
         ? { ...item, badge: pendingApprovals }
@@ -93,7 +93,7 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
     };
   }, [fetchPendingApprovals]);
 
-  useEffect(() => {
+  const fetchFooterStats = useCallback(() => {
     const token = localStorage.getItem("token");
     if (!token) return;
 
@@ -106,7 +106,7 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
           if (data) {
             setFooterStats({
               screenhouseCount: data.screenhouse_count ?? 0,
-              deviceCount: data.device_count ?? 0,
+              sinkNodeCount: data.online_sink_node_count ?? data.sink_node_count ?? 0,
             });
           }
         })
@@ -123,7 +123,7 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
           if (data) {
             setFooterStats({
               screenhouseCount: data.screenhouse_count ?? screenhouses.length,
-              deviceCount: data.active_nodes ?? 0,
+              sinkNodeCount: data.online_nodes ?? data.active_sensors ?? 0,
             });
           }
         })
@@ -131,15 +131,18 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
     }
   }, [role, screenhouses.length]);
 
+  useEffect(() => {
+    fetchFooterStats();
+    const interval = setInterval(fetchFooterStats, 30000);
+    return () => clearInterval(interval);
+  }, [fetchFooterStats]);
+
   const screenhouseCount =
     role === "operator" || role === "super_admin"
       ? footerStats.screenhouseCount
       : screenhouses.length || footerStats.screenhouseCount;
 
-  const deviceCount =
-    role === "operator" || role === "super_admin"
-      ? footerStats.deviceCount
-      : footerStats.deviceCount;
+  const sinkNodeCount = footerStats.sinkNodeCount;
 
   const handleNavigate = (path) => {
     navigate(path);
@@ -253,8 +256,8 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
               <div className="text-2xl font-semibold mt-1">{screenhouseCount}</div>
             </div>
             <div className="bg-white/5 rounded-xl p-3 text-left">
-              <div className="text-xs text-white/40">Device</div>
-              <div className="text-2xl font-semibold mt-1">{deviceCount}</div>
+              <div className="text-xs text-white/40">Sink online</div>
+              <div className="text-2xl font-semibold mt-1">{sinkNodeCount}</div>
             </div>
           </div>
         )}

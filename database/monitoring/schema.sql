@@ -8,8 +8,7 @@
 --   psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring -f database/monitoring/schema.sql
 --
 -- Catatan: screenhouse_registry & threshold_snapshots TIDAK punya FK ke App DB
--- (cross-database). Diisi via `npm run sync:registry` / `npm run seed:map`.
--- DB lama: jalankan migrations/001_sink_nodes_actuators.sql
+-- (cross-database). Diisi via seed / `npm run sync:registry` / `npm run seed:map`.
 -- =========================================
 
 BEGIN;

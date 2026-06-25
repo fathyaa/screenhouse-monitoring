@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { Leaf, MapPin } from "lucide-react";
+import { Leaf, MapPin, Layers } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
 import PetaniTopbar from "../layouts/PetaniTopbar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
@@ -15,13 +15,13 @@ function PetaniAjukanScreenhousePage() {
   const { isOpen: sidebarOpen, toggle: toggleSidebar, close: closeSidebar } = useSidebarOpen();
   const [loading, setLoading] = useState(false);
   const [resolving, setResolving] = useState(false);
-  const [screenhouses, setScreenhouses] = useState([]);
 
   const [screenhouse, setScreenhouse] = useState({
     name: "",
     address_detail: "",
     latitude: null,
     longitude: null,
+    tray_count: 1,
   });
   const [wilayah, setWilayah] = useState(null);
   const [wilayahError, setWilayahError] = useState("");
@@ -68,6 +68,12 @@ function PetaniAjukanScreenhousePage() {
       return;
     }
 
+    const trayCount = Number(screenhouse.tray_count);
+    if (!Number.isInteger(trayCount) || trayCount < 1 || trayCount > 20) {
+      toast.error("Jumlah tray harus antara 1 dan 20");
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/screenhouses/mine`, {
@@ -85,6 +91,7 @@ function PetaniAjukanScreenhousePage() {
           village_id: wilayah.village_id,
           latitude: screenhouse.latitude,
           longitude: screenhouse.longitude,
+          tray_count: trayCount,
         }),
       });
       const data = await res.json();
@@ -107,7 +114,7 @@ function PetaniAjukanScreenhousePage() {
       <Sidebar
         isOpen={sidebarOpen}
         onClose={closeSidebar}
-        screenhouses={screenhouses}
+        screenhouses={[]}
         role={user?.role}
         user={user}
       />
@@ -161,6 +168,28 @@ function PetaniAjukanScreenhousePage() {
                   className="flex-1 bg-transparent outline-none text-sm text-gray-800 resize-none"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                Jumlah tray terpasang
+              </label>
+              <div className="flex items-center gap-2 h-10 px-3 border border-gray-200 rounded-lg bg-gray-50">
+                <Layers size={14} className="text-gray-400 shrink-0" />
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={screenhouse.tray_count}
+                  onChange={(e) =>
+                    setScreenhouse({ ...screenhouse, tray_count: e.target.value })
+                  }
+                  className="flex-1 bg-transparent outline-none text-sm text-gray-800"
+                />
+              </div>
+              <p className="text-[11px] text-gray-400 mt-1">
+                Satu tray = satu sensor node. Operator dapat menyesuaikan saat verifikasi.
+              </p>
             </div>
 
             <LocationPickerMap

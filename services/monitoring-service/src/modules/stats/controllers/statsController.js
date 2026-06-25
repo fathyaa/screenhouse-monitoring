@@ -1,5 +1,21 @@
 const pool = require("../../../config/db");
 
+// Sink dianggap online bila ada tray aktif yang masih kirim telemetri
+// (interval × 3, minimal 15 menit — selaras map-summary & alert worker).
+const ONLINE_SINK_EXISTS = `
+  EXISTS (
+    SELECT 1
+    FROM sensor_nodes sn
+    INNER JOIN sensor_data sd ON sd.sensor_node_id = sn.id
+    WHERE sn.screenhouse_id = sk.screenhouse_id
+      AND sn.is_active = true
+      AND sd.created_at >= NOW() - (
+        GREATEST(GREATEST(COALESCE(sn.send_interval_seconds, 60), 60) * 3, 900)
+        || ' seconds'
+      )::interval
+  )
+`;
+
 async function getOperatorStats(req, res) {
   try {
     const result = await pool.query(
@@ -9,15 +25,22 @@ async function getOperatorStats(req, res) {
            FROM screenhouse_registry
            WHERE status = 'active') AS screenhouse_count,
         (SELECT COUNT(*)::int
-           FROM sensor_nodes
-           WHERE is_active = true) AS device_count
+           FROM sink_nodes
+           WHERE is_active = true) AS sink_node_count,
+        (SELECT COUNT(*)::int
+           FROM sink_nodes sk
+           INNER JOIN screenhouse_registry sr
+             ON sr.screenhouse_id = sk.screenhouse_id AND sr.status = 'active'
+           WHERE sk.is_active = true
+             AND ${ONLINE_SINK_EXISTS}) AS online_sink_node_count
       `
     );
 
     const row = result.rows[0] || {};
     res.json({
       screenhouse_count: row.screenhouse_count ?? 0,
-      device_count: row.device_count ?? 0,
+      sink_node_count: row.sink_node_count ?? 0,
+      online_sink_node_count: row.online_sink_node_count ?? 0,
     });
   } catch (err) {
     console.log(err);
