@@ -43,7 +43,8 @@ Sensor Node (tray) ──radio WSN──► Sink Node (gateway)
                                       ↓ MQTT publish
                                  Mosquitto Broker
                                       ↓ subscribe
-Monitoring Service ──→ screenhouse_monitoring
+Monitoring Service ──→ screenhouse_monitoring  (default: MQTT → DB)
+                    └→ RabbitMQ (sensor-ingest) ──→  (opsional: USE_RABBITMQ=true)
   (sink_nodes, sensor_nodes, sensor_data, actuator_logs, alerts)
     ↓ Redis event bus + WebSocket
 Frontend Dashboard ←── App Service ──→ screenhouse_app (users, screenhouses, thresholds)
@@ -162,6 +163,12 @@ JWT_SECRET=supersecret
 
 REDIS_HOST=localhost
 REDIS_PORT=6379
+
+# Ingest buffer — default off (MQTT → DB). Set true untuk MQTT → RabbitMQ → DB (load test).
+USE_RABBITMQ=false
+RABBITMQ_URL=amqp://screenhouse:screenhouse@localhost:5672
+RABBITMQ_INGEST_QUEUE=sensor-ingest
+RABBITMQ_PREFETCH=20
 ```
 
 ---
@@ -190,6 +197,7 @@ Container yang akan berjalan:
 * `screenhouse-postgres-monitoring` — PostgreSQL Monitoring DB (host port 5433)
 * `screenhouse-redis` — Redis (6379)
 * `screenhouse-mqtt` — Mosquitto MQTT Broker (1883 / 9001)
+* `screenhouse-rabbitmq` — RabbitMQ ingest buffer (5672 / management 15672)
 
 ---
 
@@ -230,6 +238,8 @@ node src/index.js
 cd services/monitoring-service
 node src/index.js
 ```
+
+Pipeline ingest default: **MQTT → DB** (`USE_RABBITMQ=false`). Untuk uji beban dengan buffer antrian, set `USE_RABBITMQ=true` dan jalankan container `rabbitmq`.
 
 ---
 
@@ -405,6 +415,8 @@ Password: 123456
 | PostgreSQL Monitoring (host)  | 5433 |
 | Redis                         | 6379 |
 | MQTT                          | 1883 |
+| RabbitMQ                      | 5672 |
+| RabbitMQ Management           | 15672 |
 
 ---
 
