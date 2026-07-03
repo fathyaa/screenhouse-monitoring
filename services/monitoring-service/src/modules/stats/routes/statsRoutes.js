@@ -4,6 +4,8 @@ const {
   getOperatorStats,
   getOwnerStats,
   getNodeCounts,
+  getIngestStats,
+  resetIngestStats,
 } = require("../controllers/statsController");
 
 const router = express.Router();
@@ -12,5 +14,7 @@ const router = express.Router();
 router.get("/operator", getOperatorStats);
 router.get("/node-counts", getNodeCounts);
 router.get("/owner/:ownerId", getOwnerStats);
+router.get("/ingest", getIngestStats);
+router.post("/ingest/reset", resetIngestStats);
 
 module.exports = router;

@@ -1,4 +1,10 @@
 const pool = require("../../../config/db");
+const { isRabbitMqEnabled } = require("../../../config/rabbitmq");
+const {
+  getIngestMetricsSnapshot,
+  resetIngestMetrics,
+  appendTimeSeriesSample,
+} = require("../../ingest/ingestMetrics");
 
 // Sink dianggap online bila ada tray aktif yang masih kirim telemetri
 // (interval × 3, minimal 15 menit — selaras map-summary & alert worker).
@@ -26,12 +32,14 @@ async function getOperatorStats(req, res) {
            WHERE status = 'active') AS screenhouse_count,
         (SELECT COUNT(*)::int
            FROM sink_nodes
-           WHERE is_active = true) AS sink_node_count,
+           WHERE is_active = true
+             AND node_code NOT LIKE 'LT-%') AS sink_node_count,
         (SELECT COUNT(*)::int
            FROM sink_nodes sk
            INNER JOIN screenhouse_registry sr
              ON sr.screenhouse_id = sk.screenhouse_id AND sr.status = 'active'
            WHERE sk.is_active = true
+             AND sk.node_code NOT LIKE 'LT-%'
              AND ${ONLINE_SINK_EXISTS}) AS online_sink_node_count
       `
     );
@@ -145,8 +153,47 @@ async function getNodeCounts(req, res) {
   }
 }
 
+async function getIngestStats(req, res) {
+  try {
+    let queueDepth = null;
+    if (isRabbitMqEnabled()) {
+      try {
+        const { getChannel, QUEUE_NAME } = require("../../../config/rabbitmq");
+        const ch = await getChannel();
+        const q = await ch.checkQueue(QUEUE_NAME);
+        queueDepth = q.messageCount;
+      } catch {
+        queueDepth = null;
+      }
+    }
+
+    appendTimeSeriesSample({ queueDepth });
+    res.json({
+      ingestMode: isRabbitMqEnabled() ? "rabbitmq" : "direct",
+      ...getIngestMetricsSnapshot(),
+      queueDepth,
+    });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+async function resetIngestStats(req, res) {
+  try {
+    const runId = req.body?.runId ?? req.query?.runId ?? null;
+    resetIngestMetrics(runId);
+    res.json({ ok: true, runId });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
 module.exports = {
   getOperatorStats,
   getOwnerStats,
   getNodeCounts,
+  getIngestStats,
+  resetIngestStats,
 };
