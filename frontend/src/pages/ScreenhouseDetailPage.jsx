@@ -28,6 +28,7 @@ import {
 import Sidebar from "../layouts/Sidebar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import ParamHealthCards from "../components/ParamHealthCards";
+import { ScreenhouseDetailSkeleton } from "../components/LoadingUI";
 import ActuatorControls from "../components/ActuatorControls";
 import {
   evaluateParam,
@@ -38,12 +39,12 @@ import {
 import { EMPTY_VALUE } from "../constants/sensorMetrics";
 
 import { API_URL } from "../config/api";
-import socket from "../lib/socket";
+import { getSocket } from "../lib/socket";
 import {
   isNodeOnline,
   isScreenhouseMonitorOffline,
 } from "../utils/nodeOnline";
-import { getStatusMeta, timeAgo, formatSnapshotTime } from "../constants/screenhouseStatus";
+import { getStatusMeta, timeAgo, formatSnapshotTime, formatLastSensorUpdate } from "../constants/screenhouseStatus";
 import {
   SCREENHOUSE_CHART_GUIDE,
   CHART_LEGEND,
@@ -218,11 +219,18 @@ function NodeCard({ node, threshold }) {
       )}
 
       <div className="px-4 py-2 border-t border-gray-100 flex justify-start text-left">
-        <div className="flex items-center gap-1 text-xs text-gray-400 text-left">
-          <Clock size={11} />
-          {d?.created_at
-            ? `Update ${new Date(d.created_at).toLocaleTimeString("id-ID")}`
-            : "Tidak ada data"}
+        <div
+          className="flex items-center gap-1 text-[11px] text-gray-400 text-left"
+          title={
+            d?.created_at
+              ? new Date(d.created_at).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })
+              : undefined
+          }
+        >
+          <Clock size={11} className="shrink-0" />
+          <span>
+            {d?.created_at ? formatLastSensorUpdate(d.created_at) : "Belum ada data sensor"}
+          </span>
         </div>
       </div>
     </div>
@@ -378,6 +386,9 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
         };
       });
     };
+    const socket = getSocket();
+    if (!socket) return;
+
     socket.on("actuator-update", handler);
     socket.on("sensor-update", handler);
     return () => {
@@ -520,8 +531,31 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
 
   if (loading) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-bl-surface text-left">
-        <div className="text-sm text-gray-500 px-5">Memuat dashboard screenhouse...</div>
+      <div className="app-shell fixed inset-0 flex bg-bl-surface overflow-hidden">
+        <Sidebar
+          isOpen={sidebarOpen}
+          onClose={closeSidebar}
+          screenhouses={screenhouses}
+          role={user.role}
+          user={user}
+        />
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0 text-left">
+          <header className="app-topbar h-14 shrink-0 bg-white border-b border-gray-200 flex items-center gap-3 px-3 z-10">
+            <button
+              onClick={toggleSidebar}
+              className="p-1.5 rounded-lg hover:bg-gray-100 transition shrink-0"
+              aria-label="Toggle sidebar"
+            >
+              <Menu size={20} className="text-gray-500" />
+            </button>
+            <div className="min-w-0 text-left">
+              <div className="text-sm font-semibold text-gray-400">Memuat screenhouse...</div>
+            </div>
+          </header>
+          <div className="flex-1 overflow-y-auto">
+            <ScreenhouseDetailSkeleton />
+          </div>
+        </div>
       </div>
     );
   }

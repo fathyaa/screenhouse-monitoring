@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import { Search, Leaf, ExternalLink } from "lucide-react";
 import AdminPageShell from "../components/AdminPageShell";
 import WilayahFilter, { buildWilayahQuery } from "../components/WilayahFilter";
+import { TableRowsSkeleton } from "../components/LoadingUI";
 
 import { API_URL } from "../config/api";
 
@@ -145,7 +146,7 @@ export default function KelolaScreenhousePage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Memuat...</td></tr>
+                <TableRowsSkeleton rows={6} />
               ) : items.length === 0 ? (
                 <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Tidak ada screenhouse</td></tr>
               ) : (

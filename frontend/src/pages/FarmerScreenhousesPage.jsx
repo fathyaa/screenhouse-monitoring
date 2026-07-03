@@ -5,6 +5,7 @@ import Sidebar from "../layouts/Sidebar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 
 import { API_URL } from "../config/api";
+import { BannerSkeleton, ScreenhouseCardsSkeleton } from "../components/LoadingUI";
 
 function FarmerScreenhousesPage() {
   const { userId } = useParams();
@@ -81,9 +82,10 @@ function FarmerScreenhousesPage() {
           </button>
 
           {loading ? (
-            <div className="bg-white rounded-2xl border border-gray-200 p-6 text-sm text-gray-400">
-              Memuat data...
-            </div>
+            <>
+              <BannerSkeleton />
+              <ScreenhouseCardsSkeleton count={3} />
+            </>
           ) : (
             <>
               <div className="bg-white rounded-2xl border border-gray-200 p-4 flex flex-wrap gap-4 items-center">

@@ -8,6 +8,7 @@ import PetaniTopbar from "../layouts/PetaniTopbar";
 import { pickPrimaryAlert } from "../utils/petaniAlertNav";
 import { isAutoHandledAlert } from "../constants/actuatorRules";
 import PullToRefresh from "../components/PullToRefresh";
+import { AlertListSkeleton, KpiGridSkeleton } from "../components/LoadingUI";
 
 function NotifikasiPage() {
     const navigate = useNavigate();
@@ -24,6 +25,7 @@ function NotifikasiPage() {
         totalCount,
         alertsLoading,
         resolveAlert,
+        resolvingAlertId,
         markAutoHandledAlertsSeen,
         refetchAlerts,
     } = useAlerts();
@@ -105,6 +107,13 @@ function NotifikasiPage() {
 
                 <PullToRefresh onRefresh={refetchAlerts} className="p-4 sm:p-5 space-y-4">
 
+                    {alertsLoading ? (
+                        <>
+                            <KpiGridSkeleton count={3} className="grid-cols-3" />
+                            <AlertListSkeleton count={4} />
+                        </>
+                    ) : (
+                    <>
                     {/* SUMMARY */}
                     <div className="grid grid-cols-3 gap-2 sm:gap-3">
                         {[
@@ -149,12 +158,7 @@ function NotifikasiPage() {
 
                     {/* ALERT LIST */}
                     <div className="space-y-3">
-                        {alertsLoading && (
-                            <div className="text-center py-12 text-gray-400">
-                                <div className="text-sm">Memuat notifikasi...</div>
-                            </div>
-                        )}
-                        {!alertsLoading && filtered.length === 0 && (
+                        {filtered.length === 0 && (
                             <div className="text-center py-12 text-gray-400">
                                 <CheckCircle2 size={32} className="mx-auto mb-3 text-gray-200" />
                                 <div className="text-sm">Tidak ada peringatan</div>
@@ -173,10 +177,11 @@ function NotifikasiPage() {
                                         <button
                                             type="button"
                                             onClick={() => resolveAlert(alert.id)}
-                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-bl-primary hover:bg-bl-primary-hover text-white text-xs font-medium transition"
+                                            disabled={resolvingAlertId === alert.id}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-bl-primary hover:bg-bl-primary-hover text-white text-xs font-medium transition disabled:opacity-50"
                                         >
                                             <CheckCircle2 size={14} />
-                                            Sudah ditangani
+                                            {resolvingAlertId === alert.id ? "Menyimpan..." : "Sudah ditangani"}
                                         </button>
                                     )
                                 ) : null;
@@ -253,6 +258,9 @@ function NotifikasiPage() {
                             );
                         })}
                     </div>
+
+                    </>
+                    )}
 
                 </PullToRefresh>
             </div>

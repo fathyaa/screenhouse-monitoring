@@ -18,6 +18,7 @@ import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import { API_URL } from "../config/api";
 import { SCREENHOUSE_STATUS, STATUS_ORDER } from "../constants/screenhouseStatus";
 import { exportOperatorReportPdf } from "../utils/exportReportPdf";
+import { ChartGridSkeleton, KpiGridSkeleton } from "../components/LoadingUI";
 
 const PERIOD_OPTIONS = [
   { value: 1, label: "24 jam" },
@@ -345,11 +346,11 @@ function OperatorLaporanPage() {
           </div>
 
           {loading ? (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-24 rounded-2xl bg-white border border-gray-200 animate-pulse" />
-              ))}
-            </div>
+            <>
+              <KpiGridSkeleton />
+              <ChartGridSkeleton />
+              <ChartGridSkeleton />
+            </>
           ) : report ? (
             <>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

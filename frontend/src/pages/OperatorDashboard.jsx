@@ -7,7 +7,7 @@ import Sidebar from "../layouts/Sidebar";
 import OperatorTopbar from "../layouts/OperatorTopbar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import { API_URL } from "../config/api";
-import socket from "../lib/socket";
+import { getSocket } from "../lib/socket";
 import { THRESHOLD_METRICS } from "../constants/thresholdMetrics";
 import {
   getStatusMeta,
@@ -15,6 +15,7 @@ import {
   STATUS_ORDER,
   SCREENHOUSE_STATUS,
 } from "../constants/screenhouseStatus";
+import { ListPanelSkeleton, MapLoadingOverlay } from "../components/LoadingUI";
 
 const METRIC_UNIT = Object.fromEntries(
   THRESHOLD_METRICS.map((m) => [m.key, m.unit])
@@ -67,12 +68,15 @@ function OperatorDashboard() {
   const [search, setSearch] = useState("");
   const [mapSummary, setMapSummary] = useState({});
   const [summaryRefreshing, setSummaryRefreshing] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [mapSummaryLoading, setMapSummaryLoading] = useState(true);
   const mapRef = useRef(null);
   const markerRefs = useRef({});
 
   const loadMapSummary = useCallback(async () => {
     try {
       setSummaryRefreshing(true);
+      setMapSummaryLoading(true);
       const res = await fetch(`${API_URL}/sensor-data/map-summary`);
       const data = await res.json();
       if (!Array.isArray(data)) return;
@@ -83,17 +87,21 @@ function OperatorDashboard() {
       console.log(err);
     } finally {
       setSummaryRefreshing(false);
+      setMapSummaryLoading(false);
     }
   }, []);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
 
+    setPageLoading(true);
     fetch(`${API_URL}/screenhouses`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
-      .then(setScreenhouses);
+      .then(setScreenhouses)
+      .catch(console.error)
+      .finally(() => setPageLoading(false));
   }, []);
 
   useEffect(() => {
@@ -137,6 +145,9 @@ function OperatorDashboard() {
     if (document.visibilityState === "visible") {
       startPolling();
     }
+
+    const socket = getSocket();
+    if (!socket) return;
 
     socket.on("sensor-update", scheduleRefresh);
     socket.on("alert-update", scheduleRefresh);
@@ -210,6 +221,11 @@ function OperatorDashboard() {
 
         <div className="flex flex-1 flex-col lg:flex-row overflow-hidden min-h-0">
           <div className="dashboard-map flex-1 relative overflow-hidden min-h-[45dvh] lg:min-h-0 isolate z-0">
+            {(pageLoading || mapSummaryLoading) && (
+              <MapLoadingOverlay
+                message={pageLoading ? "Memuat screenhouse..." : "Memuat status peta..."}
+              />
+            )}
             <MapContainer
               center={[-6.9175, 106.9287]}
               zoom={10}
@@ -229,7 +245,7 @@ function OperatorDashboard() {
 
                 return (
                   <Marker
-                    key={sh.id}
+                    key={`${sh.id}-${status}`}
                     position={[sh.latitude, sh.longitude]}
                     icon={statusIcon(status)}
                     ref={(ref) => {
@@ -412,7 +428,10 @@ function OperatorDashboard() {
               />
             </div>
             <div className="flex-1 overflow-y-auto p-2">
-              {filteredScreenhouses.map((sh, i) => {
+              {pageLoading ? (
+                <ListPanelSkeleton count={8} />
+              ) : (
+              filteredScreenhouses.map((sh, i) => {
                 const status = mapSummary[sh.id]?.status ?? "offline";
                 const meta = getStatusMeta(status);
                 return (
@@ -450,7 +469,8 @@ function OperatorDashboard() {
                     </span>
                   </div>
                 );
-              })}
+              })
+              )}
             </div>
           </div>
         </div>

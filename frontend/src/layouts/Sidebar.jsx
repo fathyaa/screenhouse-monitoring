@@ -12,9 +12,13 @@ import {
   SlidersHorizontal,
   TrendingUp,
   FileBarChart,
+  Bell,
+  BellOff,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { disconnectSocket } from "../lib/socket";
+import { useAlerts } from "../context/AlertContext";
+import { usePushNotifications } from "../context/PushNotificationContext";
 
 import { API_URL } from "../config/api";
 
@@ -26,6 +30,7 @@ const MENUS_BY_ROLE = {
   ],
   petani: [
     { icon: <LayoutDashboard size={17} />, label: "Dashboard", path: "/petani" },
+    { icon: <Bell size={17} />, label: "Peringatan", path: "/petani/peringatan", alertBadge: true },
     { icon: <Plus size={17} />, label: "Ajukan Screenhouse", path: "/petani/ajukan-screenhouse" },
     { icon: <TrendingUp size={17} />, label: "Tren Tanah", path: "/petani/tren" },
   ],
@@ -43,6 +48,8 @@ const MENUS_BY_ROLE = {
 function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { unreadCount } = useAlerts();
+  const { enabled: pushEnabled, loading: pushLoading, toggle: togglePush } = usePushNotifications();
   const [footerStats, setFooterStats] = useState({ screenhouseCount: 0, sinkNodeCount: 0 });
   const [pendingApprovals, setPendingApprovals] = useState(0);
 
@@ -66,12 +73,16 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
 
   const menus = useMemo(() => {
     const base = MENUS_BY_ROLE[role] || MENUS_BY_ROLE.operator;
-    return base.map((item) =>
-      item.path === "/operator/approval"
-        ? { ...item, badge: pendingApprovals }
-        : item
-    );
-  }, [role, pendingApprovals]);
+    return base.map((item) => {
+      if (item.path === "/operator/approval") {
+        return { ...item, badge: pendingApprovals };
+      }
+      if (item.alertBadge) {
+        return { ...item, badge: unreadCount };
+      }
+      return item;
+    });
+  }, [role, pendingApprovals, unreadCount]);
 
   const activePath = menus
     .map((m) => m.path)
@@ -156,6 +167,8 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
     localStorage.removeItem("token");
     localStorage.removeItem("role");
     localStorage.removeItem("user");
+    localStorage.removeItem("push_subscribed");
+    localStorage.removeItem("push_muted");
     window.dispatchEvent(new Event("auth-changed"));
     navigate("/login");
     onClose?.();
@@ -203,8 +216,36 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
       {/* PROFILE */}
       <div className="p-4">
         <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-left">
-          <div className="text-sm font-semibold">{user?.name || "Unknown User"}</div>
-          <div className="text-xs text-white/50 mt-1 capitalize">{role?.replace("_", " ")}</div>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold truncate">{user?.name || "Unknown User"}</div>
+              <div className="text-xs text-white/50 mt-1 capitalize">{role?.replace("_", " ")}</div>
+            </div>
+            {role === "petani" && (
+              <button
+                type="button"
+                onClick={togglePush}
+                disabled={pushLoading}
+                title={
+                  pushEnabled
+                    ? "Notifikasi aktif — klik untuk mute"
+                    : "Notifikasi nonaktif — klik untuk aktifkan"
+                }
+                aria-label={pushEnabled ? "Mute notifikasi" : "Aktifkan notifikasi"}
+                className={`relative shrink-0 p-2 rounded-xl border transition disabled:opacity-50 ${
+                  pushEnabled
+                    ? "bg-bl-primary/20 border-bl-primary/40 text-bl-mint hover:bg-bl-primary/30"
+                    : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10 hover:text-white/60"
+                }`}
+              >
+                {pushEnabled ? (
+                  <Bell size={18} />
+                ) : (
+                  <BellOff size={18} className="opacity-80" />
+                )}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

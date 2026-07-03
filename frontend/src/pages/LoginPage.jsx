@@ -5,9 +5,11 @@ import { API_URL } from "../config/api";
 import { unlockAlertSound } from "../utils/alertSound";
 import AuthHero from "../components/AuthHero";
 import BrandBar from "../components/BrandBar";
+import { LoadingSpinner } from "../components/LoadingUI";
 
 function LoginPage() {
     const [showPassword, setShowPassword] = useState(false);
+    const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
     const [phone_number, setPhone] = useState("");
     const [password, setPassword] = useState("");
@@ -15,6 +17,7 @@ function LoginPage() {
     const handleLogin = async () => {
         const trimmedPhone = phone_number.trim();
 
+        setLoading(true);
         try {
             const response = await fetch(`${API_URL}/auth/login`, {
                 method: "POST",
@@ -67,6 +70,8 @@ function LoginPage() {
         } catch (err) {
             console.error("[login] Network error", err);
             alert("Tidak dapat terhubung ke server. Pastikan app-service (VITE_API_URL) berjalan.");
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -112,8 +117,10 @@ function LoginPage() {
 
                     <button
                         onClick={handleLogin}
-                        className="btn-bl w-full h-10 rounded-lg text-sm">
-                        Masuk
+                        disabled={loading}
+                        className="btn-bl w-full h-10 rounded-lg text-sm flex items-center justify-center gap-2 disabled:opacity-60">
+                        {loading && <LoadingSpinner size={16} className="text-white" />}
+                        {loading ? "Memproses masuk..." : "Masuk"}
                     </button>
                 </div>
 

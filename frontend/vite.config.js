@@ -4,6 +4,24 @@ import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
+  server: {
+    host: true,
+    port: 5174,
+    proxy: {
+      // REST → app-service (hindari hardcode IP WiFi di .env)
+      "/api": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ""),
+      },
+      // Socket.IO → monitoring-service (WebSocket lewat origin Vite yang sama)
+      "/socket.io": {
+        target: "http://127.0.0.1:3001",
+        ws: true,
+        changeOrigin: true,
+      },
+    },
+  },
   plugins: [
     react(),
     tailwindcss(),

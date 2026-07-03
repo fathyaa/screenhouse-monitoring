@@ -6,6 +6,7 @@ import Sidebar from "../layouts/Sidebar";
 import PetaniTopbar from "../layouts/PetaniTopbar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import LocationPickerMap from "../components/LocationPickerMap";
+import { LoadingSpinner } from "../components/LoadingUI";
 import { API_URL } from "../config/api";
 
 function PetaniAjukanScreenhousePage() {
@@ -227,8 +228,9 @@ function PetaniAjukanScreenhousePage() {
               type="button"
               onClick={handleSubmit}
               disabled={loading || resolving}
-              className="w-full h-10 rounded-xl bg-bl-primary hover:bg-bl-primary-hover text-white text-sm font-medium transition disabled:opacity-50"
+              className="w-full h-10 rounded-xl bg-bl-primary hover:bg-bl-primary-hover text-white text-sm font-medium transition disabled:opacity-50 flex items-center justify-center gap-2"
             >
+              {loading && <LoadingSpinner size={16} className="text-white" />}
               {loading ? "Mengirim pengajuan..." : "Kirim pengajuan"}
             </button>
           </div>

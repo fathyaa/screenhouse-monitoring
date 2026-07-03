@@ -1,10 +1,12 @@
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Bell, Menu } from "lucide-react";
+import { ArrowLeft, Bell, BellOff, Menu } from "lucide-react";
 import { useAlerts } from "../context/AlertContext";
+import { usePushNotifications } from "../context/PushNotificationContext";
 
 export default function PetaniTopbar({ onToggleSidebar, title, subtitle, onBack }) {
     const navigate = useNavigate();
     const { unreadCount } = useAlerts();
+    const { enabled: pushEnabled } = usePushNotifications();
 
     return (
         <header className="app-topbar h-14 shrink-0 bg-white border-b border-gray-200 flex items-center justify-between z-10">
@@ -34,10 +36,14 @@ export default function PetaniTopbar({ onToggleSidebar, title, subtitle, onBack 
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 <button
                     onClick={() => navigate("/petani/peringatan")}
-                    title="Peringatan screenhouse"
+                    title={pushEnabled ? "Peringatan screenhouse" : "Notifikasi dimatikan — buka peringatan"}
                     className="relative p-2 rounded-xl hover:bg-gray-100 transition"
                 >
-                    <Bell size={18} className="text-gray-600" />
+                    {pushEnabled ? (
+                        <Bell size={18} className="text-gray-600" />
+                    ) : (
+                        <BellOff size={18} className="text-gray-400" />
+                    )}
                     {unreadCount > 0 && (
                         <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
                             {unreadCount > 9 ? "9+" : unreadCount}

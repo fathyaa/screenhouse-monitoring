@@ -4,6 +4,11 @@ import { ClipboardCheck, Phone, UserCheck, UserX, Menu, Leaf, MapPin, Map, Layer
 import Sidebar from "../layouts/Sidebar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import MapPointPreview from "../components/MapPointPreview";
+import {
+  ApprovalListSkeleton,
+  KpiGridSkeleton,
+  TableRowsSkeleton,
+} from "../components/LoadingUI";
 
 import { API_URL } from "../config/api";
 
@@ -104,12 +109,14 @@ function ApprovalPage() {
     const [shActionId, setShActionId] = useState(null);
     const [mapPreview, setMapPreview] = useState(null);
     const [trayCounts, setTrayCounts] = useState({});
+    const [loading, setLoading] = useState(true);
     const user = JSON.parse(localStorage.getItem("user"));
     const token = localStorage.getItem("token");
 
     const authHeaders = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
 
     const loadData = useCallback(async () => {
+        setLoading(true);
         try {
             const [pendingRes, farmersRes, statsRes, pendingShRes] = await Promise.all([
                 fetch(`${API_URL}/auth/pending`, { headers: authHeaders }),
@@ -144,6 +151,8 @@ function ApprovalPage() {
             window.dispatchEvent(new Event("approval-changed"));
         } catch (err) {
             console.error(err);
+        } finally {
+            setLoading(false);
         }
     }, [authHeaders]);
 
@@ -311,6 +320,21 @@ function ApprovalPage() {
 
                 <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 text-left">
 
+                    {loading ? (
+                        <>
+                            <KpiGridSkeleton count={3} className="grid-cols-3" />
+                            <ApprovalListSkeleton count={2} />
+                            <div className="text-sm font-semibold text-gray-800 text-left">Petani terdaftar</div>
+                            <div className="bg-white rounded-2xl border border-bl-accent/20 overflow-hidden">
+                                <table className="w-full min-w-[720px]">
+                                    <tbody>
+                                        <TableRowsSkeleton rows={5} />
+                                    </tbody>
+                                </table>
+                            </div>
+                        </>
+                    ) : (
+                    <>
                     <div className="grid grid-cols-3 gap-2 sm:gap-3">
                         {[
                             { label: "Menunggu", fullLabel: "Menunggu approval", value: stats.pending, icon: ClipboardCheck, bg: "bg-amber-50", color: "text-amber-700", valColor: "text-amber-700" },
@@ -560,6 +584,9 @@ function ApprovalPage() {
                             </table>
                         </div>
                     </div>
+
+                    </>
+                    )}
 
                 </div>
             </div>

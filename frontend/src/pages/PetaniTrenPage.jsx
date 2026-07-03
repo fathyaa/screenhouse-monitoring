@@ -30,6 +30,11 @@ import {
 import { API_URL } from "../config/api";
 import PullToRefresh from "../components/PullToRefresh";
 import { formatSnapshotTime } from "../constants/screenhouseStatus";
+import {
+  BannerSkeleton,
+  ChartGridSkeleton,
+  Skeleton,
+} from "../components/LoadingUI";
 
 function PetaniTrenPage() {
   const [screenhouses, setScreenhouses] = useState([]);
@@ -38,6 +43,7 @@ function PetaniTrenPage() {
   const [chartHistories, setChartHistories] = useState([]);
   const [chartThreshold, setChartThreshold] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const { isOpen: sidebarOpen, toggle: toggleSidebar, close: closeSidebar } = useSidebarOpen();
 
@@ -50,24 +56,23 @@ function PetaniTrenPage() {
   }, []);
 
   useEffect(() => {
-    fetch(`${API_URL}/screenhouses/my-screenhouses`, { headers })
-      .then((res) => res.json())
-      .then((data) => setScreenhouses(Array.isArray(data) ? data : []))
-      .catch(console.error);
-  }, [refreshKey, headers]);
-
-  useEffect(() => {
-    fetch(`${API_URL}/sensor-data/latest`, { headers })
-      .then((res) => res.json())
-      .then((data) => {
-        if (!Array.isArray(data)) return;
-        const mapped = {};
-        data.forEach((item) => {
-          if (item.screenhouse_id != null) mapped[item.screenhouse_id] = item;
-        });
-        setLatestSensorData(mapped);
+    setPageLoading(true);
+    Promise.all([
+      fetch(`${API_URL}/screenhouses/my-screenhouses`, { headers }).then((res) => res.json()),
+      fetch(`${API_URL}/sensor-data/latest`, { headers }).then((res) => res.json()),
+    ])
+      .then(([shData, latestData]) => {
+        setScreenhouses(Array.isArray(shData) ? shData : []);
+        if (Array.isArray(latestData)) {
+          const mapped = {};
+          latestData.forEach((item) => {
+            if (item.screenhouse_id != null) mapped[item.screenhouse_id] = item;
+          });
+          setLatestSensorData(mapped);
+        }
       })
-      .catch(console.error);
+      .catch(console.error)
+      .finally(() => setPageLoading(false));
   }, [refreshKey, headers]);
 
   useEffect(() => {
@@ -167,6 +172,22 @@ function PetaniTrenPage() {
         />
 
         <PullToRefresh onRefresh={refreshPage} className="p-5 space-y-4 text-left">
+          {pageLoading ? (
+            <>
+              <BannerSkeleton />
+              <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
+                <Skeleton className="h-4 w-40" />
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <Skeleton key={i} className="h-24 rounded-xl" />
+                  ))}
+                </div>
+              </div>
+              <ChartGridSkeleton />
+              <div className="bg-white rounded-2xl border border-gray-200 h-56 animate-pulse" />
+            </>
+          ) : (
+            <>
           <div className="bg-white rounded-2xl border border-gray-200 p-4 text-left">
             <div className="text-sm font-semibold text-gray-800">Ringkasan tren</div>
             <div className="text-xs text-gray-400 mt-0.5">
@@ -189,14 +210,7 @@ function PetaniTrenPage() {
           )}
 
           {loading ? (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              {[1, 2].map((i) => (
-                <div
-                  key={i}
-                  className="bg-white rounded-2xl border border-gray-200 h-72 animate-pulse"
-                />
-              ))}
-            </div>
+            <ChartGridSkeleton />
           ) : (
             <>
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -366,6 +380,8 @@ function PetaniTrenPage() {
                   extra="Arahkan kursor ke garis untuk melihat angka pada jam tertentu."
                 />
               </div>
+            </>
+          )}
             </>
           )}
         </PullToRefresh>

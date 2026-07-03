@@ -1,7 +1,7 @@
-import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import AppToaster from "./components/AppToaster";
 import { AlertProvider } from "./context/AlertContext";
-import PwaInstallBanner from "./components/PwaInstallBanner";
+import { PushNotificationProvider } from "./context/PushNotificationContext";
 import "./App.css";
 
 import OperatorDashboard from "./pages/OperatorDashboard";
@@ -33,12 +33,8 @@ const SUPER_ADMIN = ["super_admin"];
 const OPERATOR = ["operator", "super_admin"];
 
 function AppRoutes() {
-  const location = useLocation();
-  const showPwaBanner = location.pathname.startsWith("/petani");
-
   return (
     <>
-      {showPwaBanner && <PwaInstallBanner />}
       <Routes>
       {/* PUBLIC */}
       <Route path="/" element={<LoginPage />} />
@@ -78,9 +74,11 @@ function App() {
   return (
     <>
       <AppToaster />
-      <AlertProvider>
-        <AppRoutes />
-      </AlertProvider>
+      <PushNotificationProvider>
+        <AlertProvider>
+          <AppRoutes />
+        </AlertProvider>
+      </PushNotificationProvider>
     </>
   );
 }

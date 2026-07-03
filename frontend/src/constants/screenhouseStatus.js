@@ -56,6 +56,29 @@ export function timeAgo(dateStr) {
   return `${day} hari lalu`;
 }
 
+/** Versi relatif untuk label "Terakhir diperbarui 2 menit yang lalu". */
+export function timeAgoLong(dateStr) {
+  const base = timeAgo(dateStr);
+  if (base === "baru saja" || base === "belum ada data") return base;
+  return base.replace(/(\d+) (menit|jam|hari) lalu/, "$1 $2 yang lalu");
+}
+
+/** Label mikro last-updated sensor — jam WIB + relatif untuk bukti monitoring realtime. */
+export function formatLastSensorUpdate(dateStr) {
+  if (!dateStr) return "Belum ada data sensor";
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "Belum ada data sensor";
+
+  const clock = d.toLocaleTimeString("id-ID", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Jakarta",
+  });
+  const relative = timeAgoLong(dateStr);
+
+  return `Terakhir diperbarui ${relative} · ${clock} WIB`;
+}
+
 /** Waktu snapshot untuk label "terakhir diperbarui 16 Jun, 22.15" */
 export function formatSnapshotTime(dateStr) {
   if (!dateStr) return null;

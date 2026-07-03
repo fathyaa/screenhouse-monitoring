@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Leaf, MapPin, ArrowLeft, Layers } from "lucide-react";
+import { LoadingSpinner } from "../components/LoadingUI";
 import LocationPickerMap from "../components/LocationPickerMap";
 
 import { API_URL } from "../config/api";
@@ -296,8 +297,9 @@ function RegisterScreenhousePage() {
             type="button"
             onClick={handleSubmit}
             disabled={loading || resolving}
-            className="w-full h-12 rounded-xl btn-bl text-sm mt-10 disabled:opacity-50"
+            className="w-full h-12 rounded-xl btn-bl text-sm mt-10 disabled:opacity-50 flex items-center justify-center gap-2"
           >
+            {loading && <LoadingSpinner size={16} className="text-white" />}
             {loading ? "Mengirim pendaftaran..." : "Kirim pendaftaran"}
           </button>
 

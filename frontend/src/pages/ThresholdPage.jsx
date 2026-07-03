@@ -4,6 +4,7 @@ import { RotateCcw, Save, Search, SlidersHorizontal } from "lucide-react";
 import AdminPageShell from "../components/AdminPageShell";
 import WilayahFilter, { buildWilayahQuery } from "../components/WilayahFilter";
 import { THRESHOLD_METRICS, DEFAULT_THRESHOLD } from "../constants/thresholdMetrics";
+import { ListPanelSkeleton } from "../components/LoadingUI";
 
 import { API_URL } from "../config/api";
 
@@ -190,7 +191,7 @@ export default function ThresholdPage() {
           )}
           <div className="overflow-y-auto flex-1">
             {loading ? (
-              <div className="p-6 text-center text-sm text-gray-400">Memuat...</div>
+              <ListPanelSkeleton count={8} />
             ) : list.length === 0 ? (
               <div className="p-6 text-center text-sm text-gray-400">Tidak ada screenhouse aktif</div>
             ) : (

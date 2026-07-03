@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from "react";
-import socket, { authenticateSocket } from "../lib/socket";
+import { getSocket, authenticateSocket } from "../lib/socket";
 import toast from "react-hot-toast";
 import { TriangleAlert } from "lucide-react";
 import { ALERT_PARAM_MAP } from "../constants/sensorMetrics";
@@ -8,6 +8,7 @@ import { getAutoHandledNotice, isAutoHandledAlert } from "../constants/actuatorR
 import { loadSeenAutoAlerts, markAutoAlertsSeen } from "../utils/seenAutoAlerts";
 import { installAlertSoundUnlock, playAlertSound } from "../utils/alertSound";
 import { API_URL } from "../config/api";
+import { usePushNotifications } from "./PushNotificationContext";
 
 const AlertContext = createContext(null);
 const TOAST_ID = "alert-notif";
@@ -43,8 +44,10 @@ export function isUnreadAlert(alert, seenAutoAlertIds) {
 }
 
 export function AlertProvider({ children }) {
+  const { enabled: pushEnabled } = usePushNotifications();
   const [alerts, setAlerts] = useState([]);
   const [alertsLoading, setAlertsLoading] = useState(true);
+  const [resolvingAlertId, setResolvingAlertId] = useState(null);
   const [seenAutoAlertIds, setSeenAutoAlertIds] = useState(() => loadSeenAutoAlerts());
   const alertsRef = useRef(alerts);
   alertsRef.current = alerts;
@@ -109,11 +112,16 @@ export function AlertProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    if (localStorage.getItem("role") !== "petani" || !localStorage.getItem("token")) {
+      return;
+    }
+
+    const socket = getSocket();
+    if (!socket) return;
+
     const onConnect = () => {
       const userId = getCurrentUserId();
-      if (userId && localStorage.getItem("role") === "petani") {
-        authenticateSocket(userId);
-      }
+      if (userId) authenticateSocket(userId);
     };
 
     socket.on("connect", onConnect);
@@ -123,8 +131,6 @@ export function AlertProvider({ children }) {
       if (!alertBelongsToCurrentUser(newAlert)) {
         return;
       }
-
-      playAlertSound();
 
       const isEnriched =
         newAlert.actual_nitrogen !== undefined ||
@@ -141,6 +147,10 @@ export function AlertProvider({ children }) {
       } else {
         loadAlerts();
       }
+
+      if (!pushEnabled) return;
+
+      playAlertSound();
 
       toast.dismiss(TOAST_ID);
       const autoNotice = getAutoHandledNotice(newAlert);
@@ -191,9 +201,10 @@ export function AlertProvider({ children }) {
       socket.off("alert-update", handleAlert);
       socket.off("alert-resolved", handleAlertResolved);
     };
-  }, [loadAlerts]);
+  }, [loadAlerts, pushEnabled]);
 
   const resolveAlert = async (alertId) => {
+    setResolvingAlertId(alertId);
     try {
       await fetch(`${API_URL}/alerts/${alertId}/resolve`, {
         method: "PATCH",
@@ -208,6 +219,8 @@ export function AlertProvider({ children }) {
       );
     } catch {
       toast.error("Gagal menandai peringatan sudah ditangani");
+    } finally {
+      setResolvingAlertId(null);
     }
   };
 
@@ -235,6 +248,7 @@ export function AlertProvider({ children }) {
         resolvedCount,
         totalCount,
         alertsLoading,
+        resolvingAlertId,
         resolveAlert,
         markAutoHandledAlertsSeen,
         refetchAlerts: loadAlerts,
@@ -253,6 +267,7 @@ const defaultAlertsContext = {
   resolvedCount: 0,
   totalCount: 0,
   alertsLoading: false,
+  resolvingAlertId: null,
   resolveAlert: async () => {},
   markAutoHandledAlertsSeen: () => {},
   refetchAlerts: async () => {},
