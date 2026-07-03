@@ -6,7 +6,9 @@
     "import": "node import-wilayah-idn.js",
     "import:prune": "node import-wilayah-idn.js --prune-legacy",
     "sync:registry": "node sync-screenhouse-registry.js",
-    "seed:map": "node seed-map-screenhouses.js"
+    "seed:map": "node seed-map-screenhouses.js",
+    "seed:stress": "node seed-stress-test-farmers.js",
+    "seed:stress:dedupe": "node seed-stress-test-farmers.js --dedupe-only"
   },
   "dependencies": {
     "dotenv": "^17.4.2",

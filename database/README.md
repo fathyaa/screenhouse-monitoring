@@ -26,6 +26,7 @@ cd database/scripts && npm install
 npm run import         # wilayah Indonesia → App DB
 npm run sync:registry  # screenhouse + threshold App DB → Monitoring DB
 npm run seed:map       # 30+ screenhouse demo di peta (App + Monitoring DB)
+npm run seed:stress    # 100 screenhouse stress test + petani dummy (selaras load test & UI)
 cd ../..
 ```
 
@@ -60,6 +61,7 @@ Monitoring DB: screenhouse_registry + threshold_snapshots (sync)
 |--------|----------------------|---------------------|
 | 3 screenhouse inti (`seed.sql`) | `SH01-T01`, `SH01-T02`, `SH02-T01`, `SH03-T01` | `SH01-SINK`, `SH02-SINK`, `SH03-SINK` |
 | 30+ titik peta (`npm run seed:map`) | `SHM01-N01`, `SHM02-N01`, … | `SHM01-SINK`, `SHM02-SINK`, … |
+| Stress test + demo UI (`npm run seed:stress`) | `SH04-T01`, `SH05-T01`, … | `SH04-SINK`, `SH05-SINK`, … |
 
 Pola demo inti: `SH` + `screenhouse_id` (2 digit) + `-T` + nomor tray (`01`, `02`, …). Satu sink per screenhouse: `SH01-SINK`, `SH02-SINK`, dst.
 
