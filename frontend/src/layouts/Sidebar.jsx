@@ -9,8 +9,8 @@ import {
   CheckCircle,
   LogOut,
   User,
+  Users,
   SlidersHorizontal,
-  TrendingUp,
   FileBarChart,
   Bell,
   BellOff,
@@ -27,12 +27,13 @@ const MENUS_BY_ROLE = {
     { icon: <LayoutDashboard size={17} />, label: "Dashboard", path: "/operator" },
     { icon: <FileBarChart size={17} />, label: "Laporan Wilayah", path: "/operator/laporan" },
     { icon: <Map size={17} />, label: "Approval Petani", path: "/operator/approval" },
+    { icon: <Users size={17} />, label: "Daftar Petani", path: "/operator/petani" },
   ],
   petani: [
     { icon: <LayoutDashboard size={17} />, label: "Dashboard", path: "/petani" },
     { icon: <Bell size={17} />, label: "Peringatan", path: "/petani/peringatan", alertBadge: true },
     { icon: <Plus size={17} />, label: "Ajukan Screenhouse", path: "/petani/ajukan-screenhouse" },
-    { icon: <TrendingUp size={17} />, label: "Tren Tanah", path: "/petani/tren" },
+    { icon: <FileBarChart size={17} />, label: "Riwayat Semai", path: "/petani/riwayat-semai" },
   ],
   super_admin: [
     { icon: <User size={17} />, label: "Kelola User", path: "/admin/kelola-user" },
@@ -42,6 +43,7 @@ const MENUS_BY_ROLE = {
     { icon: <LayoutDashboard size={17} />, label: "Dashboard Operator", path: "/operator" },
     { icon: <FileBarChart size={17} />, label: "Laporan Wilayah", path: "/operator/laporan" },
     { icon: <Map size={17} />, label: "Approval Petani", path: "/operator/approval" },
+    { icon: <Users size={17} />, label: "Daftar Petani", path: "/operator/petani" },
   ],
 };
 
@@ -50,7 +52,11 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
   const location = useLocation();
   const { unreadCount } = useAlerts();
   const { enabled: pushEnabled, loading: pushLoading, toggle: togglePush } = usePushNotifications();
-  const [footerStats, setFooterStats] = useState({ screenhouseCount: 0, sinkNodeCount: 0 });
+  const [footerStats, setFooterStats] = useState({
+    screenhouseCount: 0,
+    sinkNodeCount: 0,
+    onlineSinkCount: 0,
+  });
   const [pendingApprovals, setPendingApprovals] = useState(0);
 
   const fetchPendingApprovals = useCallback(() => {
@@ -118,6 +124,7 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
             setFooterStats({
               screenhouseCount: data.screenhouse_count ?? 0,
               sinkNodeCount: data.online_sink_node_count ?? data.sink_node_count ?? 0,
+              onlineSinkCount: data.online_sink_node_count ?? 0,
             });
           }
         })
@@ -152,8 +159,6 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
     role === "operator" || role === "super_admin"
       ? footerStats.screenhouseCount
       : screenhouses.length || footerStats.screenhouseCount;
-
-  const sinkNodeCount = footerStats.sinkNodeCount;
 
   const handleNavigate = (path) => {
     navigate(path);
@@ -277,12 +282,16 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
         <>
           <div className="mx-4 border-t border-white/10 mt-4" />
           <div className="p-3 flex flex-col gap-0.5 text-left shrink-0">
-            <p className="text-[10px] uppercase tracking-widest text-white/30 font-medium px-3 py-2">Status</p>
+            <p className="text-[10px] uppercase tracking-widest text-white/30 font-medium px-3 py-2">Status sistem</p>
             <div className="flex items-center gap-3 px-3 py-2 text-sm text-white/55">
-              <CheckCircle size={17} className="text-bl-mint shrink-0" />Realtime aktif
+              <CheckCircle size={17} className="text-bl-mint shrink-0" />
+              {footerStats.screenhouseCount > 0
+                ? `${footerStats.onlineSinkCount}/${footerStats.sinkNodeCount} screenhouse kirim data`
+                : "Menunggu data screenhouse"}
             </div>
             <div className="flex items-center gap-3 px-3 py-2 text-sm text-white/55">
-              <Wifi size={17} className="text-bl-mint shrink-0" />MQTT terhubung
+              <Wifi size={17} className="text-bl-mint shrink-0" />
+              Pembaruan otomatis aktif
             </div>
           </div>
         </>
@@ -293,12 +302,12 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
         {role !== "petani" && (
           <div className="grid grid-cols-2 gap-3 mb-4">
             <div className="bg-white/5 rounded-xl p-3 text-left">
-              <div className="text-xs text-white/40">Screenhouse</div>
+              <div className="text-xs text-white/40">Screenhouse aktif</div>
               <div className="text-2xl font-semibold mt-1">{screenhouseCount}</div>
             </div>
             <div className="bg-white/5 rounded-xl p-3 text-left">
-              <div className="text-xs text-white/40">Sink online</div>
-              <div className="text-2xl font-semibold mt-1">{sinkNodeCount}</div>
+              <div className="text-xs text-white/40">Kirim data 24 jam</div>
+              <div className="text-2xl font-semibold mt-1">{footerStats.onlineSinkCount}</div>
             </div>
           </div>
         )}

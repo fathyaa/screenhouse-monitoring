@@ -6,14 +6,7 @@ import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import { useAlerts } from "../context/AlertContext";
 import PetaniTopbar from "../layouts/PetaniTopbar";
 import ActuatorControls from "../components/ActuatorControls";
-import {
-  getAutoHandledNotice,
-} from "../constants/actuatorRules";
-import {
-  loadDismissedActuatorHints,
-  persistDismissedActuatorHint,
-} from "../utils/dismissedActuatorHints";
-import { getAdviceForAlert, isAlertCritical } from "../constants/paramHealth";
+import DashboardAlertList from "../components/DashboardAlertList";
 
 import { API_URL } from "../config/api";
 import { getSocket } from "../lib/socket";
@@ -23,14 +16,22 @@ import {
   pickPrimaryAlert,
 } from "../utils/petaniAlertNav";
 import { screenhouseMatchesQuery } from "../utils/screenhouseSearch";
-import { formatLastSensorUpdate } from "../constants/screenhouseStatus";
+import {
+  deriveScreenhouseStatus,
+  formatLastSensorUpdate,
+} from "../constants/screenhouseStatus";
 import PullToRefresh from "../components/PullToRefresh";
+import ScreenhouseMiniStats from "../components/ScreenhouseMiniStats";
+import EstimasiTanamPanel from "../components/EstimasiTanamPanel";
+import { FARMER_LABELS } from "../constants/farmerLabels";
 import {
   ScreenhouseCardsSkeleton,
   Skeleton,
 } from "../components/LoadingUI";
 
 const CARD_STATUS_RANK = { critical: 4, warning: 3, offline: 2, pending: 1.5, healthy: 1 };
+/** Search bar baru berguna kalau petani punya banyak screenhouse. */
+const SEARCH_MIN_SCREENHOUSES = 10;
 
 function getScreenhouseCardMeta(sensor, screenhouseAlerts = [], screenhouseStatus = "active") {
   if (screenhouseStatus === "pending") {
@@ -43,11 +44,19 @@ function getScreenhouseCardMeta(sensor, screenhouseAlerts = [], screenhouseStatu
   }
 
   if (screenhouseAlerts.length > 0) {
-    const critical = screenhouseAlerts.some(isAlertCritical);
+    const status = deriveScreenhouseStatus({
+      activeAlertCount: screenhouseAlerts.length,
+    });
     return {
-      status: critical ? "critical" : "warning",
-      rank: critical ? CARD_STATUS_RANK.critical : CARD_STATUS_RANK.warning,
-      chip: { label: "Perlu perhatian", cls: critical ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700" },
+      status,
+      rank: CARD_STATUS_RANK[status],
+      chip: {
+        label: "Perlu perhatian",
+        cls:
+          status === "critical"
+            ? "bg-red-50 text-red-700"
+            : "bg-amber-50 text-amber-700",
+      },
       primaryAlert: pickPrimaryAlert(screenhouseAlerts),
     };
   }
@@ -56,7 +65,7 @@ function getScreenhouseCardMeta(sensor, screenhouseAlerts = [], screenhouseStatu
     return {
       status: "offline",
       rank: CARD_STATUS_RANK.offline,
-      chip: { label: "Tidak ada data", cls: "bg-slate-100 text-slate-500" },
+      chip: { label: FARMER_LABELS.offline, cls: "bg-slate-100 text-slate-600" },
       primaryAlert: null,
     };
   }
@@ -72,9 +81,8 @@ function getScreenhouseCardMeta(sensor, screenhouseAlerts = [], screenhouseStatu
 function PetaniDashboard() {
   const [screenhouses, setScreenhouses] = useState([]);
   const [latestSensorData, setLatestSensorData] = useState({});
-  const [dismissedActuatorHints, setDismissedActuatorHints] = useState(() =>
-    loadDismissedActuatorHints()
-  );
+  const [stressScores, setStressScores] = useState({});
+  const [estimasiTanam, setEstimasiTanam] = useState({});
   const { isOpen: sidebarOpen, toggle: toggleSidebar, close: closeSidebar } = useSidebarOpen();
   const [searchQuery, setSearchQuery] = useState("");
   const [pageLoading, setPageLoading] = useState(true);
@@ -105,6 +113,56 @@ function PetaniDashboard() {
   }, [activeAlerts]);
 
 
+  const loadEstimasiTanam = useCallback(
+    (shList) => {
+      if (!token || !shList?.length) return Promise.resolve();
+      const active = shList.filter((sh) => sh.status === "active");
+      if (!active.length) {
+        setEstimasiTanam({});
+        return Promise.resolve();
+      }
+
+      return Promise.all(
+        active.map((sh) =>
+          fetch(`${API_URL}/screenhouses/${sh.id}/estimasi-tanam`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data) => [sh.id, data])
+            .catch(() => [sh.id, null])
+        )
+      ).then((entries) => {
+        setEstimasiTanam(Object.fromEntries(entries.filter(([, data]) => data)));
+      });
+    },
+    [token]
+  );
+
+  const loadStressScores = useCallback(
+    (shList) => {
+      if (!token || !shList?.length) return Promise.resolve();
+      const active = shList.filter((sh) => sh.status === "active");
+      if (!active.length) {
+        setStressScores({});
+        return Promise.resolve();
+      }
+
+      return Promise.all(
+        active.map((sh) =>
+          fetch(`${API_URL}/screenhouses/${sh.id}/stress-score`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data) => [sh.id, data])
+            .catch(() => [sh.id, null])
+        )
+      ).then((entries) => {
+        setStressScores(Object.fromEntries(entries.filter(([, data]) => data)));
+      });
+    },
+    [token]
+  );
+
   const loadLatestSensorData = useCallback(() => {
     if (!token) return Promise.resolve();
     return fetch(`${API_URL}/sensor-data/latest`, {
@@ -130,27 +188,30 @@ function PetaniDashboard() {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
-      .then((data) => setScreenhouses(Array.isArray(data) ? data : []))
+      .then((data) => {
+        const list = Array.isArray(data) ? data : [];
+        setScreenhouses(list);
+        loadStressScores(list);
+        loadEstimasiTanam(list);
+        return list;
+      })
       .catch(console.error);
-  }, [token]);
+  }, [token, loadStressScores, loadEstimasiTanam]);
 
   const refreshDashboard = useCallback(async () => {
-    await Promise.all([
-      loadScreenhouses(),
-      loadLatestSensorData(),
-      refetchAlerts(),
-    ]);
+    await Promise.all([loadScreenhouses(), loadLatestSensorData()]);
+    refetchAlerts();
   }, [loadScreenhouses, loadLatestSensorData, refetchAlerts]);
 
   useEffect(() => {
     let active = true;
-    refreshDashboard().finally(() => {
+    Promise.all([loadScreenhouses(), loadLatestSensorData()]).finally(() => {
       if (active) setPageLoading(false);
     });
     return () => {
       active = false;
     };
-  }, [refreshDashboard]);
+  }, [loadScreenhouses, loadLatestSensorData]);
 
   useEffect(() => {
     const intervalId = setInterval(loadLatestSensorData, 30000);
@@ -177,13 +238,25 @@ function PetaniDashboard() {
         };
       });
       refetchAlerts();
+      if (update.screenhouse_id) {
+        fetch(`${API_URL}/screenhouses/${update.screenhouse_id}/stress-score`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data) {
+              setStressScores((prev) => ({ ...prev, [update.screenhouse_id]: data }));
+            }
+          })
+          .catch(console.error);
+      }
     };
     const socket = getSocket();
     if (!socket) return;
 
     socket.on("sensor-update", handler);
     return () => socket.off("sensor-update", handler);
-  }, [refetchAlerts]);
+  }, [refetchAlerts, token]);
 
   useEffect(() => {
     const handler = (update) => {
@@ -228,22 +301,7 @@ function PetaniDashboard() {
     });
   }, []);
 
-  const dismissActuatorHint = useCallback((alertId) => {
-    const next = persistDismissedActuatorHint(alertId);
-    setDismissedActuatorHints(new Set(next));
-  }, []);
-
-  const todoItems = useMemo(
-    () =>
-      unreadAlerts.map((a) => ({
-        id: a.id,
-        screenhouseName: a.screenhouse_name,
-        message: a.message,
-        advice: getAdviceForAlert(a),
-        critical: isAlertCritical(a),
-      })),
-    [unreadAlerts]
-  );
+  const showScreenhouseSearch = screenhouses.length > SEARCH_MIN_SCREENHOUSES;
 
   const sortedScreenhouses = useMemo(
     () =>
@@ -297,54 +355,22 @@ function PetaniDashboard() {
             </>
           ) : (
             <>
-          {todoItems.length > 0 && (
-            <div className="bg-white rounded-2xl border border-gray-200 p-4 text-left">
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <div className="text-sm font-semibold text-gray-800">Peringatan aktif</div>
-                <button
-                  type="button"
-                  onClick={() => navigate("/petani/peringatan")}
-                  className="text-xs font-medium text-bl-primary hover:underline"
-                >
-                  Lihat semua
-                </button>
-              </div>
-              <div className="space-y-1.5">
-                {todoItems.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => goToAlert({ alertId: t.id })}
-                    className={`w-full flex items-start gap-2 text-sm rounded-lg px-3 py-2 text-left transition border hover:opacity-90 ${
-                      t.critical
-                        ? "border-red-300 bg-red-50 text-red-950 hover:bg-red-100/70 alert-attention-pulse"
-                        : "border-amber-300 bg-amber-50 text-amber-950 hover:bg-amber-100/70 alert-attention-pulse"
-                    }`}
-                  >
-                    <span
-                      className="mt-1 w-2 h-2 rounded-full shrink-0"
-                      style={{ backgroundColor: t.critical ? "#dc2626" : "#d97706" }}
-                    />
-                    <span>
-                      <span className="font-semibold">{t.screenhouseName}</span>: {t.message}
-                      {t.advice && (
-                        <span className="text-gray-500"> · {t.advice}</span>
-                      )}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
+          {unreadAlerts.length > 0 && (
+            <DashboardAlertList
+              alerts={unreadAlerts}
+              onNavigateAlert={goToAlert}
+              onViewAll={() => navigate("/petani/peringatan")}
+            />
           )}
 
           <div className="text-left space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-gray-800">Screenhouse saya</div>
-                <div className="text-xs text-gray-400 mt-0.5 text-left">
+                <div className="text-xs text-gray-600 mt-0.5 text-left">
                   Yang perlu perhatian ditampilkan paling atas
-                  {searchQuery.trim() && (
-                    <span className="text-gray-500">
+                  {showScreenhouseSearch && searchQuery.trim() && (
+                    <span className="text-gray-600 font-medium">
                       {" "}
                       · {filteredScreenhouses.length} dari {sortedScreenhouses.length} ditampilkan
                     </span>
@@ -354,16 +380,18 @@ function PetaniDashboard() {
               <button
                 type="button"
                 onClick={() => navigate("/petani/ajukan-screenhouse")}
-                className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-xl bg-bl-primary hover:bg-bl-primary-hover text-white text-xs font-medium transition"
+                title="Ajukan pendaftaran screenhouse baru untuk ditinjau operator"
+                className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-bl-primary hover:bg-bl-primary-hover text-white text-xs font-medium transition"
               >
                 <Plus size={14} />
-                Ajukan
+                Ajukan screenhouse baru
               </button>
             </div>
+            {showScreenhouseSearch && (
             <div className="relative">
               <Search
                 size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none"
               />
               <input
                 type="text"
@@ -372,26 +400,27 @@ function PetaniDashboard() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari nama screenhouse..."
-                className="w-full pl-9 pr-9 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-bl-primary/20 focus:border-bl-primary/40"
+                className="w-full pl-9 pr-9 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-800 placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-bl-primary/20 focus:border-bl-primary/40"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 rounded"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-600 p-0.5 rounded"
                   aria-label="Hapus pencarian"
                 >
                   <X size={14} />
                 </button>
               )}
             </div>
+            )}
 
-            {filteredScreenhouses.length === 0 && searchQuery.trim() ? (
-              <div className="text-center py-8 text-sm text-gray-400 bg-white rounded-2xl border border-gray-200">
+            {showScreenhouseSearch && filteredScreenhouses.length === 0 && searchQuery.trim() ? (
+              <div className="text-center py-8 text-sm text-gray-600 bg-white rounded-2xl border border-gray-200">
                 Tidak ada screenhouse yang cocok dengan &ldquo;{searchQuery.trim()}&rdquo;
               </div>
             ) : (
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div className="space-y-3">
                 {filteredScreenhouses.map((sh) => {
               const sensor = latestSensorData[sh.id];
               const shAlerts = alertsByScreenhouse[sh.id] ?? [];
@@ -399,13 +428,6 @@ function PetaniDashboard() {
               const { chip: statusChip, status, primaryAlert } = cardMeta;
               const isPending = sh.status === "pending";
               const needsAttention = isAttentionStatus(status);
-              const autoHandledNotice = primaryAlert
-                ? getAutoHandledNotice(primaryAlert)
-                : null;
-              const showActuatorHint =
-                autoHandledNotice &&
-                primaryAlert &&
-                !dismissedActuatorHints.has(String(primaryAlert.id));
 
               return (
                 <div
@@ -428,19 +450,19 @@ function PetaniDashboard() {
                         disabled={isPending}
                         className={`text-sm font-semibold text-left ${
                           isPending
-                            ? "text-gray-500 cursor-default"
+                            ? "text-gray-600 font-medium cursor-default"
                             : "text-gray-800 hover:text-bl-primary hover:underline"
                         }`}
                       >
                         {sh.name}
                       </button>
                       <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                        <div className="flex items-center gap-1 text-xs text-gray-400">
+                        <div className="flex items-center gap-1 text-xs text-gray-600">
                           <MapPin size={12} />
                           {sh.village}
                         </div>
                         <div
-                          className="flex items-center gap-1 text-[11px] text-gray-400"
+                          className="flex items-center gap-1 text-[11px] text-gray-600"
                           title={
                             sensor?.created_at
                               ? new Date(sensor.created_at).toLocaleString("id-ID", {
@@ -453,13 +475,13 @@ function PetaniDashboard() {
                           <span>
                             {sensor?.created_at
                               ? formatLastSensorUpdate(sensor.created_at)
-                              : "Belum ada data sensor"}
+                              : FARMER_LABELS.noDataHint}
                           </span>
                         </div>
                         {(sh.node_count ?? 0) > 0 && (
-                          <div className="flex items-center gap-1 text-xs text-gray-400">
+                          <div className="flex items-center gap-1 text-xs text-gray-600">
                             <Radio size={12} />
-                            {sh.node_count} node
+                            {FARMER_LABELS.nodeCount(sh.node_count)}
                           </div>
                         )}
                       </div>
@@ -486,37 +508,43 @@ function PetaniDashboard() {
                     )}
                   </div>
 
-                  <div className="px-4 pb-4">
+                  <div className="px-4 pt-4 pb-4">
                     {isPending ? (
                       <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
                         Pengajuan screenhouse menunggu persetujuan operator. Monitoring akan aktif setelah disetujui.
                       </p>
                     ) : (
-                      <>
-                    {showActuatorHint && (
-                      <div className="mb-2 flex items-start gap-2 text-[10px] text-bl-primary bg-bl-surface-muted border border-bl-accent/20 rounded-lg px-2.5 py-1.5">
-                        <span className="flex-1">{autoHandledNotice}</span>
-                        <button
-                          type="button"
-                          onClick={() => dismissActuatorHint(primaryAlert.id)}
-                          className="shrink-0 text-bl-primary hover:text-bl-dark p-0.5 rounded transition"
-                          aria-label="Tutup pesan"
-                        >
-                          <X size={12} />
-                        </button>
+                      <div className="flex flex-col md:flex-row gap-3 md:gap-4 items-stretch">
+                        <div className="flex-1 min-w-0 space-y-2">
+                          <EstimasiTanamPanel
+                            layout="inline"
+                            compact
+                            estimasi={estimasiTanam[sh.id]}
+                            stressScore={stressScores[sh.id]}
+                            varietasNama={sh.varietas_nama || sh.seed_variety}
+                            tanggalSemai={sh.tanggal_semai ?? sh.seedling_start_date}
+                            durasiPembibitanHari={sh.durasi_pembibitan_hari}
+                            deviceOffline={status === "offline"}
+                            showStressScore
+                          />
+                          <ScreenhouseMiniStats sensor={sensor} />
+                        </div>
+                        <div className="md:w-44 lg:w-48 shrink-0 border-t md:border-t-0 md:border-l border-gray-100 pt-3 md:pt-0 md:pl-4">
+                          <div className="text-[10px] uppercase tracking-wide text-gray-600 mb-2 font-semibold">
+                            Kontrol aktuator
+                          </div>
+                          <ActuatorControls
+                            compact
+                            screenhouseId={sh.id}
+                            fan_status={sensor?.fan_status}
+                            irrigation_status={sensor?.irrigation_status}
+                            lamp_status={sensor?.lamp_status}
+                            autoAlerts={shAlerts}
+                            disabled={!sensor}
+                            onUpdated={handleActuatorUpdated}
+                          />
+                        </div>
                       </div>
-                    )}
-                    <ActuatorControls
-                      compact
-                      screenhouseId={sh.id}
-                      sensorNodeId={sensor?.sensor_node_id}
-                      fan_status={sensor?.fan_status}
-                      irrigation_status={sensor?.irrigation_status}
-                      lamp_status={sensor?.lamp_status}
-                      disabled={!sensor}
-                      onUpdated={handleActuatorUpdated}
-                    />
-                      </>
                     )}
                   </div>
                 </div>

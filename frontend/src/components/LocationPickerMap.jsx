@@ -73,7 +73,7 @@ export default function LocationPickerMap({
       <div className="relative">
         <div className="flex gap-2">
           <div className="flex-1 flex items-center gap-2 h-10 px-3 border border-gray-200 rounded-lg bg-gray-50">
-            <Search size={14} className="text-gray-400 shrink-0" />
+            <Search size={14} className="text-gray-600 shrink-0" />
             <input
               type="text"
               value={query}
@@ -109,7 +109,7 @@ export default function LocationPickerMap({
         )}
       </div>
 
-      <p className="text-[11px] text-gray-400">
+      <p className="text-[11px] text-gray-600">
         Cari alamat atau klik peta untuk menandai lokasi. Marker bisa digeser.
       </p>
 

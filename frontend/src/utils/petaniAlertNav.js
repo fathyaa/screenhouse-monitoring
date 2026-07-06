@@ -1,5 +1,6 @@
 import { isAlertCritical } from "../constants/paramHealth";
 import { ALERT_PARAM_MAP } from "../constants/sensorMetrics";
+import { getAlertCategory, ALERT_CATEGORY } from "./alertDisplay";
 
 export function buildPetaniAlertUrl({ alertId, screenhouseId } = {}) {
   const params = new URLSearchParams();
@@ -11,7 +12,9 @@ export function buildPetaniAlertUrl({ alertId, screenhouseId } = {}) {
 
 export function pickPrimaryAlert(alerts = []) {
   if (!alerts.length) return null;
-  return alerts.find(isAlertCritical) ?? alerts[0];
+  const soilAlerts = alerts.filter((a) => getAlertCategory(a) === ALERT_CATEGORY.SOIL);
+  const pool = soilAlerts.length ? soilAlerts : alerts;
+  return pool.find(isAlertCritical) ?? pool[0];
 }
 
 export function findAlertForScreenhouse(alerts, screenhouseId, paramKey = null) {

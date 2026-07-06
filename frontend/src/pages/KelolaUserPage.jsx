@@ -151,7 +151,7 @@ export default function KelolaUserPage() {
     >
       <div className="bg-white rounded-2xl border border-gray-200 p-4 flex flex-wrap gap-3 items-center">
         <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-          <Search size={16} className="text-gray-400 shrink-0" />
+          <Search size={16} className="text-gray-600 shrink-0" />
           <input
             type="text"
             placeholder="Cari nama atau nomor HP..."
@@ -186,13 +186,13 @@ export default function KelolaUserPage() {
         <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
           <Users size={18} className="text-bl-primary" />
           <span className="text-sm font-semibold text-gray-800">Daftar User</span>
-          <span className="text-xs text-gray-400 ml-auto">{users.length} user</span>
+          <span className="text-xs text-gray-600 ml-auto">{users.length} user</span>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead>
-              <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+              <tr className="text-table-head">
                 <th className="px-4 py-3 font-medium">No</th>
                 <th className="px-4 py-3 font-medium">Nama</th>
                 <th className="px-4 py-3 font-medium">No HP</th>
@@ -208,18 +208,18 @@ export default function KelolaUserPage() {
                 <TableRowsSkeleton rows={6} />
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-gray-400">Tidak ada user</td>
+                  <td colSpan={8} className="px-4 py-8 text-center text-gray-600">Tidak ada user</td>
                 </tr>
               ) : (
                 users.map((u, i) => (
                   <tr key={u.id} className="border-t border-gray-100 hover:bg-gray-50/50">
-                    <td className="px-4 py-3 text-gray-400">{i + 1}</td>
+                    <td className="px-4 py-3 text-gray-600">{i + 1}</td>
                     <td className="px-4 py-3 font-medium text-gray-800">{u.name}</td>
                     <td className="px-4 py-3 text-gray-600">{u.phone_number}</td>
                     <td className="px-4 py-3 text-gray-600">{roleLabel(u.role)}</td>
                     <td className="px-4 py-3">{statusBadge(u.status)}</td>
                     <td className="px-4 py-3 text-center text-gray-600">{u.screenhouse_count ?? 0}</td>
-                    <td className="px-4 py-3 text-gray-500">{formatDate(u.created_at)}</td>
+                    <td className="px-4 py-3 text-gray-600 font-medium">{formatDate(u.created_at)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
                         <button
@@ -252,7 +252,7 @@ export default function KelolaUserPage() {
             <h3 className="text-base font-semibold text-gray-800">Edit User</h3>
             <div className="space-y-3">
               <div>
-                <label className="text-xs text-gray-500">Nama</label>
+                <label className="text-xs text-gray-600 font-medium">Nama</label>
                 <input
                   value={editUser.name}
                   onChange={(e) => setEditUser({ ...editUser, name: e.target.value })}
@@ -260,7 +260,7 @@ export default function KelolaUserPage() {
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-500">Role</label>
+                <label className="text-xs text-gray-600 font-medium">Role</label>
                 <select
                   value={editUser.role}
                   onChange={(e) => setEditUser({ ...editUser, role: e.target.value })}
@@ -272,7 +272,7 @@ export default function KelolaUserPage() {
                 </select>
               </div>
               <div>
-                <label className="text-xs text-gray-500">Status</label>
+                <label className="text-xs text-gray-600 font-medium">Status</label>
                 <select
                   value={editUser.status}
                   onChange={(e) => setEditUser({ ...editUser, status: e.target.value })}
@@ -302,7 +302,7 @@ export default function KelolaUserPage() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-md p-6 space-y-4 text-left">
             <h3 className="text-base font-semibold text-gray-800">Reset Password</h3>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-600 font-medium">
               Set password baru untuk <span className="font-medium text-gray-800">{resetUser.name}</span>
             </p>
             <input

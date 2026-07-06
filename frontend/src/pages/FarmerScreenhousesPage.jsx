@@ -28,7 +28,7 @@ function FarmerScreenhousesPage() {
       })
       .catch(() => {
         alert("Gagal memuat data petani");
-        navigate("/operator/approval");
+        navigate("/operator/petani");
       })
       .finally(() => setLoading(false));
   }, [userId, token, navigate]);
@@ -60,11 +60,11 @@ function FarmerScreenhousesPage() {
               className="p-1.5 rounded-lg hover:bg-gray-100 transition shrink-0"
               aria-label="Toggle sidebar"
             >
-              <Menu size={20} className="text-gray-500" />
+              <Menu size={20} className="text-gray-600 font-medium" />
             </button>
             <div className="min-w-0">
               <div className="text-sm font-semibold text-gray-800 truncate">Screenhouse milik petani</div>
-              <div className="text-xs text-gray-400 truncate">
+              <div className="text-xs text-gray-600 truncate">
                 {farmer?.name ? `Daftar screenhouse ${farmer.name}` : "Memuat..."}
               </div>
             </div>
@@ -74,11 +74,11 @@ function FarmerScreenhousesPage() {
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           <button
             type="button"
-            onClick={() => navigate("/operator/approval")}
-            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700"
+            onClick={() => navigate("/operator/petani")}
+            className="flex items-center gap-1.5 text-xs text-gray-600 font-medium hover:text-gray-800"
           >
             <ArrowLeft size={14} />
-            Kembali ke approval
+            Kembali ke daftar petani
           </button>
 
           {loading ? (
@@ -94,12 +94,12 @@ function FarmerScreenhousesPage() {
                 </div>
                 <div className="flex-1 min-w-[200px]">
                   <div className="text-sm font-semibold text-gray-800">{farmer.name}</div>
-                  <div className="flex items-center gap-1.5 text-xs text-gray-500 mt-1">
+                  <div className="flex items-center gap-1.5 text-xs text-gray-600 font-medium mt-1">
                     <Phone size={12} />
                     {farmer.phone_number}
                   </div>
                 </div>
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-gray-600 font-medium">
                   Terdaftar {formatDate(farmer.created_at)}
                 </div>
                 <div className="text-xs font-medium text-gray-600">
@@ -109,7 +109,7 @@ function FarmerScreenhousesPage() {
 
               <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
                 {screenhouses.length === 0 ? (
-                  <div className="p-6 text-sm text-gray-400">
+                  <div className="p-6 text-sm text-gray-600">
                     Petani ini belum memiliki screenhouse aktif
                   </div>
                 ) : (
@@ -134,19 +134,19 @@ function FarmerScreenhousesPage() {
                               </span>
                             </div>
                             {sh.address_detail && (
-                              <div className="text-xs text-gray-500 mt-1">{sh.address_detail}</div>
+                              <div className="text-xs text-gray-600 font-medium mt-1">{sh.address_detail}</div>
                             )}
-                            <div className="text-xs text-gray-500 mt-1">
+                            <div className="text-xs text-gray-600 font-medium mt-1">
                               {[sh.village, sh.district, sh.regency, sh.province].filter(Boolean).join(", ")}
                             </div>
                             {sh.latitude != null && sh.longitude != null && (
-                              <div className="flex items-center gap-1 text-[11px] text-gray-400 mt-1">
+                              <div className="flex items-center gap-1 text-[11px] text-gray-600 mt-1">
                                 <MapPin size={11} />
                                 {Number(sh.latitude).toFixed(5)}, {Number(sh.longitude).toFixed(5)}
                               </div>
                             )}
                           </div>
-                          <ChevronRight size={18} className="text-gray-300 shrink-0 mt-1" />
+                          <ChevronRight size={18} className="text-gray-500 shrink-0 mt-1" />
                         </button>
                       );
                     })}

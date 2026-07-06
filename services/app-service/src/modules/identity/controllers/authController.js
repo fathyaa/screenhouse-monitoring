@@ -6,6 +6,8 @@ const {
   activateScreenhouseRecord,
   postActivationProvisioning,
 } = require("../../../shared/provisionScreenhouse");
+const { resolveVarietasId } = require("../../../shared/varietasThreshold");
+const { validateIndonesianPhone } = require("../../../shared/phoneNumber");
 
 function logAuth(event, detail = {}) {
   const payload = { event, ...detail, at: new Date().toISOString() };
@@ -53,10 +55,21 @@ async function register(req, res) {
       return res.status(400).json({ message: "Jumlah tray harus bilangan bulat antara 1 dan 20" });
     }
 
+    if (!screenhouse.varietas_id) {
+      return res.status(400).json({ message: "Varietas bibit wajib dipilih" });
+    }
+
+    const phoneCheck = validateIndonesianPhone(phone_number);
+    if (!phoneCheck.ok) {
+      return res.status(400).json({ message: phoneCheck.message });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
-    const trimmedPhone = phone_number.trim();
+    const trimmedPhone = phoneCheck.normalized;
 
     await client.query("BEGIN");
+
+    const varietas = await resolveVarietasId(client, screenhouse.varietas_id);
 
     const existingUserResult = await client.query(
       `SELECT id, name, phone_number, role, status FROM users WHERE phone_number = $1`,
@@ -111,10 +124,12 @@ async function register(req, res) {
             latitude,
             longitude,
             tray_count,
+            varietas_id,
+            seed_variety,
             status
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending')
-          RETURNING id, name, latitude, longitude, tray_count, status
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pending')
+          RETURNING id, name, latitude, longitude, tray_count, varietas_id, status
         `,
         [
           screenhouse.name.trim(),
@@ -127,6 +142,8 @@ async function register(req, res) {
           Number(screenhouse.latitude),
           Number(screenhouse.longitude),
           trayCount,
+          varietas.id,
+          varietas.nama,
         ]
       );
 
@@ -160,10 +177,12 @@ async function register(req, res) {
             latitude,
             longitude,
             tray_count,
+            varietas_id,
+            seed_variety,
             status
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending')
-          RETURNING id, name, latitude, longitude, tray_count, status
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pending')
+          RETURNING id, name, latitude, longitude, tray_count, varietas_id, status
         `,
         [
           screenhouse.name.trim(),
@@ -176,6 +195,8 @@ async function register(req, res) {
           Number(screenhouse.latitude),
           Number(screenhouse.longitude),
           trayCount,
+          varietas.id,
+          varietas.nama,
         ]
       );
 
@@ -194,6 +215,10 @@ async function register(req, res) {
     });
   } catch (err) {
     await client.query("ROLLBACK");
+
+    if (err.status === 400) {
+      return res.status(400).json({ message: err.message });
+    }
 
     if (err.code === "23505") {
       return res.status(409).json({ message: "Nomor HP sudah terdaftar" });
@@ -321,11 +346,16 @@ async function approveUser(req, res) {
   try {
     const userId = req.params.id;
     const trayOverride = req.body?.tray_count != null ? parseTrayCount(req.body.tray_count) : null;
+    const varietasOverride = req.body?.varietas_id != null ? Number(req.body.varietas_id) : null;
     if (req.body?.tray_count != null && trayOverride == null) {
       return res.status(400).json({ message: "Jumlah tray harus bilangan bulat antara 1 dan 20" });
     }
 
     await client.query("BEGIN");
+
+    if (varietasOverride != null) {
+      await resolveVarietasId(client, varietasOverride);
+    }
 
     const result = await client.query(
       `
@@ -342,7 +372,7 @@ async function approveUser(req, res) {
 
     const pendingScreenhouses = await client.query(
       `
-        SELECT id, name, owner_user_id, tray_count
+        SELECT id, name, owner_user_id, tray_count, varietas_id
         FROM screenhouses
         WHERE owner_user_id = $1 AND status = 'pending'
         `,
@@ -351,6 +381,17 @@ async function approveUser(req, res) {
 
     const activated = [];
     for (const row of pendingScreenhouses.rows) {
+      if (varietasOverride != null) {
+        await client.query(
+          `
+          UPDATE screenhouses
+          SET varietas_id = $1,
+              seed_variety = (SELECT nama FROM varietas_bibit WHERE id = $1)
+          WHERE id = $2
+          `,
+          [varietasOverride, row.id]
+        );
+      }
       const effectiveTray = trayOverride ?? row.tray_count ?? 1;
       const sh = await activateScreenhouseRecord(client, row.id, effectiveTray);
       if (sh) activated.push(sh);
@@ -373,6 +414,9 @@ async function approveUser(req, res) {
     });
   } catch (err) {
     await client.query("ROLLBACK");
+    if (err.status === 400) {
+      return res.status(400).json({ message: err.message });
+    }
     logAuth("approve_error", { level: "error", message: err.message });
     res.status(500).json({ message: "Internal server error" });
   } finally {
@@ -471,6 +515,10 @@ async function getPendingUsers(req, res) {
           sh.latitude,
           sh.longitude,
           sh.tray_count,
+          sh.varietas_id,
+          vb.nama AS varietas_nama,
+          vb.durasi_pembibitan_hari,
+          vb.sumber_referensi,
           p.name AS province,
           r.name AS regency,
           d.name AS district,
@@ -489,6 +537,7 @@ async function getPendingUsers(req, res) {
         LEFT JOIN regencies r ON sh.regency_id = r.id
         LEFT JOIN districts d ON sh.district_id = d.id
         LEFT JOIN villages v ON sh.village_id = v.id
+        LEFT JOIN varietas_bibit vb ON sh.varietas_id = vb.id
         WHERE u.status = 'pending'
         ORDER BY u.created_at DESC
         `

@@ -16,7 +16,7 @@ export default function PetaniTopbar({ onToggleSidebar, title, subtitle, onBack 
                     className="p-1.5 rounded-lg hover:bg-gray-100 transition shrink-0"
                     aria-label="Toggle sidebar"
                 >
-                    <Menu size={20} className="text-gray-500" />
+                    <Menu size={20} className="icon-muted" />
                 </button>
                 {onBack && (
                     <button
@@ -24,12 +24,12 @@ export default function PetaniTopbar({ onToggleSidebar, title, subtitle, onBack 
                         className="p-1.5 rounded-lg hover:bg-gray-100 transition shrink-0"
                         aria-label="Kembali"
                     >
-                        <ArrowLeft size={20} className="text-gray-500" />
+                        <ArrowLeft size={20} className="icon-muted" />
                     </button>
                 )}
                 <div className="min-w-0">
                     <div className="text-sm font-semibold text-gray-800 truncate">{title}</div>
-                    <div className="text-xs text-gray-400 truncate hidden sm:block">{subtitle}</div>
+                    <div className="text-xs text-gray-600 truncate hidden sm:block">{subtitle}</div>
                 </div>
             </div>
 
@@ -42,7 +42,7 @@ export default function PetaniTopbar({ onToggleSidebar, title, subtitle, onBack 
                     {pushEnabled ? (
                         <Bell size={18} className="text-gray-600" />
                     ) : (
-                        <BellOff size={18} className="text-gray-400" />
+                        <BellOff size={18} className="text-gray-600" />
                     )}
                     {unreadCount > 0 && (
                         <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">

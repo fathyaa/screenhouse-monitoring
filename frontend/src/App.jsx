@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useParams } from "react-router-dom";
 import AppToaster from "./components/AppToaster";
 import { AlertProvider } from "./context/AlertContext";
 import { PushNotificationProvider } from "./context/PushNotificationContext";
@@ -8,9 +8,11 @@ import OperatorDashboard from "./pages/OperatorDashboard";
 import OperatorLaporanPage from "./pages/OperatorLaporanPage";
 import ScreenhouseDetailPage from "./pages/ScreenhouseDetailPage";
 import PetaniDashboard from "./pages/PetaniDashboard";
-import PetaniTrenPage from "./pages/PetaniTrenPage";
+import PetaniRiwayatSemaiPage from "./pages/PetaniRiwayatSemaiPage";
+import SemaiCycleDetailPage from "./pages/SemaiCycleDetailPage";
 import NotifikasiPage from "./pages/NotifikasiPage";
 import ApprovalPage from "./pages/ApprovalPage";
+import DaftarPetaniPage from "./pages/DaftarPetaniPage";
 import FarmerScreenhousesPage from "./pages/FarmerScreenhousesPage";
 import ThresholdPage from "./pages/ThresholdPage";
 import KelolaUserPage from "./pages/KelolaUserPage";
@@ -32,6 +34,11 @@ function PrivateRoute({ children, allowedRole, allowedRoles }) {
 const SUPER_ADMIN = ["super_admin"];
 const OPERATOR = ["operator", "super_admin"];
 
+function RedirectLegacyFarmerPath() {
+  const { userId } = useParams();
+  return <Navigate to={`/operator/petani/${userId}`} replace />;
+}
+
 function AppRoutes() {
   return (
     <>
@@ -44,7 +51,9 @@ function AppRoutes() {
 
       {/* PETANI */}
       <Route path="/petani" element={<PrivateRoute allowedRole="petani"><PetaniDashboard /></PrivateRoute>} />
-      <Route path="/petani/tren" element={<PrivateRoute allowedRole="petani"><PetaniTrenPage /></PrivateRoute>} />
+      <Route path="/petani/riwayat-semai" element={<PrivateRoute allowedRole="petani"><PetaniRiwayatSemaiPage /></PrivateRoute>} />
+      <Route path="/petani/riwayat-semai/:screenhouseId/:cycleId" element={<PrivateRoute allowedRole="petani"><SemaiCycleDetailPage /></PrivateRoute>} />
+      <Route path="/petani/tren" element={<Navigate to="/petani/riwayat-semai" replace />} />
       <Route path="/petani/screenhouse/:id" element={<PrivateRoute allowedRole="petani"><ScreenhouseDetailPage basePath="/petani" /></PrivateRoute>} />
       <Route path="/petani/ajukan-screenhouse" element={<PrivateRoute allowedRole="petani"><PetaniAjukanScreenhousePage /></PrivateRoute>} />
       <Route path="/petani/peringatan" element={<PrivateRoute allowedRole="petani"><NotifikasiPage /></PrivateRoute>} />
@@ -55,7 +64,9 @@ function AppRoutes() {
       <Route path="/operator/laporan" element={<PrivateRoute allowedRoles={OPERATOR}><OperatorLaporanPage /></PrivateRoute>} />
       <Route path="/operator/screenhouse/:id" element={<PrivateRoute allowedRoles={OPERATOR}><ScreenhouseDetailPage basePath="/operator" /></PrivateRoute>} />
       <Route path="/operator/approval" element={<PrivateRoute allowedRoles={OPERATOR}><ApprovalPage /></PrivateRoute>} />
-      <Route path="/operator/approval/petani/:userId" element={<PrivateRoute allowedRoles={OPERATOR}><FarmerScreenhousesPage /></PrivateRoute>} />
+      <Route path="/operator/petani" element={<PrivateRoute allowedRoles={OPERATOR}><DaftarPetaniPage /></PrivateRoute>} />
+      <Route path="/operator/petani/:userId" element={<PrivateRoute allowedRoles={OPERATOR}><FarmerScreenhousesPage /></PrivateRoute>} />
+      <Route path="/operator/approval/petani/:userId" element={<RedirectLegacyFarmerPath />} />
 
       {/* SUPER ADMIN */}
       <Route path="/admin/kelola-user" element={<PrivateRoute allowedRoles={SUPER_ADMIN}><KelolaUserPage /></PrivateRoute>} />

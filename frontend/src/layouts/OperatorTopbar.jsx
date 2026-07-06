@@ -11,7 +11,9 @@ export default function OperatorTopbar({
   title,
   subtitle,
   onExport,
+  onExportCsv,
   exportDisabled,
+  exportCsvDisabled,
 }) {
   return (
     <header className="app-topbar h-14 shrink-0 bg-white border-b border-gray-200 flex items-center justify-between z-10 gap-3">
@@ -21,12 +23,12 @@ export default function OperatorTopbar({
           className="p-1.5 rounded-lg hover:bg-gray-100 transition shrink-0"
           aria-label="Toggle sidebar"
         >
-          <Menu size={20} className="text-gray-500" />
+          <Menu size={20} className="icon-muted" />
         </button>
         <div className="min-w-0">
           <div className="text-sm font-semibold text-gray-800 truncate">{title}</div>
           {subtitle && (
-            <div className="text-xs text-gray-400 truncate hidden sm:block">{subtitle}</div>
+            <div className="text-xs text-gray-600 truncate hidden sm:block">{subtitle}</div>
           )}
         </div>
       </div>
@@ -42,7 +44,7 @@ export default function OperatorTopbar({
                 `px-3 py-1.5 rounded-lg text-xs font-medium transition ${
                   isActive
                     ? "bg-white text-emerald-800 shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
+                    : "text-gray-600 hover:text-gray-800"
                 }`
               }
             >
@@ -59,7 +61,19 @@ export default function OperatorTopbar({
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
           >
             <Download size={14} />
-            <span className="hidden sm:inline">Unduh PDF</span>
+            <span className="hidden sm:inline">PDF</span>
+          </button>
+        )}
+
+        {onExportCsv && (
+          <button
+            type="button"
+            onClick={onExportCsv}
+            disabled={exportCsvDisabled ?? exportDisabled}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+          >
+            <Download size={14} />
+            <span className="hidden sm:inline">CSV</span>
           </button>
         )}
 

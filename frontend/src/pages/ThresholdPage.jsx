@@ -4,6 +4,7 @@ import { RotateCcw, Save, Search, SlidersHorizontal } from "lucide-react";
 import AdminPageShell from "../components/AdminPageShell";
 import WilayahFilter, { buildWilayahQuery } from "../components/WilayahFilter";
 import { THRESHOLD_METRICS, DEFAULT_THRESHOLD } from "../constants/thresholdMetrics";
+import { formatVarietasSourceLabel } from "../constants/varietasThresholdHints";
 import { ListPanelSkeleton } from "../components/LoadingUI";
 
 import { API_URL } from "../config/api";
@@ -155,7 +156,7 @@ export default function ThresholdPage() {
       <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
         <WilayahFilter value={wilayah} onChange={setWilayah} />
         <div className="flex items-center gap-2">
-          <Search size={16} className="text-gray-400 shrink-0" />
+          <Search size={16} className="text-gray-600 shrink-0" />
           <input
             type="text"
             placeholder="Cari nama screenhouse atau pemilik..."
@@ -171,7 +172,7 @@ export default function ThresholdPage() {
           <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2 shrink-0">
             <SlidersHorizontal size={16} className="text-bl-primary" />
             <span className="text-sm font-semibold text-gray-800">Screenhouse</span>
-            <span className="text-xs text-gray-400 ml-auto">{checkedIds.size}/{list.length}</span>
+            <span className="text-xs text-gray-600 ml-auto">{checkedIds.size}/{list.length}</span>
           </div>
           {list.length > 0 && (
             <label className="flex items-center gap-2.5 px-4 py-2.5 border-b border-gray-100 bg-gray-50/80 cursor-pointer text-left">
@@ -193,7 +194,7 @@ export default function ThresholdPage() {
             {loading ? (
               <ListPanelSkeleton count={8} />
             ) : list.length === 0 ? (
-              <div className="p-6 text-center text-sm text-gray-400">Tidak ada screenhouse aktif</div>
+              <div className="p-6 text-center text-sm text-gray-600">Tidak ada screenhouse aktif</div>
             ) : (
               list.map((row) => {
                 const active = row.screenhouse_id === selectedId;
@@ -218,8 +219,8 @@ export default function ThresholdPage() {
                       className="flex-1 min-w-0 text-left"
                     >
                       <div className="text-sm font-medium text-gray-800">{row.screenhouse_name}</div>
-                      <div className="text-xs text-gray-500 mt-0.5">{row.owner_name}</div>
-                      <div className="text-[10px] text-gray-400 mt-1">
+                      <div className="text-xs text-gray-600 font-medium mt-0.5">{row.owner_name}</div>
+                      <div className="text-[11px] text-gray-600 font-medium mt-1">
                         {[row.village, row.district, row.regency].filter(Boolean).join(", ")}
                       </div>
                       {!hasThreshold && (
@@ -240,20 +241,33 @@ export default function ThresholdPage() {
             <>
               <div className="bg-white rounded-2xl border border-gray-200 px-4 py-3 text-left">
                 <div className="text-sm font-semibold text-gray-800">{selected.screenhouse_name}</div>
-                <div className="text-xs text-gray-500 mt-0.5">
+                <div className="text-xs text-gray-600 font-medium mt-0.5">
                   {selected.owner_name} · {[selected.village, selected.district, selected.regency].filter(Boolean).join(", ")}
                 </div>
+                {formatVarietasSourceLabel(
+                  selected.varietas_nama,
+                  selected.varietas_sumber,
+                  selected.manual_override
+                ) && (
+                  <p className="text-xs text-bl-primary mt-2 font-medium">
+                    {formatVarietasSourceLabel(
+                      selected.varietas_nama,
+                      selected.varietas_sumber,
+                      selected.manual_override
+                    )}
+                  </p>
+                )}
               </div>
 
               {THRESHOLD_METRICS.map((m) => (
                 <div key={m.key} className="bg-white rounded-2xl border border-gray-200 p-4 flex items-center gap-4">
                   <div className="flex-1 min-w-0 text-left">
                     <div className="text-sm font-semibold text-gray-800">{m.label}</div>
-                    <div className="text-xs text-gray-400 mt-0.5">Satuan: {m.unit}</div>
+                    <div className="text-xs text-gray-600 mt-0.5">Satuan: {m.unit}</div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <div className="flex flex-col gap-1">
-                      <div className="text-[10px] uppercase tracking-wide text-gray-400">Min</div>
+                      <div className="text-[10px] uppercase tracking-wide text-gray-600">Min</div>
                       <input
                         type="number"
                         step="any"
@@ -262,9 +276,9 @@ export default function ThresholdPage() {
                         className="w-20 h-8 rounded-lg border border-gray-200 bg-gray-50 px-2 text-sm font-semibold text-gray-800 outline-none focus:ring-1 focus:ring-green-300 text-center"
                       />
                     </div>
-                    <div className="text-gray-400 text-xs mt-4 font-medium">s/d</div>
+                    <div className="text-gray-600 text-xs mt-4 font-medium">s/d</div>
                     <div className="flex flex-col gap-1">
-                      <div className="text-[10px] uppercase tracking-wide text-gray-400">Maks</div>
+                      <div className="text-[10px] uppercase tracking-wide text-gray-600">Maks</div>
                       <input
                         type="number"
                         step="any"
@@ -273,7 +287,7 @@ export default function ThresholdPage() {
                         className="w-20 h-8 rounded-lg border border-gray-200 bg-gray-50 px-2 text-sm font-semibold text-gray-800 outline-none focus:ring-1 focus:ring-green-300 text-center"
                       />
                     </div>
-                    <div className="text-xs text-gray-400 mt-4">{m.unit}</div>
+                    <div className="text-xs text-gray-600 mt-4">{m.unit}</div>
                   </div>
                 </div>
               ))}
@@ -286,7 +300,7 @@ export default function ThresholdPage() {
               )}
 
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-1">
-                <div className="text-xs text-gray-400">
+                <div className="text-xs text-gray-600">
                   {saveTargets.length > 0
                     ? `Akan disimpan ke ${saveTargets.length} screenhouse`
                     : "Centang screenhouse di daftar kiri"}
@@ -314,7 +328,7 @@ export default function ThresholdPage() {
               </div>
             </>
           ) : (
-            <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center text-sm text-gray-400">
+            <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center text-sm text-gray-600">
               Pilih screenhouse dari daftar di sebelah kiri
             </div>
           )}

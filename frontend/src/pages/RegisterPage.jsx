@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { User, Phone, Lock } from "lucide-react";
 import AuthHero from "../components/AuthHero";
 import BrandBar from "../components/BrandBar";
+import { sanitizePhoneInput, validateIndonesianPhone } from "../utils/phoneNumber";
 
 const PENDING_KEY = "pendingRegister";
 
@@ -31,11 +32,25 @@ function RegisterPage() {
         }
     }, []);
 
+    const [phoneError, setPhoneError] = useState("");
+
     const handleChange = (e) => {
-        setForm({
-            ...form,
-            [e.target.name]: e.target.value,
-        });
+        const { name, value } = e.target;
+        if (name === "phone_number") {
+            setPhoneError("");
+            setForm({ ...form, phone_number: sanitizePhoneInput(value) });
+            return;
+        }
+        setForm({ ...form, [name]: value });
+    };
+
+    const handlePhoneBlur = () => {
+        if (!form.phone_number.trim()) {
+            setPhoneError("");
+            return;
+        }
+        const result = validateIndonesianPhone(form.phone_number);
+        if (!result.ok) setPhoneError(result.message);
     };
 
     const handleContinue = () => {
@@ -49,9 +64,16 @@ function RegisterPage() {
             return;
         }
 
+        const phoneResult = validateIndonesianPhone(form.phone_number);
+        if (!phoneResult.ok) {
+            setPhoneError(phoneResult.message);
+            alert(phoneResult.message);
+            return;
+        }
+
         let payload = {
             name: form.name.trim(),
-            phone_number: form.phone_number.trim(),
+            phone_number: phoneResult.normalized,
             password: form.password,
         };
 
@@ -90,7 +112,7 @@ function RegisterPage() {
                     Daftar akun petani
                 </div>
 
-                <div className="text-xs text-gray-400 mt-1 mb-5">
+                <div className="text-xs text-gray-600 mt-1 mb-5">
                     Isi data diri untuk mendaftar ke BibitLive
                 </div>
 
@@ -98,12 +120,12 @@ function RegisterPage() {
 
                     {/* NAMA */}
                     <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                        <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                             Nama lengkap
                         </label>
 
                         <div className="flex items-center gap-2 h-10 px-3 border border-gray-200 rounded-lg bg-gray-50">
-                            <User size={14} className="text-gray-400 shrink-0" />
+                            <User size={14} className="text-gray-600 shrink-0" />
 
                             <input
                                 type="text"
@@ -118,32 +140,40 @@ function RegisterPage() {
 
                     {/* HP */}
                     <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                        <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                             Nomor HP
                         </label>
 
-                        <div className="flex items-center gap-2 h-10 px-3 border border-gray-200 rounded-lg bg-gray-50">
-                            <Phone size={14} className="text-gray-400 shrink-0" />
+                        <div className={`flex items-center gap-2 h-10 px-3 border rounded-lg bg-gray-50 ${phoneError ? "border-red-300" : "border-gray-200"}`}>
+                            <Phone size={14} className="text-gray-600 shrink-0" />
 
                             <input
                                 type="tel"
                                 name="phone_number"
                                 value={form.phone_number}
                                 onChange={handleChange}
+                                onBlur={handlePhoneBlur}
+                                inputMode="numeric"
+                                autoComplete="tel"
                                 placeholder="081234567890"
                                 className="flex-1 bg-transparent outline-none text-sm text-gray-800"
                             />
                         </div>
+                        {phoneError ? (
+                            <p className="text-xs text-red-600 mt-1">{phoneError}</p>
+                        ) : (
+                            <p className="text-xs text-gray-500 mt-1">Format: 08xxxxxxxxxx (10–13 digit)</p>
+                        )}
                     </div>
 
                     {/* PASSWORD */}
                     <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                        <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                             Password
                         </label>
 
                         <div className="flex items-center gap-2 h-10 px-3 border border-gray-200 rounded-lg bg-gray-50">
-                            <Lock size={14} className="text-gray-400 shrink-0" />
+                            <Lock size={14} className="text-gray-600 shrink-0" />
 
                             <input
                                 type="password"
@@ -165,11 +195,11 @@ function RegisterPage() {
                     Daftar sekarang
                 </button>
 
-                <p className="text-center text-xs text-gray-400 mb-4 leading-relaxed">
+                <p className="text-center text-xs text-gray-600 mb-4 leading-relaxed">
                     Akun akan diverifikasi oleh operator terlebih dahulu.
                 </p>
 
-                <div className="text-center text-xs text-gray-400">
+                <div className="text-center text-xs text-gray-600">
                     Sudah punya akun?{" "}
                     <button
                         onClick={() => navigate("/login")}

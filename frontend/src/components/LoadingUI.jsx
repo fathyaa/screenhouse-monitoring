@@ -13,7 +13,7 @@ export function LoadingSpinner({ size = 20, className = "" }) {
 export function LoadingCenter({ message = "Memuat...", className = "", size = 28 }) {
   return (
     <div
-      className={`flex flex-col items-center justify-center gap-2.5 py-12 text-gray-400 ${className}`}
+      className={`flex flex-col items-center justify-center gap-2.5 py-12 text-gray-600 ${className}`}
       role="status"
       aria-live="polite"
     >

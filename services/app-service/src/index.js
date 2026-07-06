@@ -54,7 +54,9 @@ app.use("/auth", authRoutes);
 app.use("/admin", adminUserRoutes);
 app.use("/admin", adminScreenhouseRoutes);
 app.use("/screenhouses", screenhouseRoutes);
+app.use("/varietas-bibit", require("./modules/catalog/routes/varietasRoutes"));
 app.use("/wilayah", wilayahRoutes);
+app.use("/laporan", require("./modules/catalog/routes/laporanRoutes"));
 app.use("/thresholds", thresholdRoutes);
 app.use("/push", pushRoutes);
 

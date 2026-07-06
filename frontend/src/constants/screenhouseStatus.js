@@ -27,7 +27,7 @@ export const SCREENHOUSE_STATUS = {
     label: "Offline",
     color: "#94a3b8",
     dotClass: "bg-slate-400",
-    badgeClass: "bg-slate-100 text-slate-500",
+    badgeClass: "bg-slate-100 text-slate-600",
   },
 };
 
@@ -35,6 +35,16 @@ export const STATUS_ORDER = ["healthy", "warning", "critical", "offline"];
 
 export function getStatusMeta(status) {
   return SCREENHOUSE_STATUS[status] ?? SCREENHOUSE_STATUS.offline;
+}
+
+/** Selaras map-summary: 1 masalah → peringatan, 2+ → kritis. */
+export function deriveScreenhouseStatus({
+  abnormalCount = 0,
+  activeAlertCount = 0,
+} = {}) {
+  if (activeAlertCount >= 2 || abnormalCount >= 2) return "critical";
+  if (activeAlertCount >= 1 || abnormalCount >= 1) return "warning";
+  return "healthy";
 }
 
 // "Update 2 menit lalu" / "Offline 3 jam" style relative time, in Bahasa Indonesia.

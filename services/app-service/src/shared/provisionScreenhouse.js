@@ -1,24 +1,14 @@
+const pool = require("../config/db");
 const monitoringPool = require("../config/monitoringDb");
 const { publishEvent } = require("./events/publisher");
+const { DEFAULT_THRESHOLD, THRESHOLD_COLS } = require("./thresholdDefaults");
+const {
+  fetchVarietasById,
+  buildThresholdValuesArray,
+  upsertThresholdFromVarietas,
+} = require("./varietasThreshold");
 
 const MAX_TRAY_COUNT = 20;
-
-const DEFAULT_THRESHOLD = [
-  20, 45, 10, 30, 15, 50, 50, 80, 20, 35, 5.5, 7.0, 200, 800, 22, 35, 40, 85, 5000, 50000,
-];
-
-const THRESHOLD_COLS = [
-  "min_nitrogen", "max_nitrogen",
-  "min_phosphorus", "max_phosphorus",
-  "min_potassium", "max_potassium",
-  "min_soil_moisture", "max_soil_moisture",
-  "min_soil_temperature", "max_soil_temperature",
-  "min_soil_ph", "max_soil_ph",
-  "min_conductivity", "max_conductivity",
-  "min_air_temperature", "max_air_temperature",
-  "min_air_humidity", "max_air_humidity",
-  "min_light_intensity", "max_light_intensity",
-];
 
 function parseTrayCount(val, defaultVal = 1) {
   if (val == null || val === "") return defaultVal;
@@ -47,7 +37,13 @@ function buildThresholdPayload(screenhouseId) {
   return payload;
 }
 
-async function insertDefaultThreshold(client, screenhouseId) {
+async function insertDefaultThreshold(client, screenhouseId, varietasId = null) {
+  const varietas = varietasId ? await fetchVarietasById(client, varietasId) : null;
+  if (varietas) {
+    await upsertThresholdFromVarietas(client, screenhouseId, varietas, { manualOverride: false });
+    return;
+  }
+
   await client.query(
     `
     INSERT INTO thresholds (
@@ -78,18 +74,24 @@ async function activateScreenhouseRecord(client, screenhouseId, trayCountOverrid
     );
   }
 
+  const shRow = await client.query(
+    `SELECT varietas_id FROM screenhouses WHERE id = $1`,
+    [screenhouseId]
+  );
+
   const result = await client.query(
     `
     UPDATE screenhouses
     SET status = 'active'
     WHERE id = $1 AND status = 'pending'
-    RETURNING id, name, owner_user_id, tray_count
+    RETURNING id, name, owner_user_id, tray_count, varietas_id
     `,
     [screenhouseId]
   );
 
   if (result.rows[0]) {
-    await insertDefaultThreshold(client, screenhouseId);
+    const varietasId = result.rows[0].varietas_id ?? shRow.rows[0]?.varietas_id ?? null;
+    await insertDefaultThreshold(client, screenhouseId, varietasId);
   }
 
   return result.rows[0] ?? null;
@@ -99,6 +101,23 @@ async function provisionMonitoringInfrastructure(screenhouse) {
   const screenhouseId = Number(screenhouse.id);
   const trayCount = parseTrayCount(screenhouse.tray_count, 1);
   const shCode = formatShCode(screenhouseId);
+
+  let thresholdValues = DEFAULT_THRESHOLD;
+  if (screenhouse.varietas_id && monitoringPool) {
+    const vRes = await pool.query(`SELECT * FROM varietas_bibit WHERE id = $1`, [
+      screenhouse.varietas_id,
+    ]);
+    if (vRes.rows[0]) {
+      thresholdValues = buildThresholdValuesArray(vRes.rows[0]);
+    }
+  } else if (monitoringPool) {
+    const tRes = await pool.query(`SELECT * FROM thresholds WHERE screenhouse_id = $1`, [
+      screenhouseId,
+    ]);
+    if (tRes.rows[0]) {
+      thresholdValues = THRESHOLD_COLS.map((col) => tRes.rows[0][col] ?? DEFAULT_THRESHOLD[THRESHOLD_COLS.indexOf(col)]);
+    }
+  }
 
   if (monitoringPool) {
     const client = await monitoringPool.connect();
@@ -128,7 +147,7 @@ async function provisionMonitoringInfrastructure(screenhouse) {
           ${thresholdSetClause},
           updated_at = NOW()
         `,
-        [screenhouseId, ...DEFAULT_THRESHOLD]
+        [screenhouseId, ...thresholdValues]
       );
 
       await client.query(
@@ -172,7 +191,11 @@ async function provisionMonitoringInfrastructure(screenhouse) {
     status: "active",
   });
 
-  await publishEvent("threshold.updated", buildThresholdPayload(screenhouseId));
+  const thresholdPayload = { screenhouse_id: screenhouseId };
+  THRESHOLD_COLS.forEach((col, i) => {
+    thresholdPayload[col] = thresholdValues[i];
+  });
+  await publishEvent("threshold.updated", thresholdPayload);
 }
 
 async function postActivationProvisioning(screenhouses) {

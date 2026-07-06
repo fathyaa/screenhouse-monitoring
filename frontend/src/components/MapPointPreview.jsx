@@ -24,16 +24,16 @@ export default function MapPointPreview({
           <div className="min-w-0">
             <div className="text-sm font-semibold text-gray-800 truncate">{title}</div>
             {subtitle && (
-              <div className="text-xs text-gray-500 mt-0.5 truncate">{subtitle}</div>
+              <div className="text-xs text-gray-600 font-medium mt-0.5 truncate">{subtitle}</div>
             )}
-            <div className="text-[11px] text-gray-400 mt-1">
+            <div className="text-[11px] text-gray-600 mt-1">
               {Number(latitude).toFixed(5)}, {Number(longitude).toFixed(5)}
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 shrink-0"
+            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 font-medium shrink-0"
             aria-label="Tutup"
           >
             <X size={18} />

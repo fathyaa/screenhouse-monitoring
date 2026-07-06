@@ -62,7 +62,11 @@ async function listThresholds(req, res) {
         t.min_conductivity, t.max_conductivity,
         t.min_air_temperature, t.max_air_temperature,
         t.min_air_humidity, t.max_air_humidity,
-        t.min_light_intensity, t.max_light_intensity
+        t.min_light_intensity, t.max_light_intensity,
+        t.varietas_id AS threshold_varietas_id,
+        t.manual_override,
+        vb.nama AS varietas_nama,
+        vb.sumber_referensi AS varietas_sumber
       FROM screenhouses s
       JOIN users u ON u.id = s.owner_user_id
       JOIN provinces p ON p.id = s.province_id
@@ -70,6 +74,7 @@ async function listThresholds(req, res) {
       JOIN districts d ON d.id = s.district_id
       JOIN villages v ON v.id = s.village_id
       LEFT JOIN thresholds t ON t.screenhouse_id = s.id
+      LEFT JOIN varietas_bibit vb ON t.varietas_id = vb.id
       WHERE ${conditions.join(" AND ")}
       ORDER BY s.name ASC
       `,
@@ -121,7 +126,7 @@ async function upsertThresholdForScreenhouse(screenhouseId, body, client = pool)
   if (existing.rows[0]) {
     const setClause = THRESHOLD_FIELDS.map((f, i) => `${f} = $${i + 1}`).join(", ");
     result = await client.query(
-      `UPDATE thresholds SET ${setClause} WHERE screenhouse_id = $${THRESHOLD_FIELDS.length + 1} RETURNING *`,
+      `UPDATE thresholds SET ${setClause}, manual_override = true WHERE screenhouse_id = $${THRESHOLD_FIELDS.length + 1} RETURNING *`,
       [...values, screenhouseId]
     );
   } else {

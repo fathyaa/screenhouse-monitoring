@@ -104,7 +104,7 @@ function Navbar({ onToggleSidebar }) {
               uppercase
               tracking-[2px]
               font-black
-              text-slate-400
+              text-slate-600
             "
           >
             Cuaca Hari Ini

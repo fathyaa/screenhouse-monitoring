@@ -36,6 +36,8 @@ async function setScreenhouseActuators(req, res) {
     console.error("[actuators-gateway]", err.message);
     res.status(err.status || 500).json({
       message: err.data?.message || err.message || "Internal server error",
+      code: err.data?.code,
+      locked: err.data?.locked,
     });
   }
 }

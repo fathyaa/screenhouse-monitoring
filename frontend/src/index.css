@@ -69,6 +69,35 @@ body {
   @apply w-2 h-2 rounded-full bg-bl-live animate-pulse;
 }
 
+/* WCAG AA — teks sekunder & metadata (kontras ≥ 4.5:1 di background terang) */
+.text-meta {
+  @apply text-gray-600 font-medium;
+}
+
+.text-caption {
+  @apply text-xs text-gray-600 font-medium;
+}
+
+.text-label {
+  @apply text-xs text-gray-700 font-semibold;
+}
+
+.text-subtle {
+  @apply text-[11px] text-gray-600 font-medium leading-snug;
+}
+
+.text-empty-state {
+  @apply text-sm text-gray-600 font-medium;
+}
+
+.text-table-head {
+  @apply text-xs font-semibold text-gray-600 uppercase tracking-wide;
+}
+
+.icon-muted {
+  @apply text-gray-500 shrink-0;
+}
+
 .overscroll-y-contain {
   overscroll-behavior-y: contain;
 }

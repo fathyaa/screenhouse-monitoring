@@ -1,6 +1,8 @@
 const pool = require("../../../config/db");
 const monitoringPool = require("../../../config/monitoringDb");
 const { monitoringGet } = require("../../../shared/monitoringClient");
+const { computeStressScore, getCategory } = require("../../../shared/stressScore");
+const { buildEstimasiTanamBatch } = require("../../../shared/estimasiTanamService");
 
 const PARAM_LABELS = [
   { key: "nitrogen", label: "Nitrogen" },
@@ -38,6 +40,246 @@ function parseGroupBy(raw) {
   return "district";
 }
 
+function parseBool(raw, defaultValue = false) {
+  if (raw === "true" || raw === "1") return true;
+  if (raw === "false" || raw === "0") return false;
+  return defaultValue;
+}
+
+function wibTodayStr() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
+}
+
+function diffCalendarDays(fromStr, toStr) {
+  if (!fromStr) return null;
+  const from = new Date(`${String(fromStr).slice(0, 10)}T12:00:00+07:00`);
+  const to = toStr
+    ? new Date(`${String(toStr).slice(0, 10)}T12:00:00+07:00`)
+    : new Date(`${wibTodayStr()}T12:00:00+07:00`);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return null;
+  return Math.max(0, Math.round((to.getTime() - from.getTime()) / 86400000));
+}
+
+function screenhouseVarietasName(sh) {
+  return sh.varietas_nama || sh.seed_variety || null;
+}
+
+function elapsedSemaiDays(sh) {
+  return diffCalendarDays(sh.tanggal_semai, null);
+}
+
+function dominantVarietasFromCounts(countsMap) {
+  if (!countsMap?.size) return null;
+  return [...countsMap.entries()].sort(
+    (a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "id")
+  )[0][0];
+}
+
+function buildVarietasStressRanking(screenhouses, stressMap) {
+  const groups = new Map();
+  for (const sh of screenhouses) {
+    const name = screenhouseVarietasName(sh);
+    const score = stressMap[sh.id];
+    if (!name || score == null) continue;
+    const list = groups.get(name) ?? [];
+    list.push(Number(score));
+    groups.set(name, list);
+  }
+
+  return [...groups.entries()]
+    .map(([nama, scores]) => ({
+      nama,
+      avg_score: avgNumeric(scores),
+      screenhouse_count: scores.length,
+    }))
+    .sort(
+      (a, b) =>
+        (b.avg_score ?? 0) - (a.avg_score ?? 0) ||
+        b.screenhouse_count - a.screenhouse_count
+    );
+}
+
+function buildVarietasDurationStats(screenhouses) {
+  const groups = new Map();
+  for (const sh of screenhouses) {
+    const name = screenhouseVarietasName(sh);
+    const elapsed = elapsedSemaiDays(sh);
+    if (!name || elapsed == null) continue;
+
+    const entry = groups.get(name) ?? {
+      nama: name,
+      actual_days: [],
+      standard_days: [],
+    };
+    entry.actual_days.push(elapsed);
+    if (sh.durasi_pembibitan_hari != null) {
+      entry.standard_days.push(Number(sh.durasi_pembibitan_hari));
+    }
+    groups.set(name, entry);
+  }
+
+  return [...groups.values()]
+    .map((g) => {
+      const avgActual = avgNumeric(g.actual_days);
+      const avgStandard = avgNumeric(g.standard_days);
+      return {
+        nama: g.nama,
+        screenhouse_count: g.actual_days.length,
+        avg_actual_days: avgActual,
+        avg_standard_days: avgStandard,
+        delay_index_days:
+          avgActual != null && avgStandard != null
+            ? Math.round((avgActual - avgStandard) * 10) / 10
+            : null,
+      };
+    })
+    .sort((a, b) => b.screenhouse_count - a.screenhouse_count);
+}
+
+function formatEstimasiLabel(estimasi) {
+  if (!estimasi?.estimasi_siap) return "—";
+  const date = new Date(`${estimasi.estimasi_siap}T12:00:00+07:00`).toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "Asia/Jakarta",
+  });
+  if (estimasi.sisa_hari == null) return date;
+  if (estimasi.sisa_hari > 0) return `${estimasi.sisa_hari} hari · ${date}`;
+  if (estimasi.sisa_hari === 0) return `Hari ini · ${date}`;
+  return `Lewat ${Math.abs(estimasi.sisa_hari)} hari · ${date}`;
+}
+
+function buildStressScoreMap(screenhouseIds, monitoringStats) {
+  const map = {};
+  for (const id of screenhouseIds) {
+    if (!monitoringStats.uptimeIds.has(id)) {
+      map[id] = null;
+      continue;
+    }
+    const reading = monitoringStats.sensorAvgs[id];
+    const threshold = monitoringStats.thresholds[id];
+    if (!reading) {
+      map[id] = null;
+      continue;
+    }
+    map[id] = computeStressScore(reading, threshold).score;
+  }
+  return map;
+}
+
+function buildVarietasDistribution(screenhouses) {
+  const counts = new Map();
+  for (const sh of screenhouses) {
+    const name = sh.varietas_nama || sh.seed_variety || "Tidak diisi";
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([nama, count]) => ({ nama, count }))
+    .sort((a, b) => b.count - a.count || a.nama.localeCompare(b.nama, "id"));
+}
+
+function buildSeedlingProgressByDistrict(screenhouses, stressMap, estimasiMap) {
+  const groups = new Map();
+
+  for (const sh of screenhouses) {
+    const key = sh.district_id;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        district_id: sh.district_id,
+        district_name: sh.district,
+        regency: sh.regency,
+        total: 0,
+        on_track: 0,
+        terlambat: 0,
+        perlu_evaluasi: 0,
+        belum_disi: 0,
+        stress_scores: [],
+        varietas_counts: new Map(),
+        cycle_days: [],
+      });
+    }
+
+    const group = groups.get(key);
+    group.total += 1;
+
+    const vName = screenhouseVarietasName(sh) || "Tidak diisi";
+    group.varietas_counts.set(vName, (group.varietas_counts.get(vName) ?? 0) + 1);
+
+    const elapsed = elapsedSemaiDays(sh);
+    if (elapsed != null) group.cycle_days.push(elapsed);
+
+    const estimasi = estimasiMap[sh.id];
+    const status = estimasi?.status ?? sh.status_estimasi;
+    if (status === "on_track") group.on_track += 1;
+    else if (status === "terlambat") group.terlambat += 1;
+    else if (status === "perlu_evaluasi") group.perlu_evaluasi += 1;
+    else group.belum_disi += 1;
+
+    const score = stressMap[sh.id];
+    if (score != null) group.stress_scores.push(score);
+  }
+
+  return [...groups.values()]
+    .map((g) => ({
+      district_id: g.district_id,
+      district_name: g.district_name,
+      regency: g.regency,
+      total: g.total,
+      on_track: g.on_track,
+      terlambat: g.terlambat,
+      perlu_evaluasi: g.perlu_evaluasi,
+      belum_disi: g.belum_disi,
+      avg_stress_score: avgNumeric(g.stress_scores),
+      dominant_varietas: dominantVarietasFromCounts(g.varietas_counts),
+      avg_cycle_duration_days: avgNumeric(g.cycle_days),
+    }))
+    .sort((a, b) => b.total - a.total || a.district_name.localeCompare(b.district_name, "id"));
+}
+
+function buildBibitSummary(screenhouses, stressMap, estimasiMap) {
+  const stressScores = screenhouses
+    .map((sh) => stressMap[sh.id])
+    .filter((v) => v != null);
+
+  const cycleDays = screenhouses
+    .map((sh) => elapsedSemaiDays(sh))
+    .filter((v) => v != null);
+
+  const varietasRanking = buildVarietasStressRanking(screenhouses, stressMap);
+  const mostStable = varietasRanking[0] ?? null;
+
+  let onTrack = 0;
+  let terlambat = 0;
+  let perluEvaluasi = 0;
+  let belumDisi = 0;
+
+  for (const sh of screenhouses) {
+    const status = estimasiMap[sh.id]?.status ?? sh.status_estimasi;
+    if (status === "on_track") onTrack += 1;
+    else if (status === "terlambat") terlambat += 1;
+    else if (status === "perlu_evaluasi") perluEvaluasi += 1;
+    else belumDisi += 1;
+  }
+
+  return {
+    avg_stress_score: avgNumeric(stressScores),
+    avg_cycle_duration_days: avgNumeric(cycleDays),
+    most_stable_varietas: mostStable
+      ? {
+          nama: mostStable.nama,
+          avg_score: mostStable.avg_score,
+          screenhouse_count: mostStable.screenhouse_count,
+        }
+      : null,
+    on_track: onTrack,
+    terlambat: terlambat,
+    perlu_evaluasi: perluEvaluasi,
+    belum_disi: belumDisi,
+    varietas_count: buildVarietasDistribution(screenhouses).length,
+  };
+}
+
 async function fetchScreenhouses(filters) {
   const conditions = ["s.status = 'active'"];
   const params = [];
@@ -65,6 +307,15 @@ async function fetchScreenhouses(filters) {
       s.district_id,
       s.village_id,
       s.created_at,
+      s.varietas_id,
+      s.seed_variety,
+      COALESCE(s.tanggal_semai, s.seedling_start_date) AS tanggal_semai,
+      s.estimasi_siap_tanam,
+      s.status_estimasi,
+      vb.nama AS varietas_nama,
+      vb.durasi_pembibitan_hari,
+      u.name AS owner_name,
+      u.phone_number AS owner_phone,
       p.name AS province,
       r.name AS regency,
       d.name AS district,
@@ -74,6 +325,8 @@ async function fetchScreenhouses(filters) {
     JOIN regencies r ON s.regency_id = r.id
     JOIN districts d ON s.district_id = d.id
     JOIN villages v ON s.village_id = v.id
+    LEFT JOIN varietas_bibit vb ON vb.id = s.varietas_id
+    LEFT JOIN users u ON s.owner_user_id = u.id
     WHERE ${conditions.join(" AND ")}
     ORDER BY s.id
     `,
@@ -99,6 +352,7 @@ async function fetchMonitoringStats(screenhouseIds, days) {
       sensorAvgs: {},
       uptimeIds: new Set(),
       actuator: {},
+      thresholds: {},
     };
   }
 
@@ -110,6 +364,7 @@ async function fetchMonitoringStats(screenhouseIds, days) {
       sensorAvgs: {},
       uptimeIds: new Set(),
       actuator: {},
+      thresholds: {},
     };
   }
 
@@ -120,6 +375,7 @@ async function fetchMonitoringStats(screenhouseIds, days) {
     sensorAvgRes,
     uptimeRes,
     actuatorRes,
+    thresholdRes,
   ] = await Promise.all([
     monitoringPool.query(
       `
@@ -199,6 +455,10 @@ async function fetchMonitoringStats(screenhouseIds, days) {
       `,
       [screenhouseIds, days]
     ),
+    monitoringPool.query(
+      `SELECT * FROM threshold_snapshots WHERE screenhouse_id = ANY($1::int[])`,
+      [screenhouseIds]
+    ),
   ]);
 
   const sensorAvgs = Object.fromEntries(
@@ -207,6 +467,10 @@ async function fetchMonitoringStats(screenhouseIds, days) {
 
   const actuator = Object.fromEntries(
     actuatorRes.rows.map((row) => [row.screenhouse_id, row])
+  );
+
+  const thresholds = Object.fromEntries(
+    thresholdRes.rows.map((row) => [row.screenhouse_id, row])
   );
 
   return {
@@ -219,11 +483,12 @@ async function fetchMonitoringStats(screenhouseIds, days) {
     sensorAvgs,
     uptimeIds: new Set(uptimeRes.rows.map((r) => r.screenhouse_id)),
     actuator,
+    thresholds,
   };
 }
 
 async function fetchGrowthStats(days) {
-  const [screenhousesRes, farmersRes] = await Promise.all([
+  const [screenhousesRes, farmersRes, ownersRes] = await Promise.all([
     pool.query(
       `
       SELECT COUNT(*)::int AS count
@@ -244,13 +509,41 @@ async function fetchGrowthStats(days) {
       `,
       [days]
     ),
+    pool.query(
+      `
+      SELECT COUNT(DISTINCT owner_user_id)::int AS distinct_owners
+      FROM screenhouses
+      WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+        AND owner_user_id IS NOT NULL
+      `,
+      [days]
+    ),
   ]);
 
+  const new_screenhouses = screenhousesRes.rows[0]?.count ?? 0;
+  const farmers_approved = farmersRes.rows[0]?.approved ?? 0;
+  const farmers_pending = farmersRes.rows[0]?.pending ?? 0;
+  const farmers_rejected = farmersRes.rows[0]?.rejected ?? 0;
+  const distinct_petani_owners = ownersRes.rows[0]?.distinct_owners ?? 0;
+
+  let note = null;
+  if (new_screenhouses > 0 && farmers_approved === 0) {
+    note =
+      distinct_petani_owners > 0
+        ? "Unit screenhouse baru terhubung ke petani yang sudah terdaftar sebelumnya — bukan akun petani baru."
+        : "Unit screenhouse baru belum terhubung ke akun petani.";
+  } else if (new_screenhouses > 0 || farmers_approved > 0) {
+    note =
+      "Unit screenhouse dan akun petani dihitung terpisah; penambahan unit tidak selalu berarti petani baru.";
+  }
+
   return {
-    new_screenhouses: screenhousesRes.rows[0]?.count ?? 0,
-    farmers_approved: farmersRes.rows[0]?.approved ?? 0,
-    farmers_pending: farmersRes.rows[0]?.pending ?? 0,
-    farmers_rejected: farmersRes.rows[0]?.rejected ?? 0,
+    new_screenhouses,
+    farmers_approved,
+    farmers_pending,
+    farmers_rejected,
+    distinct_petani_owners,
+    note,
   };
 }
 
@@ -260,7 +553,7 @@ function avgNumeric(values) {
   return Math.round((nums.reduce((a, c) => a + c, 0) / nums.length) * 100) / 100;
 }
 
-function buildRegionRows(screenhouses, mapSummary, groupBy, monitoringStats) {
+function buildRegionRows(screenhouses, mapSummary, groupBy, monitoringStats, includeStressScore) {
   const col = GROUP_BY_COLUMNS[groupBy];
   const groups = new Map();
 
@@ -333,6 +626,20 @@ function buildRegionRows(screenhouses, mapSummary, groupBy, monitoringStats) {
           ? Math.round((group.online_count / group.total) * 1000) / 10
           : 0;
 
+      const stressScores = includeStressScore
+        ? group.screenhouse_ids
+            .map((id) => {
+              if (!monitoringStats.uptimeIds.has(id)) return null;
+              const reading = monitoringStats.sensorAvgs[id];
+              const threshold = monitoringStats.thresholds[id];
+              if (!reading) return null;
+              return computeStressScore(reading, threshold).score;
+            })
+            .filter((v) => v != null)
+        : [];
+
+      const avg_stress_score = includeStressScore ? avgNumeric(stressScores) : null;
+
       return {
         region_id: group.region_id,
         region_name: group.region_name,
@@ -345,6 +652,7 @@ function buildRegionRows(screenhouses, mapSummary, groupBy, monitoringStats) {
         offline: group.offline,
         active_alerts: group.active_alerts,
         uptime_pct,
+        avg_stress_score,
         sensor_avg,
         actuator: {
           irrigation_on,
@@ -357,10 +665,72 @@ function buildRegionRows(screenhouses, mapSummary, groupBy, monitoringStats) {
     .sort((a, b) => b.total - a.total || a.region_name.localeCompare(b.region_name, "id"));
 }
 
+const STATUS_RANK = { critical: 4, warning: 3, offline: 2, healthy: 1 };
+
+function buildProblematicScreenhouses(screenhouses, mapSummary, stressMap, estimasiMap, includeStressScore, includeEstimasi) {
+  const labels = {
+    healthy: "Sehat",
+    warning: "Peringatan",
+    critical: "Kritis",
+    offline: "Offline",
+  };
+
+  return screenhouses
+    .map((sh) => {
+      const summary = mapSummary[sh.id];
+      const status = summary?.status ?? "offline";
+      const stressScore = includeStressScore ? (stressMap[sh.id] ?? null) : null;
+      const estimasi = includeEstimasi ? estimasiMap[sh.id] : null;
+      const stressCategory =
+        stressScore != null ? getCategory(stressScore).category : null;
+
+      return {
+        id: sh.id,
+        name: sh.name,
+        owner_name: sh.owner_name,
+        owner_phone: sh.owner_phone,
+        village: sh.village,
+        district: sh.district,
+        regency: sh.regency,
+        varietas_nama: sh.varietas_nama || sh.seed_variety || null,
+        status,
+        status_label: labels[status] ?? status,
+        insight: summary?.insight ?? null,
+        active_alerts: summary?.active_alerts ?? 0,
+        last_seen: summary?.last_seen ?? null,
+        abnormal: summary?.abnormal ?? [],
+        alerts_pending_review: summary?.alerts_pending_review ?? false,
+        rank: STATUS_RANK[status] ?? 0,
+        stress_score: stressScore,
+        stress_category: stressCategory,
+        estimasi_siap: estimasi?.estimasi_siap ?? sh.estimasi_siap_tanam ?? null,
+        estimasi_siap_label: includeEstimasi ? formatEstimasiLabel(estimasi) : null,
+        sisa_hari: estimasi?.sisa_hari ?? null,
+        status_estimasi: estimasi?.status ?? sh.status_estimasi ?? null,
+      };
+    })
+    .filter((row) => row.rank >= STATUS_RANK.warning || row.active_alerts > 0 || (includeStressScore && row.stress_score != null && row.stress_score < 70))
+    .sort((a, b) => {
+      if (includeStressScore) {
+        const sa = a.stress_score;
+        const sb = b.stress_score;
+        if (sa == null && sb != null) return 1;
+        if (sa != null && sb == null) return -1;
+        if (sa != null && sb != null && sa !== sb) return sa - sb;
+      }
+      if (b.rank !== a.rank) return b.rank - a.rank;
+      if (b.active_alerts !== a.active_alerts) return b.active_alerts - a.active_alerts;
+      return a.name.localeCompare(b.name, "id");
+    })
+    .slice(0, 50);
+}
+
 async function getOperatorReports(req, res) {
   try {
     const days = parseDays(req.query.days);
     const groupBy = parseGroupBy(req.query.group_by);
+    const includeStressScore = parseBool(req.query.include_stress_score);
+    const includeEstimasi = parseBool(req.query.include_estimasi);
     const filters = {
       province_id: req.query.province_id,
       regency_id: req.query.regency_id,
@@ -376,7 +746,38 @@ async function getOperatorReports(req, res) {
 
     const screenhouseIds = screenhouses.map((sh) => sh.id);
     const monitoringStats = await fetchMonitoringStats(screenhouseIds, days);
-    const regions = buildRegionRows(screenhouses, mapSummary, groupBy, monitoringStats);
+
+    let stressMap = {};
+    let estimasiMap = {};
+
+    if (includeStressScore) {
+      stressMap = buildStressScoreMap(screenhouseIds, monitoringStats);
+    }
+
+    if (includeEstimasi) {
+      estimasiMap = await buildEstimasiTanamBatch(screenhouseIds, { persist: true });
+    }
+
+    const regions = buildRegionRows(
+      screenhouses,
+      mapSummary,
+      groupBy,
+      monitoringStats,
+      includeStressScore
+    );
+
+    const varietas_distribution = buildVarietasDistribution(screenhouses);
+    const varietas_duration_stats = buildVarietasDurationStats(screenhouses);
+    const varietas_resilience = buildVarietasStressRanking(screenhouses, stressMap);
+    const seedling_progress_by_district =
+      includeEstimasi || includeStressScore
+        ? buildSeedlingProgressByDistrict(screenhouses, stressMap, estimasiMap)
+        : [];
+
+    const bibit_summary =
+      includeEstimasi || includeStressScore
+        ? buildBibitSummary(screenhouses, stressMap, estimasiMap)
+        : null;
 
     const statusTotals = { healthy: 0, warning: 0, critical: 0, offline: 0 };
     let activeAlerts = 0;
@@ -407,11 +808,22 @@ async function getOperatorReports(req, res) {
       .sort((a, b) => b.count - a.count)
       .slice(0, 8);
 
+    const problematic_screenhouses = buildProblematicScreenhouses(
+      screenhouses,
+      mapSummary,
+      stressMap,
+      estimasiMap,
+      includeStressScore,
+      includeEstimasi
+    );
+
     res.json({
       generated_at: new Date().toISOString(),
       period_days: days,
       group_by: groupBy,
       filters,
+      include_stress_score: includeStressScore,
+      include_estimasi: includeEstimasi,
       kpis: {
         total_screenhouses: screenhouses.length,
         uptime_pct:
@@ -421,11 +833,18 @@ async function getOperatorReports(req, res) {
         active_alerts: activeAlerts,
         offline_count: statusTotals.offline ?? 0,
         alert_count_period: alertCountCurrent,
+        avg_stress_score: bibit_summary?.avg_stress_score ?? null,
       },
       status_totals: statusTotals,
+      varietas_distribution,
+      varietas_duration_stats,
+      varietas_resilience,
+      seedling_progress_by_district,
+      bibit_summary,
       regions,
       alert_trend: monitoringStats.alertTrend,
       top_alert_params,
+      problematic_screenhouses,
       growth,
       period_comparison: {
         alerts_current: alertCountCurrent,

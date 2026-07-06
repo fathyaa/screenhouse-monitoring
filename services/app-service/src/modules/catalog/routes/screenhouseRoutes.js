@@ -9,12 +9,23 @@ const {
   getOperatorStats,
   getMyDashboardStats,
   getScreenhouseById,
+  getScreenhouseEstimasiTanam,
+  getScreenhouseStressScore,
+  patchMyScreenhouseProfile,
   submitMyScreenhouse,
   getPendingScreenhouses,
   getPendingScreenhouseStats,
   approveScreenhouse,
   rejectScreenhouse,
 } = require("../controllers/screenhouseController");
+const {
+  startSemaiCycle,
+  endSemaiCycle,
+  listScreenhouseCycles,
+  getSemaiCycleById,
+  getMySemaiCycles,
+  getActiveSemaiCycle,
+} = require("../controllers/semaiCycleController");
 const { getOperatorReports } = require("../controllers/operatorReportController");
 
 const router = express.Router();
@@ -81,6 +92,13 @@ router.get(
   getOperatorReports
 );
 
+router.get(
+  "/my-cycles",
+  authMiddleware,
+  roleMiddleware(["petani"]),
+  getMySemaiCycles
+);
+
 router.post(
   "/",
   authMiddleware,
@@ -89,6 +107,62 @@ router.post(
     "super_admin",
   ]),
   createScreenhouse
+);
+
+router.patch(
+  "/:id/profile",
+  authMiddleware,
+  roleMiddleware(["petani"]),
+  patchMyScreenhouseProfile
+);
+
+router.get(
+  "/:id/cycles/active",
+  authMiddleware,
+  roleMiddleware(["operator", "super_admin", "petani"]),
+  getActiveSemaiCycle
+);
+
+router.post(
+  "/:id/cycles/start",
+  authMiddleware,
+  roleMiddleware(["petani"]),
+  startSemaiCycle
+);
+
+router.post(
+  "/:id/cycles/end",
+  authMiddleware,
+  roleMiddleware(["petani"]),
+  endSemaiCycle
+);
+
+router.get(
+  "/:id/cycles/:cycleId",
+  authMiddleware,
+  roleMiddleware(["operator", "super_admin", "petani"]),
+  getSemaiCycleById
+);
+
+router.get(
+  "/:id/cycles",
+  authMiddleware,
+  roleMiddleware(["operator", "super_admin", "petani"]),
+  listScreenhouseCycles
+);
+
+router.get(
+  "/:id/estimasi-tanam",
+  authMiddleware,
+  roleMiddleware(["operator", "super_admin", "petani"]),
+  getScreenhouseEstimasiTanam
+);
+
+router.get(
+  "/:id/stress-score",
+  authMiddleware,
+  roleMiddleware(["operator", "super_admin", "petani"]),
+  getScreenhouseStressScore
 );
 
 router.get(

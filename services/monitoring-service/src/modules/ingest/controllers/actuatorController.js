@@ -32,6 +32,8 @@ async function postScreenhouseActuators(req, res) {
     console.error("[actuators]", err);
     res.status(err.status || 500).json({
       message: err.message || "Internal server error",
+      code: err.code ?? undefined,
+      locked: err.locked ?? undefined,
     });
   }
 }

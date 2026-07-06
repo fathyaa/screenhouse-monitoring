@@ -13,7 +13,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import pg from "pg";
-import { MAP_SCREENHOUSES, DEFAULT_THRESHOLD } from "./data/map-screenhouses.js";
+import { MAP_SCREENHOUSES, DEFAULT_THRESHOLD, demoSensorValues } from "./data/map-screenhouses.js";
+import { farmerName, seedProfile } from "./data/farmer-names.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "../..");
@@ -185,7 +186,7 @@ async function getVillageId(client, districtId) {
 
 async function upsertFarmer(appClient, farmerIndex) {
   const phone = farmerPhone(farmerIndex);
-  const name = `Petani Demo ${String(farmerIndex).padStart(2, "0")}`;
+  const name = farmerName(farmerIndex);
   const existing = await appClient.query(`SELECT id FROM users WHERE phone_number = $1`, [phone]);
   if (existing.rows[0]) {
     await appClient.query(
@@ -205,7 +206,8 @@ async function upsertFarmer(appClient, farmerIndex) {
   return ins.rows[0].id;
 }
 
-async function upsertScreenhouse(appClient, { name, ownerId, point, wilayah, villageId }) {
+async function upsertScreenhouse(appClient, { name, ownerId, point, wilayah, villageId, profileIndex = 0 }) {
+  const profile = seedProfile(profileIndex);
   const existing = await appClient.query(`SELECT id FROM screenhouses WHERE name = $1`, [name]);
   if (existing.rows[0]) {
     await appClient.query(
@@ -220,7 +222,9 @@ async function upsertScreenhouse(appClient, { name, ownerId, point, wilayah, vil
         province_id = $6,
         regency_id = $7,
         district_id = $8,
-        village_id = $9
+        village_id = $9,
+        seed_variety = $10,
+        seedling_start_date = CURRENT_DATE - $11::int
       WHERE id = $1
       `,
       [
@@ -233,6 +237,8 @@ async function upsertScreenhouse(appClient, { name, ownerId, point, wilayah, vil
         wilayah.regency_id,
         wilayah.district_id,
         villageId,
+        profile.seed_variety,
+        profile.seedling_days,
       ]
     );
     return existing.rows[0].id;
@@ -242,8 +248,9 @@ async function upsertScreenhouse(appClient, { name, ownerId, point, wilayah, vil
     `
     INSERT INTO screenhouses (
       name, province_id, regency_id, district_id, village_id,
-      owner_user_id, address_detail, latitude, longitude, tray_count, status
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, 'active')
+      owner_user_id, address_detail, latitude, longitude, tray_count,
+      seed_variety, seedling_start_date, status
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, $10, CURRENT_DATE - $11::int, 'active')
     RETURNING id
     `,
     [
@@ -256,6 +263,8 @@ async function upsertScreenhouse(appClient, { name, ownerId, point, wilayah, vil
       point.address,
       point.lat,
       point.lng,
+      profile.seed_variety,
+      profile.seedling_days,
     ]
   );
   return ins.rows[0].id;
@@ -272,7 +281,7 @@ async function upsertThreshold(appClient, screenhouseId) {
   );
 }
 
-async function provisionMonitoring(monClient, screenhouseId, ownerId, screenhouseName) {
+async function provisionMonitoring(monClient, screenhouseId, ownerId, screenhouseName, profileIndex = 0) {
   const snapCols = Object.keys(DEFAULT_THRESHOLD);
   const snapPh = snapCols.map((_, i) => `$${i + 2}`).join(", ");
   const snapSet = snapCols.map((c) => `${c} = EXCLUDED.${c}`).join(", ");
@@ -316,18 +325,52 @@ async function provisionMonitoring(monClient, screenhouseId, ownerId, screenhous
   );
   const sinkId = sinkRes.rows[0].id;
 
-  await monClient.query(
+  const sensorRes = await monClient.query(
     `
     INSERT INTO sensor_nodes (screenhouse_id, node_code, node_name, location, send_interval_seconds, is_active)
     VALUES ($1, $2, 'Tray A1', 'Pusat pembibitan', 60, true)
     ON CONFLICT (node_code) DO UPDATE SET
       screenhouse_id = EXCLUDED.screenhouse_id,
       is_active = true
+    RETURNING id
     `,
     [screenhouseId, trayCode]
   );
+  const sensorNodeId = sensorRes.rows[0].id;
 
-  return { sinkCode, trayCode, sinkId };
+  const hasReading = await monClient.query(
+    `SELECT 1 FROM sensor_data WHERE sensor_node_id = $1 LIMIT 1`,
+    [sensorNodeId]
+  );
+  if (!hasReading.rows[0]) {
+    const vals = demoSensorValues(profileIndex);
+    await monClient.query(
+      `
+      INSERT INTO sensor_data (
+        sensor_node_id, sink_node_id,
+        nitrogen, phosphorus, potassium,
+        soil_temperature, soil_moisture, soil_ph, conductivity,
+        air_temperature, air_humidity, light_intensity, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+      `,
+      [
+        sensorNodeId,
+        sinkId,
+        vals.nitrogen,
+        vals.phosphorus,
+        vals.potassium,
+        vals.soil_temperature,
+        vals.soil_moisture,
+        vals.soil_ph,
+        vals.conductivity,
+        vals.air_temperature,
+        vals.air_humidity,
+        vals.light_intensity,
+      ]
+    );
+  }
+
+  return { sinkCode, trayCode, sinkId, sensorNodeId };
 }
 
 async function main() {
@@ -386,9 +429,10 @@ async function main() {
         point,
         wilayah,
         villageId,
+        profileIndex: i,
       });
       await upsertThreshold(appClient, screenhouseId);
-      const nodes = await provisionMonitoring(monClient, screenhouseId, ownerId, name);
+      const nodes = await provisionMonitoring(monClient, screenhouseId, ownerId, name, i);
       created.push({ screenhouseId, name, ownerId, ...nodes });
     }
 

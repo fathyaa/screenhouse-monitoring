@@ -3,8 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { Leaf, MapPin, ArrowLeft, Layers } from "lucide-react";
 import { LoadingSpinner } from "../components/LoadingUI";
 import LocationPickerMap from "../components/LocationPickerMap";
+import VarietasSelect from "../components/VarietasSelect";
 
 import { API_URL } from "../config/api";
+import { validateIndonesianPhone } from "../utils/phoneNumber";
 const PENDING_KEY = "pendingRegister";
 
 function RegisterScreenhousePage() {
@@ -19,6 +21,7 @@ function RegisterScreenhousePage() {
     latitude: null,
     longitude: null,
     tray_count: 1,
+    varietas_id: "",
   });
 
   const [wilayah, setWilayah] = useState(null);
@@ -47,6 +50,7 @@ function RegisterScreenhousePage() {
           latitude: draft.latitude ?? null,
           longitude: draft.longitude ?? null,
           tray_count: draft.tray_count ?? 1,
+          varietas_id: draft.varietas_id ?? "",
         });
         if (draft.wilayah) setWilayah(draft.wilayah);
       }
@@ -123,6 +127,18 @@ function RegisterScreenhousePage() {
       return;
     }
 
+    if (!screenhouse.varietas_id) {
+      alert("Pilih varietas bibit terlebih dahulu");
+      return;
+    }
+
+    const phoneResult = validateIndonesianPhone(account.phone_number);
+    if (!phoneResult.ok) {
+      alert(phoneResult.message);
+      navigate("/register", { replace: true });
+      return;
+    }
+
     try {
       setLoading(true);
 
@@ -131,6 +147,7 @@ function RegisterScreenhousePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...account,
+          phone_number: phoneResult.normalized,
           screenhouse: {
             name: screenhouse.name.trim(),
             address_detail: screenhouse.address_detail.trim(),
@@ -141,6 +158,7 @@ function RegisterScreenhousePage() {
             latitude: screenhouse.latitude,
             longitude: screenhouse.longitude,
             tray_count: trayCount,
+            varietas_id: Number(screenhouse.varietas_id),
           },
         }),
       });
@@ -172,7 +190,7 @@ function RegisterScreenhousePage() {
         <button
           type="button"
           onClick={() => navigate("/register")}
-          className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 mb-8"
+          className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-600 mb-8"
         >
           <ArrowLeft size={16} />
           Kembali ke data akun
@@ -184,7 +202,7 @@ function RegisterScreenhousePage() {
             <div className="text-2xl font-semibold text-gray-800">
               Daftar screenhouse
             </div>
-            <p className="text-sm text-gray-400 mt-2">
+            <p className="text-sm text-gray-600 mt-2">
               Lengkapi lokasi screenhouse untuk {account.name}
             </p>
           </div>
@@ -196,7 +214,7 @@ function RegisterScreenhousePage() {
                 Nama screenhouse
               </label>
               <div className="flex items-center gap-3 h-12 px-4 border border-gray-200 rounded-xl bg-gray-50">
-                <Leaf size={16} className="text-gray-400 shrink-0" />
+                <Leaf size={16} className="text-gray-600 shrink-0" />
                 <input
                   type="text"
                   value={screenhouse.name}
@@ -214,7 +232,7 @@ function RegisterScreenhousePage() {
                 Detail alamat (opsional)
               </label>
               <div className="flex items-start gap-3 min-h-12 px-4 py-3 border border-gray-200 rounded-xl bg-gray-50">
-                <MapPin size={16} className="text-gray-400 shrink-0 mt-0.5" />
+                <MapPin size={16} className="text-gray-600 shrink-0 mt-0.5" />
                 <textarea
                   value={screenhouse.address_detail}
                   onChange={(e) =>
@@ -232,7 +250,7 @@ function RegisterScreenhousePage() {
                 Jumlah tray terpasang
               </label>
               <div className="flex items-center gap-3 h-12 px-4 border border-gray-200 rounded-xl bg-gray-50">
-                <Layers size={16} className="text-gray-400 shrink-0" />
+                <Layers size={16} className="text-gray-600 shrink-0" />
                 <input
                   type="number"
                   min={1}
@@ -244,8 +262,22 @@ function RegisterScreenhousePage() {
                   className="flex-1 bg-transparent outline-none text-sm text-gray-800"
                 />
               </div>
-              <p className="text-xs text-gray-400 mt-2">
+              <p className="text-xs text-gray-600 mt-2">
                 Satu tray = satu sensor node. Operator dapat menyesuaikan saat verifikasi.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-2">
+                Varietas bibit
+              </label>
+              <VarietasSelect
+                value={screenhouse.varietas_id}
+                onChange={(id) => setScreenhouse({ ...screenhouse, varietas_id: id })}
+                required
+              />
+              <p className="text-xs text-gray-600 mt-2">
+                Threshold sensor akan disesuaikan otomatis dengan standar varietas yang dipilih.
               </p>
             </div>
 
@@ -260,7 +292,7 @@ function RegisterScreenhousePage() {
                 className="h-56 w-full rounded-xl overflow-hidden border border-gray-200 z-0"
               />
               {screenhouse.latitude != null && (
-                <p className="text-xs text-gray-500 mt-2">
+                <p className="text-xs text-gray-600 font-medium mt-2">
                   Koordinat: {screenhouse.latitude}, {screenhouse.longitude}
                 </p>
               )}
@@ -269,7 +301,7 @@ function RegisterScreenhousePage() {
             <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-2">
               <div className="text-sm font-medium text-gray-600">Wilayah (otomatis dari peta)</div>
               {resolving && (
-                <p className="text-sm text-gray-400">Membaca wilayah...</p>
+                <p className="text-sm text-gray-600">Membaca wilayah...</p>
               )}
               {!resolving && wilayah && (
                 <>
@@ -279,7 +311,7 @@ function RegisterScreenhousePage() {
                       .join(", ")}
                   </p>
                   {wilayah.display_name && (
-                    <p className="text-xs text-gray-400">{wilayah.display_name}</p>
+                    <p className="text-xs text-gray-600">{wilayah.display_name}</p>
                   )}
                 </>
               )}
@@ -287,7 +319,7 @@ function RegisterScreenhousePage() {
                 <p className="text-sm text-amber-700">{wilayahError}</p>
               )}
               {!resolving && !wilayah && !wilayahError && (
-                <p className="text-sm text-gray-400">Pilih titik di peta untuk mengisi wilayah</p>
+                <p className="text-sm text-gray-600">Pilih titik di peta untuk mengisi wilayah</p>
               )}
             </div>
 
@@ -303,11 +335,11 @@ function RegisterScreenhousePage() {
             {loading ? "Mengirim pendaftaran..." : "Kirim pendaftaran"}
           </button>
 
-          <p className="text-center text-xs text-gray-400 mt-5 leading-relaxed">
+          <p className="text-center text-xs text-gray-600 mt-5 leading-relaxed">
             Data akun dan screenhouse akan diverifikasi operator sebelum akun aktif
           </p>
 
-          <div className="text-center text-xs text-gray-400 mt-6">
+          <div className="text-center text-xs text-gray-600 mt-6">
             Sudah punya akun?{" "}
             <button
               type="button"

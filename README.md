@@ -500,3 +500,12 @@ Service worker custom: `frontend/src/pwa/sw.js` (push handler + notification cli
 * Device WSN: **Sensor Node** (1 tray) + **Sink Node** (1 gateway/screenhouse) = publisher MQTT; lihat `docs/hardware/` dan `database/monitoring/README.md`.
 * Kontrol aktuator: manual (petani via web) + otomatis saat alert threshold.
 * PWA + Web Push untuk petani — butuh VAPID keys di app-service.
+
+### Migrasi DB (instalasi yang sudah jalan)
+
+Jalankan sekali jika database dibuat sebelum penambahan kolom profil pembibitan & catatan resolve alert:
+
+```bash
+psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/migrations/001_screenhouse_profile_fields.sql
+psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring -f database/monitoring/migrations/001_alert_resolve_fields.sql
+```

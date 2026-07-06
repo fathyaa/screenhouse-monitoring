@@ -1,4 +1,5 @@
 const express = require("express");
+const authMiddleware = require("../../../shared/middlewares/authMiddleware");
 
 const {
   getSensorData,
@@ -8,12 +9,17 @@ const {
   getSensorNodesByScreenhouse,
   getScreenhouseSensorHistory,
   getScreenhouseDashboardSummary,
+  getScreenhouseStressScore,
   getSinkNodeByScreenhouse,
 } = require("../controllers/sensorController");
 const { postScreenhouseActuators } = require("../controllers/actuatorController");
 
 const router = express.Router();
 
+router.get(
+  "/screenhouse/:screenhouseId/stress-score",
+  getScreenhouseStressScore
+);
 router.get(
   "/screenhouse/:screenhouseId/dashboard",
   getScreenhouseDashboardSummary
@@ -40,7 +46,7 @@ router.post(
 );
 router.get("/map-summary", getMapSummary);
 router.get("/latest/:screenhouseId", getLatestSensorData);
-router.get("/latest", getLatestAllSensorData);
+router.get("/latest", authMiddleware, getLatestAllSensorData);
 router.get("/", getSensorData);
 
 module.exports = router;

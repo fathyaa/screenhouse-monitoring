@@ -112,7 +112,7 @@ export default function PullToRefresh({ onRefresh, className = "", children }) {
             className={`text-bl-primary mb-0.5 ${refreshing ? "animate-spin" : ""}`}
             style={refreshing ? undefined : { transform: `rotate(${pull * 2.5}deg)` }}
           />
-          <span className="text-[10px] text-gray-500 pb-1.5">
+          <span className="text-[11px] text-gray-600 font-medium pb-1.5">
             {refreshing
               ? "Memperbarui..."
               : pull >= PULL_THRESHOLD

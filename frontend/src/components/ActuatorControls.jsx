@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { Droplets, Lightbulb, Wind } from "lucide-react";
+import { Bot, Droplets, Lightbulb, Wind } from "lucide-react";
 import { API_URL } from "../config/api";
+import { buildAutoActuatorLocks } from "../constants/actuatorRules";
 
 const ACTUATORS = [
   { key: "fan", field: "fan_status", label: "Kipas", icon: Wind },
@@ -9,11 +10,39 @@ const ACTUATORS = [
   { key: "lamp", field: "lamp_status", label: "Lampu", icon: Lightbulb },
 ];
 
+const CONFIRM_MESSAGES = {
+  fan: {
+    on: "Nyalakan kipas untuk sirkulasi udara?",
+    off: "Matikan kipas?",
+  },
+  irrigation: {
+    on: "Nyalakan irigasi? Pastikan drainase screenhouse lancar.",
+    off: "Matikan irigasi?",
+  },
+  lamp: {
+    on: "Nyalakan lampu pemanas/penerangan?",
+    off: "Matikan lampu?",
+  },
+};
+
+const AUTO_LOCK_TOAST =
+  "Aktuator sedang dikontrol otomatis oleh sistem. Tunggu kondisi normal sebelum mengubah manual.";
+
 function isOn(value) {
   return value === true || value === 1 || value === "on";
 }
 
-function ActuatorSwitch({ label, icon: Icon, value, onChange, disabled, loading, compact, readOnly }) {
+function ActuatorSwitch({
+  label,
+  icon: Icon,
+  value,
+  onChange,
+  disabled,
+  loading,
+  compact,
+  readOnly,
+  autoLocked = false,
+}) {
   const on = isOn(value);
   const hasValue = value !== null && value !== undefined;
 
@@ -22,13 +51,14 @@ function ActuatorSwitch({ label, icon: Icon, value, onChange, disabled, loading,
       <div
         className={`flex items-center gap-2 rounded-xl border p-2.5 ${
           on ? "bg-bl-surface-muted border-bl-accent/30" : "bg-gray-50 border-gray-100"
-        }`}
+        } ${autoLocked ? "opacity-70" : ""}`}
       >
-        <Icon size={16} className={on ? "text-bl-primary" : "text-gray-400"} />
+        <Icon size={16} className={on ? "text-bl-primary" : "text-gray-600"} />
         <div className="text-left min-w-0">
           <div className="text-xs font-medium text-gray-700">{label}</div>
-          <div className={`text-[10px] ${on ? "text-bl-primary" : "text-gray-400"}`}>
+          <div className={`text-[10px] ${on ? "text-bl-primary" : "text-gray-600"}`}>
             {!hasValue ? "Belum diketahui" : on ? "Nyala" : "Mati"}
+            {autoLocked && " · otomatis"}
           </div>
         </div>
       </div>
@@ -37,24 +67,26 @@ function ActuatorSwitch({ label, icon: Icon, value, onChange, disabled, loading,
 
   const trackClass = compact ? "h-5 w-9" : "h-6 w-11";
   const thumbClass = compact ? "h-4 w-4" : "h-5 w-5";
+  const switchDisabled = disabled || loading || !hasValue || autoLocked;
 
   return (
     <div
       className={`flex items-center justify-between gap-2 rounded-xl border transition ${
         compact ? "p-2" : "p-2.5"
       } ${on ? "bg-bl-surface-muted border-bl-accent/30" : "bg-gray-50 border-gray-100"} ${
-        disabled ? "opacity-60" : ""
+        autoLocked ? "opacity-70" : disabled ? "opacity-60" : ""
       }`}
     >
       <div className="flex items-center gap-2 min-w-0">
-        <Icon size={compact ? 14 : 16} className={on ? "text-bl-primary" : "text-gray-400"} />
+        <Icon size={compact ? 14 : 16} className={on ? "text-bl-primary" : "text-gray-600"} />
         <div className="text-left min-w-0">
           <div className={`font-medium text-gray-700 ${compact ? "text-[10px]" : "text-xs"}`}>
             {label}
           </div>
           {!compact && (
-            <div className={`text-[10px] ${on ? "text-bl-primary" : "text-gray-400"}`}>
+            <div className={`text-[10px] ${on ? "text-bl-primary" : "text-gray-600"}`}>
               {!hasValue ? "Belum diketahui" : on ? "Nyala" : "Mati"}
+              {autoLocked && " · otomatis"}
             </div>
           )}
         </div>
@@ -64,12 +96,25 @@ function ActuatorSwitch({ label, icon: Icon, value, onChange, disabled, loading,
         type="button"
         role="switch"
         aria-checked={on}
-        aria-label={`${label} ${on ? "nyala" : "mati"}`}
-        disabled={disabled || loading || !hasValue}
-        onClick={() => onChange(!on)}
+        aria-disabled={autoLocked || undefined}
+        aria-label={`${label} ${on ? "nyala" : "mati"}${autoLocked ? " — dikontrol otomatis" : ""}`}
+        disabled={switchDisabled}
+        onClick={() => {
+          if (autoLocked) {
+            toast(AUTO_LOCK_TOAST, { icon: "🤖" });
+            return;
+          }
+          onChange(!on);
+        }}
         className={`${trackClass} shrink-0 rounded-full p-0.5 flex items-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-green-300 ${
-          on ? "justify-end bg-green-600" : "justify-start bg-gray-300"
-        } ${disabled || loading ? "cursor-not-allowed" : "cursor-pointer"}`}
+          on
+            ? autoLocked
+              ? "justify-end bg-green-600/45"
+              : "justify-end bg-green-600"
+            : autoLocked
+            ? "justify-start bg-gray-300/70"
+            : "justify-start bg-gray-300"
+        } ${switchDisabled ? "cursor-not-allowed" : "cursor-pointer"}`}
       >
         <span className={`${thumbClass} rounded-full bg-white shadow shrink-0 block`} />
       </button>
@@ -82,6 +127,7 @@ export default function ActuatorControls({
   fan_status,
   irrigation_status,
   lamp_status,
+  autoAlerts = [],
   disabled = false,
   compact = false,
   readOnly = false,
@@ -89,6 +135,20 @@ export default function ActuatorControls({
   className = "",
 }) {
   const [loadingKey, setLoadingKey] = useState(null);
+  const [pendingConfirm, setPendingConfirm] = useState(null);
+
+  const autoLocks = useMemo(
+    () =>
+      buildAutoActuatorLocks(autoAlerts, {
+        screenhouseId: screenhouseId ?? undefined,
+      }),
+    [autoAlerts, screenhouseId]
+  );
+
+  const autoBannerMessages = useMemo(
+    () => [...new Set(Object.values(autoLocks).map((lock) => lock.message).filter(Boolean))],
+    [autoLocks]
+  );
 
   const values = {
     fan_status,
@@ -96,8 +156,12 @@ export default function ActuatorControls({
     lamp_status,
   };
 
-  const handleToggle = async (actuatorKey, nextOn) => {
+  const executeToggle = async (actuatorKey, nextOn) => {
     if (readOnly) return;
+    if (autoLocks[actuatorKey]) {
+      toast(AUTO_LOCK_TOAST, { icon: "🤖" });
+      return;
+    }
     if (!screenhouseId) {
       toast.error("Screenhouse belum tersedia");
       return;
@@ -123,6 +187,10 @@ export default function ActuatorControls({
 
       const data = await res.json();
       if (!res.ok) {
+        if (res.status === 409 && data.code === "AUTO_ACTUATOR_LOCKED") {
+          toast(data.message || AUTO_LOCK_TOAST, { icon: "🤖" });
+          return;
+        }
         throw new Error(data.message || "Gagal mengubah aktuator");
       }
 
@@ -141,36 +209,119 @@ export default function ActuatorControls({
       toast.error(err.message || "Gagal mengubah aktuator");
     } finally {
       setLoadingKey(null);
+      setPendingConfirm(null);
     }
+  };
+
+  const handleToggleRequest = (actuatorKey, nextOn) => {
+    if (readOnly) return;
+    if (autoLocks[actuatorKey]) {
+      toast(AUTO_LOCK_TOAST, { icon: "🤖" });
+      return;
+    }
+
+    const actuator = ACTUATORS.find((a) => a.key === actuatorKey);
+    if (!actuator) return;
+
+    const msg =
+      CONFIRM_MESSAGES[actuatorKey]?.[nextOn ? "on" : "off"] ??
+      `${nextOn ? "Nyalakan" : "Matikan"} ${actuator.label.toLowerCase()}?`;
+
+    setPendingConfirm({ actuatorKey, nextOn, label: actuator.label, message: msg });
   };
 
   return (
     <div className={className}>
       {!compact && (
-        <div className="text-[10px] uppercase tracking-wide text-gray-400 mb-1.5">
+        <div className="text-[10px] uppercase tracking-wide text-gray-600 mb-1.5">
           {readOnly ? "Status aktuator" : "Kontrol aktuator"}
         </div>
       )}
+
+      {autoBannerMessages.length > 0 && (
+        <div className="space-y-2 mb-2.5">
+          {autoBannerMessages.map((message) => (
+            <div
+              key={message}
+              className="flex items-start gap-2.5 rounded-xl bg-bl-surface-muted border border-bl-accent/25 px-3 py-2.5"
+            >
+              <Bot size={16} className="shrink-0 text-bl-primary mt-0.5" aria-hidden />
+              <p className="text-xs sm:text-sm text-gray-800 leading-relaxed">
+                <span className="font-semibold text-bl-primary">Dikontrol otomatis:</span>{" "}
+                {message}. Tombol terkait dikunci sementara demi keamanan bibit.
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className={`grid gap-1.5 ${compact ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-3"}`}>
-        {ACTUATORS.map(({ key, field, label, icon }) => (
-          <ActuatorSwitch
-            key={key}
-            label={label}
-            icon={icon}
-            value={values[field]}
-            compact={compact}
-            readOnly={readOnly}
-            loading={loadingKey === key}
-            disabled={disabled}
-            onChange={(next) => handleToggle(key, next)}
-          />
-        ))}
+        {ACTUATORS.map(({ key, field, label, icon }) => {
+          const lock = autoLocks[key];
+          const rawValue = values[field];
+          const displayValue =
+            lock && (rawValue === null || rawValue === undefined)
+              ? lock.expectedOn
+              : rawValue;
+
+          return (
+            <ActuatorSwitch
+              key={key}
+              label={label}
+              icon={icon}
+              value={displayValue}
+              compact={compact}
+              readOnly={readOnly}
+              loading={loadingKey === key}
+              disabled={disabled}
+              autoLocked={Boolean(lock) && !readOnly}
+              onChange={(next) => handleToggleRequest(key, next)}
+            />
+          );
+        })}
       </div>
       {!compact && !readOnly && (
-        <p className="text-[10px] text-gray-400 mt-2 leading-relaxed">
-          Geser tombol untuk kontrol manual. Saat alert terpicu, aktuator yang relevan dapat
-          dinyalakan otomatis oleh sistem.
+        <p className="text-[11px] text-gray-600 font-medium mt-2 leading-relaxed">
+          Geser tombol untuk kontrol manual — setiap perubahan meminta konfirmasi. Saat alert terpicu,
+          aktuator yang relevan dikunci otomatis hingga kondisi normal.
         </p>
+      )}
+
+      {pendingConfirm && (
+        <div
+          className="fixed inset-0 z-[2000] flex items-end sm:items-center justify-center p-4 bg-black/40"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="actuator-confirm-title"
+        >
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-xl w-full max-w-sm p-5 text-left">
+            <div id="actuator-confirm-title" className="text-sm font-semibold text-gray-800">
+              {pendingConfirm.nextOn ? "Nyalakan" : "Matikan"} {pendingConfirm.label}?
+            </div>
+            <p className="text-sm text-gray-600 mt-2 leading-relaxed">{pendingConfirm.message}</p>
+            <div className="flex gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => setPendingConfirm(null)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => executeToggle(pendingConfirm.actuatorKey, pendingConfirm.nextOn)}
+                disabled={loadingKey === pendingConfirm.actuatorKey}
+                className="flex-1 py-2.5 rounded-xl bg-bl-primary hover:bg-bl-primary-hover text-white text-sm font-medium disabled:opacity-50"
+              >
+                {loadingKey === pendingConfirm.actuatorKey
+                  ? "Memproses..."
+                  : pendingConfirm.nextOn
+                  ? "Ya, nyalakan"
+                  : "Ya, matikan"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

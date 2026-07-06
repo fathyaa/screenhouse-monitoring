@@ -6,6 +6,7 @@ import Sidebar from "../layouts/Sidebar";
 import PetaniTopbar from "../layouts/PetaniTopbar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import LocationPickerMap from "../components/LocationPickerMap";
+import VarietasSelect from "../components/VarietasSelect";
 import { LoadingSpinner } from "../components/LoadingUI";
 import { API_URL } from "../config/api";
 
@@ -23,6 +24,7 @@ function PetaniAjukanScreenhousePage() {
     latitude: null,
     longitude: null,
     tray_count: 1,
+    varietas_id: "",
   });
   const [wilayah, setWilayah] = useState(null);
   const [wilayahError, setWilayahError] = useState("");
@@ -75,6 +77,11 @@ function PetaniAjukanScreenhousePage() {
       return;
     }
 
+    if (!screenhouse.varietas_id) {
+      toast.error("Pilih varietas bibit terlebih dahulu");
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/screenhouses/mine`, {
@@ -93,6 +100,7 @@ function PetaniAjukanScreenhousePage() {
           latitude: screenhouse.latitude,
           longitude: screenhouse.longitude,
           tray_count: trayCount,
+          varietas_id: Number(screenhouse.varietas_id),
         }),
       });
       const data = await res.json();
@@ -132,17 +140,17 @@ function PetaniAjukanScreenhousePage() {
           <div className="max-w-lg mx-auto bg-white rounded-2xl border border-gray-200 p-4 sm:p-5 space-y-4">
             <div>
               <div className="text-base font-semibold text-gray-800">Data screenhouse baru</div>
-              <p className="text-xs text-gray-400 mt-1">
+              <p className="text-xs text-gray-600 mt-1">
                 Isi nama dan lokasi. Setelah dikirim, operator akan memverifikasi sebelum screenhouse aktif.
               </p>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                 Nama screenhouse
               </label>
               <div className="flex items-center gap-2 h-10 px-3 border border-gray-200 rounded-lg bg-gray-50">
-                <Leaf size={14} className="text-gray-400 shrink-0" />
+                <Leaf size={14} className="text-gray-600 shrink-0" />
                 <input
                   type="text"
                   value={screenhouse.name}
@@ -154,11 +162,11 @@ function PetaniAjukanScreenhousePage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                 Detail alamat (opsional)
               </label>
               <div className="flex items-start gap-2 min-h-10 px-3 py-2 border border-gray-200 rounded-lg bg-gray-50">
-                <MapPin size={14} className="text-gray-400 shrink-0 mt-0.5" />
+                <MapPin size={14} className="text-gray-600 shrink-0 mt-0.5" />
                 <textarea
                   value={screenhouse.address_detail}
                   onChange={(e) =>
@@ -172,11 +180,11 @@ function PetaniAjukanScreenhousePage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                 Jumlah tray terpasang
               </label>
               <div className="flex items-center gap-2 h-10 px-3 border border-gray-200 rounded-lg bg-gray-50">
-                <Layers size={14} className="text-gray-400 shrink-0" />
+                <Layers size={14} className="text-gray-600 shrink-0" />
                 <input
                   type="number"
                   min={1}
@@ -188,8 +196,24 @@ function PetaniAjukanScreenhousePage() {
                   className="flex-1 bg-transparent outline-none text-sm text-gray-800"
                 />
               </div>
-              <p className="text-[11px] text-gray-400 mt-1">
+              <p className="text-[11px] text-gray-600 mt-1">
                 Satu tray = satu sensor node. Operator dapat menyesuaikan saat verifikasi.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                Varietas bibit
+              </label>
+              <VarietasSelect
+                compact
+                token={token}
+                value={screenhouse.varietas_id}
+                onChange={(id) => setScreenhouse({ ...screenhouse, varietas_id: id })}
+                required
+              />
+              <p className="text-[11px] text-gray-600 mt-1">
+                Batas sensor akan mengikuti standar varietas yang dipilih.
               </p>
             </div>
 
@@ -201,14 +225,14 @@ function PetaniAjukanScreenhousePage() {
             />
 
             {screenhouse.latitude != null && (
-              <p className="text-[11px] text-gray-500">
+              <p className="text-[11px] text-gray-600 font-medium">
                 Koordinat: {screenhouse.latitude}, {screenhouse.longitude}
               </p>
             )}
 
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-1.5">
               <div className="text-xs font-medium text-gray-600">Wilayah (otomatis dari peta)</div>
-              {resolving && <p className="text-xs text-gray-400">Membaca wilayah...</p>}
+              {resolving && <p className="text-xs text-gray-600">Membaca wilayah...</p>}
               {!resolving && wilayah && (
                 <p className="text-xs text-gray-700">
                   {[wilayah.village, wilayah.district, wilayah.regency, wilayah.province]
@@ -220,7 +244,7 @@ function PetaniAjukanScreenhousePage() {
                 <p className="text-xs text-amber-700">{wilayahError}</p>
               )}
               {!resolving && !wilayah && !wilayahError && (
-                <p className="text-xs text-gray-400">Pilih titik di peta untuk mengisi wilayah</p>
+                <p className="text-xs text-gray-600">Pilih titik di peta untuk mengisi wilayah</p>
               )}
             </div>
 
