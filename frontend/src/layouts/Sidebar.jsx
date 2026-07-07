@@ -13,12 +13,14 @@ import {
   SlidersHorizontal,
   FileBarChart,
   Bell,
-  BellOff,
+  RefreshCw,
+  Settings,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { disconnectSocket } from "../lib/socket";
 import { useAlerts } from "../context/AlertContext";
 import { usePushNotifications } from "../context/PushNotificationContext";
+import { FARMER_LABELS } from "../constants/farmerLabels";
 
 import { API_URL } from "../config/api";
 
@@ -38,7 +40,7 @@ const MENUS_BY_ROLE = {
   super_admin: [
     { icon: <User size={17} />, label: "Kelola User", path: "/admin/kelola-user" },
     { icon: <Leaf size={17} />, label: "Kelola Screenhouse", path: "/admin/kelola-screenhouse" },
-    { icon: <SlidersHorizontal size={17} />, label: "Kelola Threshold", path: "/admin/kelola-threshold" },
+    { icon: <SlidersHorizontal size={17} />, label: "Kelola batas aman", path: "/admin/kelola-threshold" },
     { icon: <Radio size={17} />, label: "Konfigurasi", path: "/admin/konfigurasi" },
     { icon: <LayoutDashboard size={17} />, label: "Dashboard Operator", path: "/operator" },
     { icon: <FileBarChart size={17} />, label: "Laporan Wilayah", path: "/operator/laporan" },
@@ -47,17 +49,26 @@ const MENUS_BY_ROLE = {
   ],
 };
 
-function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }) {
+function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user: userProp }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const [profileUser, setProfileUser] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("user") || "null");
+    } catch {
+      return null;
+    }
+  });
+  const user = profileUser ?? userProp;
   const { unreadCount } = useAlerts();
-  const { enabled: pushEnabled, loading: pushLoading, toggle: togglePush } = usePushNotifications();
+  const { enabled: pushEnabled, loading: pushLoading, toggle: togglePush, supported: pushSupported, getUnsupportedMessage } = usePushNotifications();
   const [footerStats, setFooterStats] = useState({
     screenhouseCount: 0,
     sinkNodeCount: 0,
     onlineSinkCount: 0,
   });
   const [pendingApprovals, setPendingApprovals] = useState(0);
+  const [footerStatsLoading, setFooterStatsLoading] = useState(false);
 
   const fetchPendingApprovals = useCallback(() => {
     if (role !== "operator" && role !== "super_admin") {
@@ -100,6 +111,25 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
 
   const isActive = (path) => path === activePath;
 
+  const settingsPath =
+    role === "petani"
+      ? "/petani/pengaturan"
+      : role === "super_admin"
+      ? "/admin/pengaturan"
+      : "/operator/pengaturan";
+
+  useEffect(() => {
+    const syncUser = () => {
+      try {
+        setProfileUser(JSON.parse(localStorage.getItem("user") || "null"));
+      } catch {
+        setProfileUser(null);
+      }
+    };
+    window.addEventListener("auth-changed", syncUser);
+    return () => window.removeEventListener("auth-changed", syncUser);
+  }, []);
+
   useEffect(() => {
     fetchPendingApprovals();
     window.addEventListener("approval-changed", fetchPendingApprovals);
@@ -112,10 +142,12 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
 
   const fetchFooterStats = useCallback(() => {
     const token = localStorage.getItem("token");
-    if (!token) return;
+    if (!token) return Promise.resolve();
+
+    setFooterStatsLoading(true);
 
     if (role === "operator" || role === "super_admin") {
-      fetch(`${API_URL}/screenhouses/operator-stats`, {
+      return fetch(`${API_URL}/screenhouses/operator-stats`, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((res) => (res.ok ? res.json() : null))
@@ -128,32 +160,39 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
             });
           }
         })
-        .catch(console.error);
-      return;
+        .catch(console.error)
+        .finally(() => setFooterStatsLoading(false));
     }
 
     if (role === "petani") {
-      fetch(`${API_URL}/screenhouses/my-stats`, {
+      return fetch(`${API_URL}/screenhouses/my-stats`, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (data) {
             setFooterStats({
-              screenhouseCount: data.screenhouse_count ?? screenhouses.length,
+              screenhouseCount: data.screenhouse_count ?? 0,
               sinkNodeCount: data.online_nodes ?? data.active_sensors ?? 0,
+              onlineSinkCount: data.online_nodes ?? data.active_sensors ?? 0,
             });
           }
         })
-        .catch(console.error);
+        .catch(console.error)
+        .finally(() => setFooterStatsLoading(false));
     }
-  }, [role, screenhouses.length]);
+
+    setFooterStatsLoading(false);
+    return Promise.resolve();
+  }, [role]);
 
   useEffect(() => {
+    if (role === "petani") return;
+
     fetchFooterStats();
     const interval = setInterval(fetchFooterStats, 30000);
     return () => clearInterval(interval);
-  }, [fetchFooterStats]);
+  }, [fetchFooterStats, role]);
 
   const screenhouseCount =
     role === "operator" || role === "super_admin"
@@ -214,43 +253,65 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
         />
         <div className="whitespace-nowrap text-left">
           <div className="text-sm font-semibold tracking-tight">BibitLive</div>
-          <div className="text-xs text-bl-mint">Pantau bibit, langsung live</div>
+          <div className="text-xs text-bl-mint">Pantau bibit langsung</div>
         </div>
       </div>
 
       {/* PROFILE */}
       <div className="p-4">
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-left">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <div className="text-sm font-semibold truncate">{user?.name || "Unknown User"}</div>
-              <div className="text-xs text-white/50 mt-1 capitalize">{role?.replace("_", " ")}</div>
-            </div>
-            {role === "petani" && (
-              <button
-                type="button"
-                onClick={togglePush}
-                disabled={pushLoading}
-                title={
-                  pushEnabled
-                    ? "Notifikasi aktif — klik untuk mute"
-                    : "Notifikasi nonaktif — klik untuk aktifkan"
-                }
-                aria-label={pushEnabled ? "Mute notifikasi" : "Aktifkan notifikasi"}
-                className={`relative shrink-0 p-2 rounded-xl border transition disabled:opacity-50 ${
-                  pushEnabled
-                    ? "bg-bl-primary/20 border-bl-primary/40 text-bl-mint hover:bg-bl-primary/30"
-                    : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10 hover:text-white/60"
-                }`}
-              >
-                {pushEnabled ? (
-                  <Bell size={18} />
-                ) : (
-                  <BellOff size={18} className="opacity-80" />
-                )}
-              </button>
-            )}
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-left space-y-3">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold truncate">{user?.name || "Unknown User"}</div>
+            <div className="text-xs text-white/50 mt-1 capitalize">{role?.replace("_", " ")}</div>
           </div>
+
+          {role === "petani" && (
+            <div className="pt-3 border-t border-white/10">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-xs font-medium text-white/80">{FARMER_LABELS.phoneNotifications}</div>
+                  <div className="text-[10px] text-white/40 mt-0.5 leading-snug">
+                    {pushEnabled
+                      ? "Aktif, peringatan dikirim ke HP"
+                      : "Nonaktif, hanya tampil di aplikasi"}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={pushEnabled}
+                  onClick={togglePush}
+                  disabled={pushLoading}
+                  title={
+                    pushEnabled
+                      ? "Matikan notifikasi ke HP"
+                      : !pushSupported
+                        ? getUnsupportedMessage()
+                        : "Aktifkan notifikasi ke HP"
+                  }
+                  aria-label={pushEnabled ? "Matikan notifikasi ke HP" : "Aktifkan notifikasi ke HP"}
+                  className={`relative shrink-0 w-11 h-6 rounded-full transition disabled:opacity-50 ${
+                    pushEnabled ? "bg-bl-primary" : "bg-white/15"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                      pushEnabled ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => handleNavigate(settingsPath)}
+            className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-white/10 text-xs font-medium text-white/80 hover:bg-white/5 hover:text-white transition"
+          >
+            <Settings size={14} />
+            Pengaturan akun
+          </button>
         </div>
       </div>
 
@@ -278,7 +339,38 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user }
       </div>
 
       {/* STATUS */}
-      {role !== "petani" && (
+      {role === "petani" ? (
+        <>
+          <div className="mx-4 border-t border-white/10 mt-4" />
+          <div className="p-3 flex flex-col gap-0.5 text-left shrink-0">
+            <div className="flex items-center justify-between px-3 py-2">
+              <p className="text-[10px] uppercase tracking-widest text-white/30 font-medium">Status screenhouse</p>
+              <button
+                type="button"
+                onClick={() => fetchFooterStats()}
+                disabled={footerStatsLoading}
+                title="Perbarui status"
+                aria-label="Perbarui status screenhouse"
+                className="p-1.5 rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition disabled:opacity-50"
+              >
+                <RefreshCw size={14} className={footerStatsLoading ? "animate-spin" : ""} />
+              </button>
+            </div>
+            <div className="flex items-center gap-3 px-3 py-2 text-sm text-white/55">
+              <CheckCircle size={17} className="text-bl-mint shrink-0" />
+              {footerStats.screenhouseCount > 0
+                ? `${footerStats.screenhouseCount} screenhouse aktif`
+                : "Belum ada screenhouse aktif"}
+            </div>
+            <div className="flex items-center gap-3 px-3 py-2 text-sm text-white/55">
+              <Wifi size={17} className="text-bl-mint shrink-0" />
+              {footerStats.sinkNodeCount > 0
+                ? `${footerStats.onlineSinkCount}/${footerStats.sinkNodeCount} alat terhubung`
+                : `Ketuk ${FARMER_LABELS.refresh.toLowerCase()} untuk cek alat`}
+            </div>
+          </div>
+        </>
+      ) : (
         <>
           <div className="mx-4 border-t border-white/10 mt-4" />
           <div className="p-3 flex flex-col gap-0.5 text-left shrink-0">

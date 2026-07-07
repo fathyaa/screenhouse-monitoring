@@ -79,7 +79,7 @@ export default function OperatorTopbar({
 
         <div className="hidden md:flex items-center gap-2 bg-green-50 text-green-800 text-xs font-medium px-3 py-1.5 rounded-full">
           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          Online
+          Siap pantau
         </div>
       </div>
     </header>

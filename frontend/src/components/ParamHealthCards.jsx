@@ -1,5 +1,7 @@
 import { Clock } from "lucide-react";
 import { buildHealthList, getActions, markerPosition } from "../constants/paramHealth";
+import { FARMER_LABELS } from "../constants/farmerLabels";
+import { formatRackName } from "../utils/rackNames";
 import { EMPTY_VALUE } from "../constants/sensorMetrics";
 
 const STALE_STYLE = {
@@ -14,6 +16,10 @@ function formatValue(value, unit) {
   return `${rounded}${unit ? (unit === "°C" || unit === "%" ? unit : ` ${unit}`) : ""}`;
 }
 
+function formatRange(min, max, unit) {
+  return FARMER_LABELS.formatRange(min, max, unit);
+}
+
 function resolveDisplayStyle(item, stale) {
   if (!stale) return item.style;
   if (item.status === "ideal") return STALE_STYLE;
@@ -24,44 +30,54 @@ function resolveDisplayStyle(item, stale) {
   };
 }
 
-function HealthCard({ item, getHint, stale }) {
+function HealthCard({ item, getHint, stale, compactStaleBadge }) {
   const bar = markerPosition(item.key, item.value, item.min, item.max);
   const hint = getHint?.(item.key, item.min, item.max) ?? null;
   const style = resolveDisplayStyle(item, stale);
   const badgeLabel = stale && item.status === "ideal" ? STALE_STYLE.label : style.label;
+  const showBadge = !(stale && compactStaleBadge);
+  const accentColor = stale ? "#94a3b8" : style.color;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-3 text-left">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-xs font-semibold text-gray-700 truncate">{item.label}</div>
-          <div className="text-[11px] text-gray-600 font-medium">{item.purpose}</div>
+    <div className="bg-white rounded-xl border border-gray-200 p-3.5 sm:p-3 text-left flex flex-col gap-2.5 sm:gap-2">
+      <div className="flex items-start justify-between gap-3 min-w-0">
+        <div className="min-w-0 flex-1">
+          <div className="text-[13px] sm:text-xs font-semibold text-gray-800 leading-snug">
+            {item.purpose}
+          </div>
+          <div className="text-[11px] text-gray-500 mt-0.5 leading-snug">{item.label}</div>
         </div>
-        <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${style.badge}`}>
-          {badgeLabel}
-        </span>
-      </div>
-
-      <div className="mt-2 flex items-baseline gap-1">
-        <span
-          className="text-lg font-bold"
-          style={{ color: stale ? "#64748b" : style.color }}
-        >
-          {formatValue(item.value, item.unit)}
-        </span>
-        {item.min != null && item.max != null && (
+        {showBadge && (
           <span
-            className="text-[11px] text-gray-600 font-medium cursor-help underline decoration-dotted decoration-gray-400 underline-offset-2"
-            title={hint || undefined}
+            className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${style.badge}`}
           >
-            batas aman {item.min}–{item.max}
-            {item.unit && item.unit !== "%" && item.unit !== "°C" ? ` ${item.unit}` : item.unit}
+            {badgeLabel}
           </span>
         )}
       </div>
 
+      <div className="space-y-1">
+        <div
+          className="text-2xl sm:text-xl font-bold tabular-nums leading-none tracking-tight"
+          style={{ color: stale ? "#64748b" : style.color }}
+        >
+          {formatValue(item.value, item.unit)}
+        </div>
+        {item.min != null && item.max != null ? (
+          <div
+            className="text-[11px] text-gray-500 font-medium leading-snug"
+            title={hint || undefined}
+          >
+            Batas aman{" "}
+            <span className="text-gray-600">{formatRange(item.min, item.max, item.unit)}</span>
+          </div>
+        ) : (
+          <div className="text-[11px] text-gray-500 font-medium">Batas aman belum diatur</div>
+        )}
+      </div>
+
       {bar ? (
-        <div className="relative mt-2 h-1.5 rounded-full bg-slate-100">
+        <div className="relative h-2 sm:h-1.5 rounded-full bg-slate-100">
           {!stale && (
             <div
               className="absolute h-full rounded-full"
@@ -73,19 +89,19 @@ function HealthCard({ item, getHint, stale }) {
             />
           )}
           <div
-            className="absolute -top-0.5 w-2.5 h-2.5 rounded-full border-2 border-white shadow"
+            className="absolute top-1/2 -translate-y-1/2 w-3 h-3 sm:w-2.5 sm:h-2.5 rounded-full border-2 border-white shadow"
             style={{
-              left: `calc(${bar.pos}% - 5px)`,
-              backgroundColor: stale ? "#94a3b8" : style.color,
+              left: `clamp(0px, calc(${bar.pos}% - 6px), calc(100% - 12px))`,
+              backgroundColor: accentColor,
             }}
           />
         </div>
-      ) : (
-        <div className="mt-2 text-[11px] text-gray-600 font-medium">Batas aman belum diatur</div>
-      )}
+      ) : null}
 
       {item.multiNode && item.nodeName && item.status !== "ideal" && item.status !== "unknown" && (
-        <div className="mt-1.5 text-[11px] text-gray-600 font-medium truncate">dari {item.nodeName}</div>
+        <div className="text-[11px] text-gray-500 font-medium -mt-1">
+          Dari alat: {formatRackName(item.nodeName)}
+        </div>
       )}
     </div>
   );
@@ -138,10 +154,10 @@ export default function ParamHealthCards({
             <Clock size={15} className="shrink-0 text-amber-700" />
             <div>
               <div className="text-xs font-semibold text-amber-950">
-                Snapshot terakhir {snapshotLabel}
+                Data terakhir {snapshotLabel}
               </div>
               <div className="text-[11px] text-amber-800/90 mt-0.5">
-                Data di bawah adalah cache historis — bukan pembacaan live.
+                Angka di bawah adalah data terakhir yang tersimpan, bukan pembacaan langsung.
               </div>
             </div>
           </div>
@@ -149,12 +165,18 @@ export default function ParamHealthCards({
       </div>
 
       <div
-        className={`grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2 transition ${
-          stale ? "opacity-60 grayscale-[0.4]" : ""
+        className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-2 transition ${
+          stale ? "opacity-75 grayscale-[0.25]" : ""
         }`}
       >
         {list.map((item) => (
-          <HealthCard key={item.key} item={item} getHint={getThresholdHint} stale={stale} />
+          <HealthCard
+            key={item.key}
+            item={item}
+            getHint={getThresholdHint}
+            stale={stale}
+            compactStaleBadge={stale}
+          />
         ))}
       </div>
 
@@ -164,13 +186,13 @@ export default function ParamHealthCards({
             <div className="flex items-center gap-2 text-xs text-bl-primary bg-bl-surface-muted rounded-xl px-3 py-2">
               <span>✓</span>
               {stale
-                ? "Snapshot terakhir masih dalam batas aman. Tunggu perangkat online untuk data live."
+                ? "Data terakhir masih dalam batas aman. Tunggu alat terhubung untuk pembacaan langsung."
                 : "Semua ukuran tanah masih pas. Tidak perlu tindakan."}
             </div>
           ) : (
             <div className="space-y-1.5">
               <div className="text-[10px] uppercase tracking-wide text-gray-600 font-medium">
-                {stale ? "Catatan dari snapshot terakhir" : "Saran tindakan"}
+                {stale ? "Catatan dari data terakhir" : "Saran tindakan"}
               </div>
               {actions.map((a) => (
                 <div
@@ -183,7 +205,7 @@ export default function ParamHealthCards({
                   />
                   <span>
                     <span className="font-semibold">{a.label}</span>{" "}
-                    {stale ? "menyimpang pada snapshot terakhir" : a.style.label.toLowerCase()}
+                    {stale ? "menyimpang pada data terakhir" : a.style.label.toLowerCase()}
                     {a.multiNode && a.nodeName ? ` (${a.nodeName})` : ""}
                     {!stale && `. ${a.advice}`}
                   </span>

@@ -2,6 +2,7 @@ const { getMqttClient } = require("../../config/mqttClient");
 const { isRabbitMqEnabled } = require("../../config/rabbitmq");
 const { handleMqttPayload } = require("./ingestPipeline");
 const { recordMqttReceived, recordMqttFailed } = require("./ingestMetrics");
+const { adaptMqttMessage, getInfraSubscribeTopics } = require("./infraMqttAdapter");
 
 function connectMQTT() {
   const client = getMqttClient();
@@ -15,6 +16,7 @@ function connectMQTT() {
     "screenhouse/+/node/+/sensor",
     "screenhouse/+/sink/+/sensor",
     "node/+/telemetry",
+    ...getInfraSubscribeTopics(),
   ];
 
   client.on("connect", () => {
@@ -30,9 +32,8 @@ function connectMQTT() {
   client.on("message", async (topic, message) => {
     recordMqttReceived();
     try {
-      const data = JSON.parse(message.toString());
-      const parts = topic.split("/");
-      const screenhouseIdFromTopic = parts[0] === "screenhouse" ? parts[1] : null;
+      const rawData = JSON.parse(message.toString());
+      const { data, parts, screenhouseIdFromTopic } = adaptMqttMessage(topic, rawData);
       const ok = await handleMqttPayload(data, parts, screenhouseIdFromTopic);
       if (ok === false) recordMqttFailed();
     } catch (err) {

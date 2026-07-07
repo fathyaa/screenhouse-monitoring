@@ -12,12 +12,19 @@ const {
   getFarmers,
   getFarmerScreenhouses,
   getApprovedUsers,
+  getMe,
+  updateMe,
+  changeMyPassword,
 } = require("../controllers/authController");
 
 const router = express.Router();
 
 const approvalRoles = ["admin", "operator", "super_admin"];
 const approveRoles = ["operator", "super_admin"];
+
+router.get("/me", authMiddleware, getMe);
+router.patch("/me", authMiddleware, updateMe);
+router.patch("/me/password", authMiddleware, changeMyPassword);
 
 router.patch(
   "/:id/approve",

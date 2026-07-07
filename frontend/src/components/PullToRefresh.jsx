@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { FARMER_LABELS } from "../constants/farmerLabels";
 
 const MOBILE_QUERY = "(max-width: 639px)";
 const PULL_THRESHOLD = 68;
@@ -114,10 +115,10 @@ export default function PullToRefresh({ onRefresh, className = "", children }) {
           />
           <span className="text-[11px] text-gray-600 font-medium pb-1.5">
             {refreshing
-              ? "Memperbarui..."
+              ? FARMER_LABELS.refreshing
               : pull >= PULL_THRESHOLD
-              ? "Lepas untuk refresh"
-              : "Tarik untuk refresh"}
+              ? FARMER_LABELS.releaseToRefresh
+              : FARMER_LABELS.pullToRefresh}
           </span>
         </div>
       )}

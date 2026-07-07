@@ -31,7 +31,7 @@ export function exportOperatorReportCsv(report) {
     "Sehat",
     "Peringatan",
     "Kritis",
-    "Offline",
+    "Tidak terhubung",
     "Uptime (%)",
     "Skor rata-rata",
   ];

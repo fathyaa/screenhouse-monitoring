@@ -2,6 +2,10 @@ const pool = require("../../../config/db");
 const { HEALTH_STATUS_METRICS } = require("../../../shared/thresholdMetrics");
 const { computeScreenhouseStressScore } = require("../../../shared/stressScore");
 const { deriveScreenhouseStatus } = require("../../../shared/screenhouseStatus");
+const {
+  buildOfflineAlertMessage,
+  consolidateOfflineAlerts,
+} = require("../../../shared/offlineAlert");
 
 const SENSOR_DATA_JOIN = `
   FROM sensor_data sd
@@ -485,6 +489,58 @@ async function getSensorNodesByScreenhouse(req, res) {
   }
 }
 
+async function patchSensorNodeName(req, res) {
+  try {
+    const nodeId = Number(req.params.nodeId);
+    const nodeName =
+      typeof req.body?.node_name === "string" ? req.body.node_name.trim() : "";
+
+    if (!Number.isInteger(nodeId)) {
+      return res.status(400).json({ message: "ID tidak valid" });
+    }
+    if (nodeName.length < 1 || nodeName.length > 50) {
+      return res.status(400).json({ message: "Nama rak bibit harus 1–50 karakter" });
+    }
+
+    const userId = req.user?.id;
+    const role = req.user?.role;
+    if (!userId) {
+      return res.status(401).json({ message: "Token tidak valid" });
+    }
+
+    const isStaff = role === "operator" || role === "super_admin";
+
+    const result = await pool.query(
+      `
+      UPDATE sensor_nodes sn
+      SET node_name = $1
+      FROM screenhouse_registry sr
+      WHERE sn.id = $2
+        AND sn.screenhouse_id = sr.screenhouse_id
+        AND ($3::boolean OR sr.owner_user_id = $4)
+      RETURNING sn.id, sn.screenhouse_id, sn.node_code, sn.node_name, sn.location
+      `,
+      [nodeName, nodeId, isStaff, userId]
+    );
+
+    if (!result.rows[0]) {
+      return res.status(404).json({ message: "Rak bibit tidak ditemukan atau akses ditolak" });
+    }
+
+    const row = result.rows[0];
+    await consolidateOfflineAlerts(pool, {
+      screenhouseId: row.screenhouse_id,
+      sensorNodeId: row.id,
+      message: buildOfflineAlertMessage(nodeName),
+    });
+
+    res.json(row);
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
 async function getScreenhouseSensorHistory(req, res) {
   try {
     const { screenhouseId } = req.params;
@@ -727,4 +783,5 @@ module.exports = {
   getScreenhouseDashboardSummary,
   getScreenhouseStressScore,
   getSinkNodeByScreenhouse,
+  patchSensorNodeName,
 };

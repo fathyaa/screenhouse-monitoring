@@ -630,6 +630,84 @@ async function getApprovedUsers(req, res) {
   return getFarmers(req, res);
 }
 
+async function getMe(req, res) {
+  try {
+    const result = await pool.query(
+      `SELECT id, name, phone_number, role, status, created_at FROM users WHERE id = $1`,
+      [req.user.id]
+    );
+    if (!result.rows[0]) {
+      return res.status(404).json({ message: "User tidak ditemukan" });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    logAuth("get_me_error", { level: "error", message: err.message });
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+async function updateMe(req, res) {
+  try {
+    const name = req.body?.name?.trim();
+    if (!name || name.length < 2 || name.length > 100) {
+      return res.status(400).json({ message: "Nama harus 2–100 karakter" });
+    }
+
+    const result = await pool.query(
+      `
+      UPDATE users
+      SET name = $1
+      WHERE id = $2
+      RETURNING id, name, phone_number, role, status
+      `,
+      [name, req.user.id]
+    );
+
+    if (!result.rows[0]) {
+      return res.status(404).json({ message: "User tidak ditemukan" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    logAuth("update_me_error", { level: "error", message: err.message });
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+async function changeMyPassword(req, res) {
+  try {
+    const { current_password, new_password } = req.body ?? {};
+    if (!current_password || !new_password) {
+      return res.status(400).json({ message: "Password lama dan baru wajib diisi" });
+    }
+    if (String(new_password).length < 6) {
+      return res.status(400).json({ message: "Password baru minimal 6 karakter" });
+    }
+
+    const userRes = await pool.query(`SELECT password FROM users WHERE id = $1`, [req.user.id]);
+    const user = userRes.rows[0];
+    if (!user) {
+      return res.status(404).json({ message: "User tidak ditemukan" });
+    }
+
+    const isMatch = await bcrypt.compare(current_password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Password lama salah" });
+    }
+
+    const hashedPassword = await bcrypt.hash(new_password, 10);
+    await pool.query(`UPDATE users SET password = $1 WHERE id = $2`, [
+      hashedPassword,
+      req.user.id,
+    ]);
+
+    res.json({ message: "Password berhasil diubah" });
+  } catch (err) {
+    logAuth("change_password_error", { level: "error", message: err.message });
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
 module.exports = {
   register,
   login,
@@ -640,4 +718,7 @@ module.exports = {
   getFarmers,
   getFarmerScreenhouses,
   getApprovedUsers,
+  getMe,
+  updateMe,
+  changeMyPassword,
 };

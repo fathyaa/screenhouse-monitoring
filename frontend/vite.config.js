@@ -30,7 +30,7 @@ export default defineConfig({
       srcDir: "src/pwa",
       filename: "sw.js",
       registerType: "autoUpdate",
-      includeAssets: ["icon.svg", "logo-bibitlive.png", "apple-touch-icon.png", "pwa-192x192.png", "pwa-512x512.png"],
+      includeAssets: ["icon-512.png", "logo-bibitlive.png", "apple-touch-icon.png", "pwa-192x192.png", "pwa-512x512.png", "pwa-512-maskable.png"],
       manifest: {
         name: "BibitLive",
         short_name: "BibitLive",
@@ -57,7 +57,7 @@ export default defineConfig({
             purpose: "any",
           },
           {
-            src: "pwa-512x512.png",
+            src: "pwa-512-maskable.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable",

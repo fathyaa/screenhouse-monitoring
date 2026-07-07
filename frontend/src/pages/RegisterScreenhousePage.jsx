@@ -123,7 +123,7 @@ function RegisterScreenhousePage() {
 
     const trayCount = Number(screenhouse.tray_count);
     if (!Number.isInteger(trayCount) || trayCount < 1 || trayCount > 20) {
-      alert("Jumlah tray harus antara 1 dan 20");
+      alert("Jumlah rak bibit harus antara 1 dan 20");
       return;
     }
 
@@ -247,7 +247,7 @@ function RegisterScreenhousePage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-600 mb-2">
-                Jumlah tray terpasang
+                Jumlah rak bibit terpasang
               </label>
               <div className="flex items-center gap-3 h-12 px-4 border border-gray-200 rounded-xl bg-gray-50">
                 <Layers size={16} className="text-gray-600 shrink-0" />
@@ -263,7 +263,7 @@ function RegisterScreenhousePage() {
                 />
               </div>
               <p className="text-xs text-gray-600 mt-2">
-                Satu tray = satu sensor node. Operator dapat menyesuaikan saat verifikasi.
+                Satu rak bibit memakai satu alat pengukur. Operator dapat menyesuaikan saat verifikasi.
               </p>
             </div>
 
@@ -277,7 +277,7 @@ function RegisterScreenhousePage() {
                 required
               />
               <p className="text-xs text-gray-600 mt-2">
-                Threshold sensor akan disesuaikan otomatis dengan standar varietas yang dipilih.
+                Batas aman sensor akan disesuaikan otomatis dengan standar varietas yang dipilih.
               </p>
             </div>
 

@@ -8,6 +8,7 @@ import OperatorTopbar from "../layouts/OperatorTopbar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import { API_URL } from "../config/api";
 import { getSocket } from "../lib/socket";
+import { formatRackName } from "../utils/rackNames";
 import { THRESHOLD_METRICS } from "../constants/thresholdMetrics";
 import {
   getStatusMeta,
@@ -257,7 +258,7 @@ function OperatorDashboard() {
         <OperatorTopbar
           onToggleSidebar={toggleSidebar}
           title="Dashboard operator"
-          subtitle="Monitoring realtime · peta screenhouse"
+          subtitle="Pantau langsung, peta screenhouse"
         />
 
         {/* Legend status — di luar peta, di bawah topbar */}
@@ -409,8 +410,8 @@ function OperatorDashboard() {
                                     className={`w-1.5 h-1.5 rounded-full ${meta.dotClass}`}
                                   />
                                   {status === "offline"
-                                    ? `Offline · ${timeAgo(summary.last_seen)}`
-                                    : `Update ${timeAgo(summary.last_seen)}`}
+                                    ? `Tidak terhubung, ${timeAgo(summary.last_seen)}`
+                                    : `Diperbarui ${timeAgo(summary.last_seen)}`}
                                 </span>
                                 {summary.active_alerts > 0 && (
                                   <span
@@ -465,7 +466,7 @@ function OperatorDashboard() {
 
                               {summary.node_name && (
                                 <p className="text-[10px] text-slate-600">
-                                  Node: {summary.node_name}
+                                  {formatRackName(summary.node_name)}
                                 </p>
                               )}
                             </>
@@ -513,7 +514,7 @@ function OperatorDashboard() {
                             </div>
                             <div className="text-xs text-gray-600 mt-0.5 leading-relaxed">
                               {sh.meta.label}
-                              {sh.activeAlerts > 0 ? ` · ${sh.activeAlerts} alert` : ""}
+                              {sh.activeAlerts > 0 ? `, ${sh.activeAlerts} peringatan` : ""}
                               {sh.owner_name ? ` · ${sh.owner_name}` : ""}
                             </div>
                           </div>

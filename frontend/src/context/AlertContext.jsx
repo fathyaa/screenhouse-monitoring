@@ -8,7 +8,7 @@ import { getAutoHandledNotice, isAutoHandledAlert } from "../constants/actuatorR
 import { loadSeenAutoAlerts, markAutoAlertsSeen } from "../utils/seenAutoAlerts";
 import { installAlertSoundUnlock, playAlertSound } from "../utils/alertSound";
 import { API_URL } from "../config/api";
-import { usePushNotifications } from "./PushNotificationContext";
+import { dedupeOfflineAlerts, getAlertDisplayMessage } from "../utils/alertDisplay";
 
 const AlertContext = createContext(null);
 const TOAST_ID = "alert-notif";
@@ -44,7 +44,6 @@ export function isUnreadAlert(alert, seenAutoAlertIds) {
 }
 
 export function AlertProvider({ children }) {
-  const { enabled: pushEnabled } = usePushNotifications();
   const [alerts, setAlerts] = useState([]);
   const [alertCounts, setAlertCounts] = useState(null);
   const [alertsLoading, setAlertsLoading] = useState(true);
@@ -54,18 +53,22 @@ export function AlertProvider({ children }) {
   const loadOptionsRef = useRef({ status: "active", limit: 500 });
   alertsRef.current = alerts;
 
-  const activeCount = alertCounts?.active ?? alerts.filter((a) => a.status === "active").length;
-  const resolvedCount = alertCounts?.resolved ?? alerts.filter((a) => a.status === "resolved").length;
-  const totalCount = alertCounts?.total ?? alerts.length;
+  const normalizedAlerts = useMemo(() => dedupeOfflineAlerts(alerts), [alerts]);
+
+  const activeCount =
+    normalizedAlerts.filter((a) => a.status === "active").length;
+  const resolvedCount =
+    normalizedAlerts.filter((a) => a.status === "resolved").length;
+  const totalCount = normalizedAlerts.length;
 
   const unreadCount = useMemo(
-    () => alerts.filter((a) => isUnreadAlert(a, seenAutoAlertIds)).length,
-    [alerts, seenAutoAlertIds]
+    () => normalizedAlerts.filter((a) => isUnreadAlert(a, seenAutoAlertIds)).length,
+    [normalizedAlerts, seenAutoAlertIds]
   );
 
   const unreadAlerts = useMemo(
-    () => alerts.filter((a) => isUnreadAlert(a, seenAutoAlertIds)),
-    [alerts, seenAutoAlertIds]
+    () => normalizedAlerts.filter((a) => isUnreadAlert(a, seenAutoAlertIds)),
+    [normalizedAlerts, seenAutoAlertIds]
   );
 
   const loadAlerts = useCallback((options = {}) => {
@@ -101,7 +104,7 @@ export function AlertProvider({ children }) {
         }
 
         if (Array.isArray(data)) {
-          setAlerts(data);
+          setAlerts(dedupeOfflineAlerts(data));
           setAlertCounts(null);
           return;
         }
@@ -111,7 +114,7 @@ export function AlertProvider({ children }) {
           return;
         }
 
-        setAlerts(data.items);
+        setAlerts(dedupeOfflineAlerts(data.items));
         setAlertCounts(data.counts ?? null);
       })
       .catch((err) => console.error("[alerts] fetch gagal", err))
@@ -160,13 +163,11 @@ export function AlertProvider({ children }) {
         setAlerts((prev) => {
           const exists = prev.find((a) => a.id === newAlert.id);
           if (exists) return prev;
-          return [newAlert, ...prev];
+          return dedupeOfflineAlerts([newAlert, ...prev]);
         });
       } else {
         loadAlerts();
       }
-
-      if (!pushEnabled) return;
 
       playAlertSound();
 
@@ -183,7 +184,9 @@ export function AlertProvider({ children }) {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-semibold text-gray-800">Peringatan baru</div>
-                <div className="text-xs text-gray-600 font-medium mt-1 truncate">{newAlert.message}</div>
+                <div className="text-xs text-gray-600 font-medium mt-1 truncate">
+                  {getAlertDisplayMessage(newAlert)}
+                </div>
                 {autoNotice && (
                   <div className="text-xs text-bl-primary mt-1 font-medium">{autoNotice}</div>
                 )}
@@ -219,7 +222,7 @@ export function AlertProvider({ children }) {
       socket.off("alert-update", handleAlert);
       socket.off("alert-resolved", handleAlertResolved);
     };
-  }, [loadAlerts, pushEnabled]);
+  }, [loadAlerts]);
 
   const resolveAlert = async (alertId, resolveNote = null) => {
     setResolvingAlertId(alertId);
@@ -284,7 +287,7 @@ export function AlertProvider({ children }) {
   return (
     <AlertContext.Provider
       value={{
-        alerts,
+        alerts: normalizedAlerts,
         activeCount,
         unreadCount,
         unreadAlerts,

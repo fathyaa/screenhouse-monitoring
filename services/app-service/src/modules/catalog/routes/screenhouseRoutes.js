@@ -11,7 +11,7 @@ const {
   getScreenhouseById,
   getScreenhouseEstimasiTanam,
   getScreenhouseStressScore,
-  patchMyScreenhouseProfile,
+  patchScreenhouseProfile,
   submitMyScreenhouse,
   getPendingScreenhouses,
   getPendingScreenhouseStats,
@@ -112,8 +112,8 @@ router.post(
 router.patch(
   "/:id/profile",
   authMiddleware,
-  roleMiddleware(["petani"]),
-  patchMyScreenhouseProfile
+  roleMiddleware(["petani", "operator", "super_admin"]),
+  patchScreenhouseProfile
 );
 
 router.get(

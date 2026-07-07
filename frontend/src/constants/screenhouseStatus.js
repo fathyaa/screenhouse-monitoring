@@ -24,7 +24,7 @@ export const SCREENHOUSE_STATUS = {
   },
   offline: {
     key: "offline",
-    label: "Offline",
+    label: "Tidak terhubung",
     color: "#94a3b8",
     dotClass: "bg-slate-400",
     badgeClass: "bg-slate-100 text-slate-600",
@@ -86,7 +86,7 @@ export function formatLastSensorUpdate(dateStr) {
   });
   const relative = timeAgoLong(dateStr);
 
-  return `Terakhir diperbarui ${relative} · ${clock} WIB`;
+  return `Terakhir diperbarui ${relative}, pukul ${clock} WIB`;
 }
 
 /** Waktu snapshot untuk label "terakhir diperbarui 16 Jun, 22.15" */

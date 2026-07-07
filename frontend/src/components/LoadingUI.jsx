@@ -158,9 +158,9 @@ export function ScreenhouseDetailSkeleton() {
       <ChartGridSkeleton />
       <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
         <Skeleton className="h-4 w-40" />
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-2">
           {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-24 rounded-xl" />
+            <Skeleton key={i} className="h-28 sm:h-24 rounded-xl" />
           ))}
         </div>
       </div>

@@ -5,7 +5,7 @@ import Sidebar from "../layouts/Sidebar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import { useAlerts, getAlertDetail } from "../context/AlertContext";
 import PetaniTopbar from "../layouts/PetaniTopbar";
-import { pickPrimaryAlert } from "../utils/petaniAlertNav";
+import { pickPrimaryAlert, focusAlertHighlight } from "../utils/petaniAlertNav";
 import { isAutoHandledAlert, getAutoHandledExplanation } from "../constants/actuatorRules";
 import { RESOLVE_ACTION_OPTIONS } from "../constants/alertResolve";
 import {
@@ -15,6 +15,7 @@ import {
   getAlertIconClasses,
   getAlertListItemClasses,
   getCategoryBadgeClasses,
+  getAlertDisplayMessage,
   sortAlertsForDisplay,
 } from "../utils/alertDisplay";
 import { isAlertCritical } from "../constants/paramHealth";
@@ -59,22 +60,23 @@ function NotifikasiPage() {
     }, [searchParams]);
 
     useEffect(() => {
-        if (alertsLoading || highlightHandled.current) return;
+        if (highlightHandled.current) return;
+        if (alertsLoading && alerts.length === 0) return;
 
         const highlightParam = searchParams.get("highlight");
         const screenhouseParam = searchParams.get("screenhouse");
         if (!highlightParam && !screenhouseParam) return;
 
-        let targetId = highlightParam ? Number(highlightParam) : null;
+        let targetId = highlightParam ? String(highlightParam) : null;
 
         if (!targetId && screenhouseParam) {
             const matches = alerts.filter(
                 (a) => String(a.screenhouse_id) === String(screenhouseParam)
             );
-            targetId =
-                pickPrimaryAlert(matches.filter((a) => a.status === "active"))?.id ??
-                pickPrimaryAlert(matches)?.id ??
-                null;
+            const picked =
+                pickPrimaryAlert(matches.filter((a) => a.status === "active")) ??
+                pickPrimaryAlert(matches);
+            targetId = picked?.id != null ? String(picked.id) : null;
         }
 
         if (!targetId) {
@@ -83,7 +85,7 @@ function NotifikasiPage() {
             return;
         }
 
-        const alert = alerts.find((a) => a.id === targetId);
+        const alert = alerts.find((a) => String(a.id) === targetId);
         if (!alert) return;
 
         if (filter !== "semua" && alert.status !== filter) {
@@ -93,18 +95,18 @@ function NotifikasiPage() {
 
         highlightHandled.current = true;
 
-        const scrollTimer = window.setTimeout(() => {
-            const el = document.getElementById(`alert-${targetId}`);
-            if (el) {
-                el.scrollIntoView({ behavior: "smooth", block: "center" });
-                setBlinkId(targetId);
-            }
-            setSearchParams({}, { replace: true });
+        const cancelFocus = focusAlertHighlight(targetId, {
+            onFound: (id) => {
+                setBlinkId(id);
+                setSearchParams({}, { replace: true });
+                window.setTimeout(() => setBlinkId(null), 1100);
+            },
+            onGiveUp: () => {
+                setSearchParams({}, { replace: true });
+            },
+        });
 
-            window.setTimeout(() => setBlinkId(null), 3800);
-        }, 120);
-
-        return () => window.clearTimeout(scrollTimer);
+        return () => cancelFocus();
     }, [alertsLoading, alerts, filter, searchParams, setSearchParams]);
 
     const filtered = filter === "semua" ? alerts : alerts.filter((a) => a.status === filter);
@@ -112,6 +114,7 @@ function NotifikasiPage() {
         () => sortAlertsForDisplay(filtered),
         [filtered]
     );
+    const showLoadingSkeleton = alertsLoading && alerts.length === 0;
 
     const submitResolve = async () => {
         if (!resolveTarget) return;
@@ -133,11 +136,18 @@ function NotifikasiPage() {
                     onToggleSidebar={toggleSidebar}
                     title="Peringatan"
                     subtitle="Pantau dan tandai peringatan screenhouse"
+                    onBack={() => {
+                        if (window.history.state?.idx > 0) {
+                            navigate(-1);
+                        } else {
+                            navigate("/petani/dashboard");
+                        }
+                    }}
                 />
 
                 <PullToRefresh onRefresh={refetchAlerts} className="p-4 sm:p-5 space-y-4">
 
-                    {alertsLoading ? (
+                    {showLoadingSkeleton ? (
                         <>
                             <KpiGridSkeleton count={3} className="grid-cols-3" />
                             <AlertListSkeleton count={4} />
@@ -203,7 +213,7 @@ function NotifikasiPage() {
                             const categoryLabel = getAlertCategoryLabel(category);
                             const iconBoxCls = getAlertIconClasses(alert);
                             const cardCls = getAlertListItemClasses(alert, {
-                                blink: blinkId === alert.id,
+                                blink: blinkId != null && String(blinkId) === String(alert.id),
                             });
                             const actionControl =
                                 alert.status === "active" ? (
@@ -264,7 +274,7 @@ function NotifikasiPage() {
                                         }
                                         className="text-base font-semibold text-gray-900 text-left hover:text-bl-primary hover:underline leading-snug"
                                     >
-                                        {alert.message}
+                                        {getAlertDisplayMessage(alert)}
                                     </button>
                                     <button
                                         type="button"

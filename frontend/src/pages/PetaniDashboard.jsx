@@ -19,6 +19,7 @@ import { screenhouseMatchesQuery } from "../utils/screenhouseSearch";
 import {
   deriveScreenhouseStatus,
   formatLastSensorUpdate,
+  timeAgo,
 } from "../constants/screenhouseStatus";
 import PullToRefresh from "../components/PullToRefresh";
 import ScreenhouseMiniStats from "../components/ScreenhouseMiniStats";
@@ -32,6 +33,20 @@ import {
 const CARD_STATUS_RANK = { critical: 4, warning: 3, offline: 2, pending: 1.5, healthy: 1 };
 /** Search bar baru berguna kalau petani punya banyak screenhouse. */
 const SEARCH_MIN_SCREENHOUSES = 10;
+
+const CARD_ACCENT = {
+  critical: "border-l-red-500",
+  warning: "border-l-amber-500",
+  offline: "border-l-slate-400",
+  pending: "border-l-amber-400",
+  healthy: "border-l-bl-accent",
+};
+
+function shortenScreenhouseName(name) {
+  return String(name ?? "")
+    .replace(/^Screenhouse\s+/i, "")
+    .trim() || name;
+}
 
 function getScreenhouseCardMeta(sensor, screenhouseAlerts = [], screenhouseStatus = "active") {
   if (screenhouseStatus === "pending") {
@@ -368,7 +383,7 @@ function PetaniDashboard() {
               <div>
                 <div className="text-sm font-semibold text-gray-800">Screenhouse saya</div>
                 <div className="text-xs text-gray-600 mt-0.5 text-left">
-                  Yang perlu perhatian ditampilkan paling atas
+                  Klik nama screenhouse untuk melihat detail.
                   {showScreenhouseSearch && searchQuery.trim() && (
                     <span className="text-gray-600 font-medium">
                       {" "}
@@ -432,61 +447,71 @@ function PetaniDashboard() {
               return (
                 <div
                   key={sh.id}
-                  className={`bg-white rounded-2xl border overflow-hidden text-left ${
-                    status === "critical"
-                      ? "border-red-200"
-                      : status === "warning"
-                      ? "border-amber-200"
-                      : isPending
-                      ? "border-amber-100"
-                      : "border-gray-200"
+                  className={`bg-white rounded-2xl border border-gray-200 border-l-4 text-left overflow-hidden ${
+                    CARD_ACCENT[status] ?? CARD_ACCENT.healthy
                   }`}
                 >
-                  <div className="px-4 py-3.5 border-b border-gray-100 flex items-start justify-between text-left">
-                    <div className="text-left min-w-0">
+                  <div className="px-4 pt-4 pb-3">
+                    <div className="flex items-start justify-between gap-3">
                       <button
                         type="button"
                         onClick={() => !isPending && navigate(`/petani/screenhouse/${sh.id}`)}
                         disabled={isPending}
-                        className={`text-sm font-semibold text-left ${
+                        className={`text-base font-bold text-left leading-snug ${
                           isPending
-                            ? "text-gray-600 font-medium cursor-default"
-                            : "text-gray-800 hover:text-bl-primary hover:underline"
+                            ? "text-gray-600 cursor-default"
+                            : "text-gray-900 hover:text-bl-primary"
                         }`}
                       >
-                        {sh.name}
+                        {shortenScreenhouseName(sh.name)}
                       </button>
-                      <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                        <div className="flex items-center gap-1 text-xs text-gray-600">
-                          <MapPin size={12} />
-                          {sh.village}
-                        </div>
-                        <div
-                          className="flex items-center gap-1 text-[11px] text-gray-600"
-                          title={
-                            sensor?.created_at
-                              ? new Date(sensor.created_at).toLocaleString("id-ID", {
-                                  timeZone: "Asia/Jakarta",
-                                })
-                              : undefined
+                      {needsAttention ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            goToAlert({
+                              alertId: primaryAlert?.id,
+                              screenhouseId: sh.id,
+                            })
                           }
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 transition hover:opacity-90 ${statusChip.cls}`}
                         >
-                          <Clock3 size={12} className="shrink-0" />
-                          <span>
-                            {sensor?.created_at
-                              ? formatLastSensorUpdate(sensor.created_at)
-                              : FARMER_LABELS.noDataHint}
-                          </span>
-                        </div>
-                        {(sh.node_count ?? 0) > 0 && (
-                          <div className="flex items-center gap-1 text-xs text-gray-600">
-                            <Radio size={12} />
-                            {FARMER_LABELS.nodeCount(sh.node_count)}
-                          </div>
-                        )}
-                      </div>
+                          {statusChip.label}
+                        </button>
+                      ) : (
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 ${statusChip.cls}`}
+                        >
+                          {statusChip.label}
+                        </span>
+                      )}
                     </div>
-                    {needsAttention ? (
+
+                    <div className="flex flex-wrap gap-1.5 mt-2.5">
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-50 text-[11px] text-gray-600 font-medium">
+                        <MapPin size={11} className="shrink-0" />
+                        {sh.village}
+                      </span>
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-50 text-[11px] text-gray-600 font-medium"
+                        title={
+                          sensor?.created_at
+                            ? formatLastSensorUpdate(sensor.created_at)
+                            : undefined
+                        }
+                      >
+                        <Clock3 size={11} className="shrink-0" />
+                        {sensor?.created_at ? timeAgo(sensor.created_at) : FARMER_LABELS.noDataHint}
+                      </span>
+                      {(sh.node_count ?? 0) > 0 && (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-50 text-[11px] text-gray-600 font-medium">
+                          <Radio size={11} className="shrink-0" />
+                          {FARMER_LABELS.nodeCount(sh.node_count)}
+                        </span>
+                      )}
+                    </div>
+
+                    {needsAttention && primaryAlert?.message && (
                       <button
                         type="button"
                         onClick={() =>
@@ -495,30 +520,23 @@ function PetaniDashboard() {
                             screenhouseId: sh.id,
                           })
                         }
-                        className={`px-2 py-0.5 rounded-full text-xs font-medium shrink-0 transition hover:opacity-90 alert-attention-pulse ${statusChip.cls}`}
+                        className="mt-2.5 w-full text-left text-xs text-red-800 bg-red-50 border border-red-100 rounded-lg px-2.5 py-2 leading-snug hover:bg-red-100/80 transition"
                       >
-                        {statusChip.label}
+                        {primaryAlert.message}
                       </button>
-                    ) : (
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-xs font-medium shrink-0 ${statusChip.cls}`}
-                      >
-                        {statusChip.label}
-                      </span>
                     )}
                   </div>
 
-                  <div className="px-4 pt-4 pb-4">
+                  <div className="px-4 pb-4">
                     {isPending ? (
                       <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
                         Pengajuan screenhouse menunggu persetujuan operator. Monitoring akan aktif setelah disetujui.
                       </p>
                     ) : (
-                      <div className="flex flex-col md:flex-row gap-3 md:gap-4 items-stretch">
+                      <div className="flex flex-col lg:flex-row gap-4 items-stretch">
                         <div className="flex-1 min-w-0 space-y-2">
                           <EstimasiTanamPanel
-                            layout="inline"
-                            compact
+                            layout="dashboard"
                             estimasi={estimasiTanam[sh.id]}
                             stressScore={stressScores[sh.id]}
                             varietasNama={sh.varietas_nama || sh.seed_variety}
@@ -529,9 +547,9 @@ function PetaniDashboard() {
                           />
                           <ScreenhouseMiniStats sensor={sensor} />
                         </div>
-                        <div className="md:w-44 lg:w-48 shrink-0 border-t md:border-t-0 md:border-l border-gray-100 pt-3 md:pt-0 md:pl-4">
-                          <div className="text-[10px] uppercase tracking-wide text-gray-600 mb-2 font-semibold">
-                            Kontrol aktuator
+                        <div className="lg:w-44 xl:w-48 shrink-0 rounded-xl bg-gray-50/80 border border-gray-100 p-3">
+                          <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-2 font-semibold">
+                            Kontrol peralatan
                           </div>
                           <ActuatorControls
                             compact

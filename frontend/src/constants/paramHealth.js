@@ -154,7 +154,7 @@ export function buildWorstCaseHealth(nodes, threshold, keys = HEALTH_PARAM_KEYS)
 export function getAdviceForAlert(alert) {
   const lower = alert?.message?.toLowerCase() ?? "";
   if (lower.includes("tidak mengirim data sensor")) {
-    return "Periksa daya ESP/node, jarak ke gateway, atau koneksi jaringan WSN.";
+    return "Periksa daya alat pengukur, jarak antar alat, atau koneksi internet di lokasi.";
   }
   const row = ALERT_PARAM_MAP.find((r) => lower.includes(r.match));
   if (!row) return null;

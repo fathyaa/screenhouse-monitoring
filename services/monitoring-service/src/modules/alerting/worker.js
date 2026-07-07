@@ -3,16 +3,14 @@ const { THRESHOLD_METRICS } = require("./thresholdMetrics");
 const { subscriber, publisher } = require("../../config/redis");
 const { setActuators } = require("../ingest/actuatorService");
 const { resolveActuatorActions } = require("../../shared/actuatorRules");
+const {
+  OFFLINE_ALERT_MESSAGE_SUFFIX,
+  buildOfflineAlertMessage,
+  consolidateOfflineAlerts,
+  consolidateAllOfflineDuplicates,
+} = require("../../shared/offlineAlert");
 
 /** Cocokkan pesan alert offline (per node). */
-const OFFLINE_ALERT_MESSAGE_SUFFIX = "tidak mengirim data sensor terbaru";
-
-function buildOfflineAlertMessage(nodeName) {
-  const label = String(nodeName ?? "").trim() || "Node sensor";
-  return `${label} ${OFFLINE_ALERT_MESSAGE_SUFFIX}`;
-}
-
-/** Sama dengan getMapSummary: interval × 3, minimal 15 menit. */
 function staleThresholdMs(sendIntervalSeconds) {
   const intervalSec = Math.max(Number(sendIntervalSeconds) || 60, 60);
   return Math.max(intervalSec * 3, 900) * 1000;
@@ -78,13 +76,21 @@ async function checkOfflineNodes() {
     const message = buildOfflineAlertMessage(node_name);
 
     if (isOffline) {
-      const isNew = await ensureAlert({
-        sensorDataId: null,
+      const { keptId } = await consolidateOfflineAlerts(pool, {
         screenhouseId: screenhouse_id,
         sensorNodeId: sensor_node_id,
         message,
       });
-      if (isNew) created += 1;
+
+      if (!keptId) {
+        const isNew = await ensureAlert({
+          sensorDataId: null,
+          screenhouseId: screenhouse_id,
+          sensorNodeId: sensor_node_id,
+          message,
+        });
+        if (isNew) created += 1;
+      }
     } else if (await resolveOfflineAlertsForNode(screenhouse_id, sensor_node_id)) {
       resolved += 1;
     }
@@ -366,6 +372,14 @@ async function startAlertWorker() {
   });
 
   console.log("Alert worker listening on Redis channels");
+
+  consolidateAllOfflineDuplicates(pool)
+    .then((resolvedCount) => {
+      if (resolvedCount > 0) {
+        console.log(`[offline-check] cleaned ${resolvedCount} duplicate offline alert(s) on startup`);
+      }
+    })
+    .catch((err) => console.error("[offline-check] startup cleanup failed", err.message));
 
   const offlineCheckMs =
     Math.max(Number(process.env.OFFLINE_CHECK_INTERVAL_SEC) || 300, 60) * 1000;

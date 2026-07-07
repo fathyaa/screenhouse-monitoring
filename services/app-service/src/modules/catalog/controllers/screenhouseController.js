@@ -5,6 +5,7 @@ const {
   parseTrayCount,
   activateScreenhouseRecord,
   postActivationProvisioning,
+  syncScreenhouseRegistryName,
 } = require("../../../shared/provisionScreenhouse");
 const {
   resolveVarietasId,
@@ -682,8 +683,8 @@ async function rejectScreenhouse(req, res) {
   }
 }
 
-async function patchMyScreenhouseProfile(req, res) {
-  const { seed_variety, seedling_start_date, varietas_id } = req.body ?? {};
+async function patchScreenhouseProfile(req, res) {
+  const { seed_variety, seedling_start_date, varietas_id, name } = req.body ?? {};
 
   if (
     varietas_id !== undefined ||
@@ -696,7 +697,50 @@ async function patchMyScreenhouseProfile(req, res) {
     });
   }
 
-  return res.status(400).json({ message: "Tidak ada data untuk diperbarui" });
+  if (name === undefined) {
+    return res.status(400).json({ message: "Tidak ada data untuk diperbarui" });
+  }
+
+  const trimmedName = String(name).trim();
+  if (trimmedName.length < 2 || trimmedName.length > 100) {
+    return res.status(400).json({ message: "Nama screenhouse harus 2–100 karakter" });
+  }
+
+  try {
+    const screenhouseId = Number(req.params.id);
+    if (!Number.isInteger(screenhouseId)) {
+      return res.status(400).json({ message: "ID tidak valid" });
+    }
+
+    const existing = await pool.query(`SELECT * FROM screenhouses WHERE id = $1`, [screenhouseId]);
+    const screenhouse = existing.rows[0];
+    if (!screenhouse) {
+      return res.status(404).json({ message: "Screenhouse tidak ditemukan" });
+    }
+
+    if (req.user.role === "petani") {
+      if (screenhouse.owner_user_id !== req.user.id) {
+        return res.status(403).json({ message: "Akses ditolak" });
+      }
+    } else if (!["operator", "super_admin"].includes(req.user.role)) {
+      return res.status(403).json({ message: "Akses ditolak" });
+    }
+
+    const result = await pool.query(
+      `UPDATE screenhouses SET name = $1 WHERE id = $2 RETURNING *`,
+      [trimmedName, screenhouseId]
+    );
+
+    const updated = result.rows[0];
+    if (updated.status === "active") {
+      await syncScreenhouseRegistryName(updated);
+    }
+
+    res.json(updated);
+  } catch (err) {
+    console.error("[patch-screenhouse-profile]", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
 }
 
 async function getScreenhouseEstimasiTanam(req, res) {
@@ -778,7 +822,7 @@ module.exports = {
   getScreenhouseById,
   getScreenhouseEstimasiTanam,
   getScreenhouseStressScore,
-  patchMyScreenhouseProfile,
+  patchScreenhouseProfile,
   submitMyScreenhouse,
   getPendingScreenhouses,
   getPendingScreenhouseStats,

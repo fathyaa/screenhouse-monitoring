@@ -36,7 +36,7 @@ export default function ActuatorStatusBadges({
   return (
     <div className={className}>
       <div className="text-[10px] uppercase tracking-wide text-gray-600 mb-1.5">
-        Status aktuator
+        Status peralatan
       </div>
       <div className="grid grid-cols-3 gap-1.5">
         <StatusBadge value={fan_status} label="Fan" icon={Wind} />

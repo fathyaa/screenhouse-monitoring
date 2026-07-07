@@ -26,7 +26,7 @@ const CONFIRM_MESSAGES = {
 };
 
 const AUTO_LOCK_TOAST =
-  "Aktuator sedang dikontrol otomatis oleh sistem. Tunggu kondisi normal sebelum mengubah manual.";
+  "Peralatan sedang dikontrol otomatis oleh sistem. Tunggu kondisi normal sebelum mengubah manual.";
 
 function isOn(value) {
   return value === true || value === 1 || value === "on";
@@ -58,7 +58,7 @@ function ActuatorSwitch({
           <div className="text-xs font-medium text-gray-700">{label}</div>
           <div className={`text-[10px] ${on ? "text-bl-primary" : "text-gray-600"}`}>
             {!hasValue ? "Belum diketahui" : on ? "Nyala" : "Mati"}
-            {autoLocked && " · otomatis"}
+            {autoLocked && ", otomatis"}
           </div>
         </div>
       </div>
@@ -86,7 +86,7 @@ function ActuatorSwitch({
           {!compact && (
             <div className={`text-[10px] ${on ? "text-bl-primary" : "text-gray-600"}`}>
               {!hasValue ? "Belum diketahui" : on ? "Nyala" : "Mati"}
-              {autoLocked && " · otomatis"}
+              {autoLocked && ", otomatis"}
             </div>
           )}
         </div>
@@ -97,7 +97,7 @@ function ActuatorSwitch({
         role="switch"
         aria-checked={on}
         aria-disabled={autoLocked || undefined}
-        aria-label={`${label} ${on ? "nyala" : "mati"}${autoLocked ? " — dikontrol otomatis" : ""}`}
+        aria-label={`${label} ${on ? "nyala" : "mati"}${autoLocked ? ", dikontrol otomatis" : ""}`}
         disabled={switchDisabled}
         onClick={() => {
           if (autoLocked) {
@@ -191,7 +191,7 @@ export default function ActuatorControls({
           toast(data.message || AUTO_LOCK_TOAST, { icon: "🤖" });
           return;
         }
-        throw new Error(data.message || "Gagal mengubah aktuator");
+        throw new Error(data.message || "Gagal mengubah peralatan");
       }
 
       if (data.unchanged) {
@@ -206,7 +206,7 @@ export default function ActuatorControls({
 
       onUpdated?.(data);
     } catch (err) {
-      toast.error(err.message || "Gagal mengubah aktuator");
+      toast.error(err.message || "Gagal mengubah peralatan");
     } finally {
       setLoadingKey(null);
       setPendingConfirm(null);
@@ -234,7 +234,7 @@ export default function ActuatorControls({
     <div className={className}>
       {!compact && (
         <div className="text-[10px] uppercase tracking-wide text-gray-600 mb-1.5">
-          {readOnly ? "Status aktuator" : "Kontrol aktuator"}
+          {readOnly ? "Status peralatan" : "Kontrol peralatan"}
         </div>
       )}
 
@@ -282,8 +282,8 @@ export default function ActuatorControls({
       </div>
       {!compact && !readOnly && (
         <p className="text-[11px] text-gray-600 font-medium mt-2 leading-relaxed">
-          Geser tombol untuk kontrol manual — setiap perubahan meminta konfirmasi. Saat alert terpicu,
-          aktuator yang relevan dikunci otomatis hingga kondisi normal.
+          Geser tombol untuk kontrol manual. Setiap perubahan meminta konfirmasi. Saat ada peringatan,
+          peralatan terkait dikunci otomatis hingga kondisi normal.
         </p>
       )}
 

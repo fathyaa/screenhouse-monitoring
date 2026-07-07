@@ -61,7 +61,10 @@ import {
   formatSnapshotTime,
   formatLastSensorUpdate,
 } from "../constants/screenhouseStatus";
+import RackNameEditor from "../components/RackNameEditor";
+import ScreenhouseNameEditor from "../components/ScreenhouseNameEditor";
 import { FARMER_LABELS } from "../constants/farmerLabels";
+import { formatRackName } from "../utils/rackNames";
 import {
   SCREENHOUSE_CHART_GUIDE,
   ChartTooltip,
@@ -113,7 +116,7 @@ function formatParamValue(value) {
   return Number.isFinite(n) ? n.toFixed(1) : String(value);
 }
 
-function NodeCard({ node, threshold, isPetani = false, nodeStressScore = null }) {
+function NodeCard({ node, threshold, isPetani = false, canRename = false, onRenamed, nodeStressScore = null }) {
   const d = node.latest_data;
   const online = isNodeOnline(node);
   const lastSeen = node.last_seen ?? d?.created_at;
@@ -127,20 +130,18 @@ function NodeCard({ node, threshold, isPetani = false, nodeStressScore = null })
     <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden text-left">
       <div className="px-4 py-3 border-b border-gray-100 flex items-start justify-between gap-3">
         <div className="text-left min-w-0 flex-1">
-          <div className="text-sm font-semibold text-gray-800">
-            {node.node_name}
-          </div>
-          <div className="text-xs text-gray-600 mt-0.5">
-            {node.node_code} · {node.location || "Tidak ada lokasi"}
-          </div>
+          <RackNameEditor node={node} canEdit={canRename} onRenamed={onRenamed} />
+          {node.location && (
+            <div className="text-xs text-gray-600 mt-0.5">{node.location}</div>
+          )}
           <div className="flex flex-wrap items-center gap-1.5 mt-2">
             {online ? (
               <span className="px-2 py-0.5 rounded-full bg-bl-surface-muted text-bl-primary text-xs font-medium">
-                Online
+                {FARMER_LABELS.connected}
               </span>
             ) : (
               <span className="px-2 py-0.5 rounded-full bg-red-50 text-red-700 text-xs font-medium">
-                Offline
+                {FARMER_LABELS.notConnected}
               </span>
             )}
             {online &&
@@ -157,7 +158,10 @@ function NodeCard({ node, threshold, isPetani = false, nodeStressScore = null })
         </div>
         {nodeStressScore && online && (
           <div className="shrink-0">
-            <StressScoreNodeGauge scoreData={nodeStressScore} nodeName={node.node_name} />
+            <StressScoreNodeGauge
+              scoreData={nodeStressScore}
+              nodeName={formatRackName(node.node_name)}
+            />
           </div>
         )}
       </div>
@@ -634,8 +638,8 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
 
   const displayInsight = screenhouseOffline
     ? latestLastSeen
-      ? `Perangkat tidak mengirim data terbaru · terakhir ${timeAgo(latestLastSeen)}`
-      : "Belum ada data sensor dari perangkat."
+      ? `Alat pengukur tidak mengirim data terbaru, terakhir ${timeAgo(latestLastSeen)}`
+      : "Belum ada data dari alat pengukur."
     : dashboard?.insight;
 
   const displayInsightTone =
@@ -653,6 +657,28 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
   const handleCycleChanged = () => {
     loadScreenhouseData();
   };
+
+  const canRenameRack =
+    user?.role === "petani" || user?.role === "operator" || user?.role === "super_admin";
+
+  const handleNodeRenamed = useCallback((updated) => {
+    setNodes((prev) =>
+      prev.map((node) =>
+        node.id === updated.id ? { ...node, node_name: updated.node_name } : node
+      )
+    );
+  }, []);
+
+  const canEditScreenhouseName =
+    Boolean(screenhouse) &&
+    (user?.role === "operator" || user?.role === "super_admin" || isPetani);
+
+  const handleScreenhouseRenamed = useCallback((updated) => {
+    setScreenhouse((prev) => (prev ? { ...prev, name: updated.name } : prev));
+    setScreenhouses((prev) =>
+      prev.map((sh) => (Number(sh.id) === Number(updated.id) ? { ...sh, name: updated.name } : sh))
+    );
+  }, []);
 
   const semaiCycle = useSemaiCycle(isPetani ? Number(id) : null, token, handleCycleChanged);
 
@@ -729,9 +755,13 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
               <ArrowLeft size={20} className="icon-muted" />
             </button>
             <div className="min-w-0 text-left">
-              <div className="text-sm font-semibold text-gray-800 truncate">
-                {screenhouse.name}
-              </div>
+              <ScreenhouseNameEditor
+                screenhouseId={screenhouse.id}
+                name={screenhouse.name}
+                canEdit={canEditScreenhouseName}
+                onRenamed={handleScreenhouseRenamed}
+                className="text-sm font-semibold text-gray-800 truncate"
+              />
               <div className="text-xs text-gray-600 truncate">
                 Detail sensor realtime
               </div>
@@ -748,9 +778,13 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
           {/* Info bar */}
           <div className="bg-white rounded-2xl border border-gray-200 p-5 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 text-left">
             <div className="text-left min-w-0">
-              <div className="text-base sm:text-lg font-semibold text-gray-800">
-                {screenhouse.name}
-              </div>
+              <ScreenhouseNameEditor
+                screenhouseId={screenhouse.id}
+                name={screenhouse.name}
+                canEdit={canEditScreenhouseName}
+                onRenamed={handleScreenhouseRenamed}
+                className="text-base sm:text-lg font-semibold text-gray-800"
+              />
               <div className="flex items-center gap-4 mt-2 flex-wrap">
                 {screenhouse.owner_name && (
                   <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -778,9 +812,13 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
               )}
             </div>
             <div className="flex gap-2 flex-wrap justify-start">
-              <span className="px-3 py-1.5 rounded-full bg-bl-surface-muted text-bl-primary text-sm font-semibold">
-                {screenhouse.status === "active" ? "Aktif" : screenhouse.status}
-              </span>
+              {screenhouse.status !== "active" && (
+                <span className="px-3 py-1.5 rounded-full bg-amber-50 text-amber-800 text-sm font-semibold">
+                  {screenhouse.status === "pending"
+                    ? "Menunggu persetujuan"
+                    : screenhouse.status}
+                </span>
+              )}
               <span
                 className={`px-3 py-1.5 rounded-full text-sm font-semibold ${
                   monitorStatus === "offline"
@@ -790,15 +828,8 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
                     : "bg-blue-50 text-blue-800"
                 }`}
               >
-                {onlineCount}/{nodes.length} alat online
+                {onlineCount}/{nodes.length} alat terhubung
               </span>
-              {!screenhouseOffline && (
-                <span
-                  className={`px-3 py-1.5 rounded-full text-sm font-semibold ${monitorMeta.badgeClass}`}
-                >
-                  {monitorMeta.label}
-                </span>
-              )}
             </div>
           </div>
 
@@ -809,10 +840,10 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
               </div>
               <div className="min-w-0 pt-0.5">
                 <p className="text-sm sm:text-base text-rose-950 leading-relaxed">
-                  <span className="font-bold">Offline</span>
+                  <span className="font-bold">{FARMER_LABELS.notConnected}</span>
                   <span className="text-rose-800/95">
                     {" "}
-                    — Perangkat tidak mengirim data terbaru
+                    Alat pengukur tidak mengirim data terbaru
                     {latestLastSeen
                       ? ` (Terakhir aktif ${timeAgo(latestLastSeen)})`
                       : ""}
@@ -938,8 +969,8 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
             <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
               Grafik di bawah menampilkan riwayat 24 jam.
               {latestLastSeen
-                ? ` Pembacaan live terakhir ${formatSnapshotTime(latestLastSeen)} (${timeAgo(latestLastSeen)}).`
-                : " Belum ada pembacaan live tersimpan."}
+                ? ` ${FARMER_LABELS.lastReading} ${formatSnapshotTime(latestLastSeen)} (${timeAgo(latestLastSeen)}).`
+                : ` Belum ada ${FARMER_LABELS.lastReading.toLowerCase()} tersimpan.`}
             </p>
           )}
           {/* Grafik */}
@@ -949,7 +980,7 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
                 Tren nitrogen & kelembapan tanah (24 jam)
               </div>
               <div className="text-xs text-gray-600 mb-4 text-left">
-                Rata-rata per jam · hijau muda = aman, merah muda = kurang, kuning = berlebih
+                Rata-rata per jam. Hijau muda = aman, merah muda = kurang, kuning = berlebih.
               </div>
               {trendChartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={280}>
@@ -1014,7 +1045,7 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
                 Komposisi NPK terbaru
               </div>
               <div className="text-xs text-gray-600 mb-4 text-left">
-                Nilai terbaru · hijau = pas, oranye = kurang, merah = berlebih
+                Nilai terbaru. Hijau = pas, oranye = kurang, merah = berlebih.
               </div>
               {npkCompareData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={280}>
@@ -1054,7 +1085,7 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
               Tren fosfor & kalium (24 jam)
             </div>
             <div className="text-xs text-gray-600 mb-4 text-left">
-              Perubahan fosfor (P) dan kalium (K) per jam · Cek kebutuhan pupuk.
+              Perubahan fosfor (P) dan kalium (K) per jam. Cek kebutuhan pupuk.
             </div>
             {trendChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height={240}>
@@ -1120,8 +1151,8 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
                 screenhouseOffline
                   ? undefined
                   : onlineCount > 1
-                  ? "Ambil kondisi paling buruk dari semua tray · detail per tray ada di bawah"
-                  : "Hijau = pas · oranye = kurang · merah = berlebih"
+                  ? "Ambil kondisi paling buruk dari semua rak bibit. Detail per rak ada di bawah."
+                  : "Hijau = pas, oranye = kurang, merah = berlebih"
               }
               showActions={!screenhouseOffline}
             />
@@ -1131,11 +1162,9 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
           {dashboard?.sinkNode && (
             <div className="bg-white rounded-2xl border border-gray-200 p-4 text-left">
               <div className="text-sm font-semibold text-gray-800 mb-1">
-                Kontrol aktuator
+                {FARMER_LABELS.autoEquipmentControl}
               </div>
-              <div className="text-xs text-gray-600 mb-3">
-                {FARMER_LABELS.sinkControl} · {dashboard.sinkNode.node_code}
-              </div>
+              <div className="text-xs text-gray-600 mb-3">{FARMER_LABELS.sinkControl}</div>
               <ActuatorControls
                 screenhouseId={Number(id)}
                 fan_status={dashboard.sinkNode.fan_status}
@@ -1150,7 +1179,7 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
           )}
 
           <div className="text-sm font-semibold text-gray-700 text-left">
-            {isPetani ? FARMER_LABELS.traySensors : "Tray sensor"}
+            {isPetani ? FARMER_LABELS.traySensors : "Rak bibit dengan alat pengukur"}
           </div>
 
           {nodes.length === 0 ? (
@@ -1165,6 +1194,8 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
                   node={node}
                   threshold={threshold}
                   isPetani={isPetani}
+                  canRename={canRenameRack}
+                  onRenamed={handleNodeRenamed}
                   nodeStressScore={nodeScoreById[node.id]}
                 />
               ))}

@@ -139,7 +139,7 @@ export default function KelolaScreenhousePage() {
                 <th className="px-4 py-3 font-medium">Pemilik</th>
                 <th className="px-4 py-3 font-medium">No HP</th>
                 <th className="px-4 py-3 font-medium">Wilayah</th>
-                <th className="px-4 py-3 font-medium text-center">Node</th>
+                <th className="px-4 py-3 font-medium text-center">Alat pengukur</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium text-center">Aksi</th>
               </tr>

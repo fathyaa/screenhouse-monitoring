@@ -215,9 +215,9 @@ function PetaniTrenPage() {
               <BannerSkeleton />
               <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
                 <Skeleton className="h-4 w-40" />
-                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-2">
                   {Array.from({ length: 8 }).map((_, i) => (
-                    <Skeleton key={i} className="h-24 rounded-xl" />
+                    <Skeleton key={i} className="h-28 sm:h-24 rounded-xl" />
                   ))}
                 </div>
               </div>
@@ -230,7 +230,7 @@ function PetaniTrenPage() {
             <div>
               <div className="text-sm font-semibold text-gray-800">Ringkasan tren</div>
               <div className="text-xs text-gray-600 mt-0.5">
-                Grafik 24 jam · {trendScopeLabel}. Untuk status harian & tindakan, buka Dashboard.
+                Grafik 24 jam, {trendScopeLabel}. Untuk status harian dan tindakan, buka Dashboard.
               </div>
             </div>
             {screenhouses.length > 1 && (
@@ -259,7 +259,7 @@ function PetaniTrenPage() {
               title="Kondisi rata-rata saat ini"
               subtitle={
                 latestSnapshotAt
-                  ? `${trendScopeLabel} · terakhir ${formatSnapshotTime(latestSnapshotAt)}`
+                  ? `${trendScopeLabel}, terakhir ${formatSnapshotTime(latestSnapshotAt)}`
                   : trendScopeLabel
               }
             />
@@ -275,7 +275,7 @@ function PetaniTrenPage() {
                     Tren nitrogen & kelembapan tanah (24 jam)
                   </div>
                   <div className="text-xs text-gray-600 mb-2">
-                    Rata-rata {trendScopeLabel} · hijau muda = aman, merah muda = kurang, kuning = berlebih
+                    Rata-rata {trendScopeLabel}. Hijau muda = aman, merah muda = kurang, kuning = berlebih.
                   </div>
                   {trendChartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height={260}>
@@ -355,7 +355,7 @@ function PetaniTrenPage() {
                     Rata-rata NPK screenhouse Anda
                   </div>
                   <div className="text-xs text-gray-600 mb-2">
-                    Nilai rata-rata terbaru · hijau = pas, oranye = kurang, merah = berlebih
+                    Nilai rata-rata terbaru. Hijau = pas, oranye = kurang, merah = berlebih.
                   </div>
                   {npkColored.length > 0 && npkColored.some((d) => d.value > 0) ? (
                     <ResponsiveContainer width="100%" height={260}>
@@ -398,7 +398,7 @@ function PetaniTrenPage() {
                   Tren fosfor & kalium (24 jam)
                 </div>
                 <div className="text-xs text-gray-600 mb-2">
-                  Rata-rata semua tray sensor · pantau kebutuhan pupuk P dan K
+                  Rata-rata semua rak bibit. Pantau kebutuhan pupuk P dan K.
                 </div>
                 {trendChartData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={220}>

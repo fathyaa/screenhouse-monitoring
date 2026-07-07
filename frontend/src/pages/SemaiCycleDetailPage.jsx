@@ -111,7 +111,7 @@ export default function SemaiCycleDetailPage() {
                   Kesimpulan kualitas bibit
                 </div>
                 <div className={`text-xl font-bold mt-1 ${gradeStyle.text}`}>
-                  Grade {grade?.letter ?? "—"} — {grade?.title ?? "Rekap siklus"}
+                  Grade {grade?.letter ?? "belum ada"}, {grade?.title ?? "Rekap siklus"}
                 </div>
                 <p className={`text-sm mt-2 leading-relaxed ${gradeStyle.text} opacity-90`}>
                   {grade?.summary ?? "Rekap analytics tersedia setelah siklus diakhiri."}
@@ -145,12 +145,12 @@ export default function SemaiCycleDetailPage() {
               )}
             </MetricCard>
 
-            <MetricCard icon={Wifi} title="Keandalan perangkat">
+            <MetricCard icon={Wifi} title="Keandalan alat">
               <div className="text-lg font-bold text-gray-900">
-                {analytics.uptime?.pct ?? "—"}% online
+                {analytics.uptime?.pct ?? "belum ada"}% terhubung
               </div>
               <p className="text-xs text-gray-600 mt-1">
-                Offline ~{analytics.uptime?.offline_pct ?? 0}% dari masa pembibitan
+                Tidak terhubung sekitar {analytics.uptime?.offline_pct ?? 0}% dari masa pembibitan
               </p>
             </MetricCard>
           </div>

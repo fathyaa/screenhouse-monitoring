@@ -1,4 +1,4 @@
-export default function BrandBar({ title = "BibitLive", subtitle = "Pantau bibit, langsung live" }) {
+export default function BrandBar({ title = "BibitLive", subtitle = "Pantau bibit langsung" }) {
   return (
     <div className="lg:hidden bg-bl-forest px-5 py-4 text-white shrink-0">
       <div className="flex items-center gap-3">

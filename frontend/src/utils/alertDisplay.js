@@ -1,4 +1,5 @@
 import { getAdviceForAlert, isAlertCritical } from "../constants/paramHealth";
+import { formatRackName } from "./rackNames";
 
 export const ALERT_CATEGORY = {
   SOIL: "soil",
@@ -16,27 +17,22 @@ export function getAlertCategory(alert) {
 }
 
 export function getAlertCategoryLabel(category) {
-  return category === ALERT_CATEGORY.DEVICE ? "Masalah teknis device" : "Kondisi tanah";
+  return category === ALERT_CATEGORY.DEVICE ? "Masalah alat" : "Kondisi tanah";
 }
 
-/** Label tray singkat untuk ringkasan grouped (A1, T01, …). */
+/** Label rak bibit untuk ringkasan peringatan — pakai nama kustom, bukan kode. */
 export function getTrayLabel(alert) {
-  if (alert?.node_code) {
-    const parts = String(alert.node_code).split("-");
-    return parts[parts.length - 1] || alert.node_code;
-  }
   if (alert?.sensor_node_name) {
-    const name = String(alert.sensor_node_name);
-    const code = name.match(/\b(T\d+|[A-Z]\d+)\b/i);
-    if (code) return code[1];
-    return name.replace(/^Tray\s+/i, "").trim() || name;
+    return formatRackName(alert.sensor_node_name);
   }
+
   const msg = alert?.message ?? "";
   if (isDeviceOfflineAlert(alert)) {
     const before = msg.split(/tidak mengirim data sensor/i)[0]?.trim();
-    if (before) return before.replace(/^Tray\s+/i, "").trim();
+    if (before) return formatRackName(before);
   }
-  return "Tray";
+
+  return "Rak bibit";
 }
 
 export function getAlertGroupKey(alert) {
@@ -60,35 +56,119 @@ export function sortAlertsForDisplay(alerts) {
   return [...alerts].sort(compareAlertsForDisplay);
 }
 
-function buildOfflineGroupSummary(alerts) {
-  const count = alerts.length;
+function shortenScreenhouseName(name) {
+  return String(name ?? "")
+    .replace(/^Screenhouse\s+/i, "")
+    .trim() || name;
+}
+
+/** Gabungkan alert offline aktif per rak — simpan yang terbaru. */
+export function dedupeOfflineAlerts(alerts) {
+  const offlineBuckets = new Map();
+  const other = [];
+
+  for (const alert of alerts) {
+    if (!isDeviceOfflineAlert(alert)) {
+      other.push(alert);
+      continue;
+    }
+
+    const key =
+      alert.sensor_node_id != null
+        ? `${alert.screenhouse_id}:${alert.sensor_node_id}`
+        : `${alert.screenhouse_id}:${getTrayLabel(alert)}`;
+
+    const prev = offlineBuckets.get(key);
+    if (
+      !prev ||
+      new Date(alert.created_at).getTime() > new Date(prev.created_at).getTime()
+    ) {
+      offlineBuckets.set(key, alert);
+    }
+  }
+
+  return [...other, ...offlineBuckets.values()];
+}
+
+/** Tampilkan pesan offline pakai nama rak terkini, bukan teks lama di database. */
+export function getAlertDisplayMessage(alert) {
+  if (isDeviceOfflineAlert(alert)) {
+    const label = alert.sensor_node_name
+      ? formatRackName(alert.sensor_node_name)
+      : getTrayLabel(alert);
+    return `${label} tidak mengirim data sensor terbaru`;
+  }
+  return alert.message ?? "";
+}
+
+function buildDeviceOfflineDisplay(alerts) {
+  const uniqueAlerts = dedupeOfflineAlerts(alerts);
+  const byScreenhouse = new Map();
+
+  for (const alert of uniqueAlerts) {
+    const fullName = alert.screenhouse_name ?? `Screenhouse ${alert.screenhouse_id}`;
+    if (!byScreenhouse.has(fullName)) {
+      byScreenhouse.set(fullName, { fullName, racks: [], alerts: [] });
+    }
+    const entry = byScreenhouse.get(fullName);
+    entry.racks.push(getTrayLabel(alert));
+    entry.alerts.push(alert);
+  }
+
+  const locations = [...byScreenhouse.values()].map((entry) => ({
+    name: shortenScreenhouseName(entry.fullName),
+    fullName: entry.fullName,
+    racks: [...new Set(entry.racks)],
+    primaryAlertId: entry.alerts[0]?.id,
+  }));
+
+  const count = uniqueAlerts.length;
+  const headline =
+    count === 1 ? "1 rak bibit tidak kirim data" : `${count} rak bibit tidak kirim data`;
+  const subline =
+    locations.length === 1
+      ? `di ${locations[0].name}`
+      : `di ${locations.length} screenhouse`;
+
+  return { headline, subline, locations };
+}
+
+function buildSoilGroupDisplay(alerts) {
+  const message = alerts[0]?.message ?? "Peringatan tanah";
   const byScreenhouse = new Map();
 
   for (const alert of alerts) {
-    const shName = alert.screenhouse_name ?? `Screenhouse ${alert.screenhouse_id}`;
-    if (!byScreenhouse.has(shName)) byScreenhouse.set(shName, []);
-    byScreenhouse.get(shName).push(getTrayLabel(alert));
+    const fullName = alert.screenhouse_name ?? `Screenhouse ${alert.screenhouse_id}`;
+    if (!byScreenhouse.has(fullName)) {
+      byScreenhouse.set(fullName, { fullName, alerts: [] });
+    }
+    byScreenhouse.get(fullName).alerts.push(alert);
   }
 
-  const screenhouseParts = [...byScreenhouse.entries()].map(([name, trays]) => {
-    const unique = [...new Set(trays)];
-    return `${name} (${unique.join(", ")})`;
-  });
+  const locations = [...byScreenhouse.values()].map((entry) => ({
+    name: shortenScreenhouseName(entry.fullName),
+    fullName: entry.fullName,
+    primaryAlertId: entry.alerts[0]?.id,
+  }));
 
-  const countLabel = count === 1 ? "1 tray" : `${count} tray`;
-  return `${countLabel} tidak mengirim data · ${screenhouseParts.join(", ")}`;
+  return {
+    headline: message,
+    subline:
+      locations.length === 1
+        ? locations[0].name
+        : `${locations.length} screenhouse terdampak`,
+    locations,
+  };
+}
+
+function buildOfflineGroupSummary(alerts) {
+  const { headline, subline } = buildDeviceOfflineDisplay(alerts);
+  return `${headline} ${subline}`;
 }
 
 function buildSoilGroupSummary(alerts) {
-  const message = alerts[0]?.message ?? "Peringatan";
-  const screenhouses = [...new Set(alerts.map((a) => a.screenhouse_name).filter(Boolean))];
-
-  if (screenhouses.length <= 1) {
-    const sh = screenhouses[0];
-    return sh ? `${message} · ${sh}` : message;
-  }
-
-  return `${message} · ${screenhouses.join(", ")} (${alerts.length} lokasi)`;
+  const { headline, subline } = buildSoilGroupDisplay(alerts);
+  return alerts.length <= 1 ? headline : `${headline}, ${subline}`;
 }
 
 function buildGroupSummary(group) {
@@ -124,11 +204,18 @@ export function groupAlertsForDashboard(alerts) {
       group.category === ALERT_CATEGORY.DEVICE || group.alerts.length > 1;
 
     if (shouldGroup) {
+      const display =
+        group.category === ALERT_CATEGORY.DEVICE
+          ? buildDeviceOfflineDisplay(group.alerts)
+          : buildSoilGroupDisplay(group.alerts);
+
       items.push({
         kind: "group",
         id: `group-${group.key}`,
         category: group.category,
         alerts: group.alerts,
+        display,
+        primaryAlertId: group.alerts[0]?.id ?? null,
         summary: buildGroupSummary(group),
         critical: group.alerts.some(isAlertCritical),
         advice: getAdviceForAlert(group.alerts[0]),

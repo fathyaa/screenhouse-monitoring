@@ -99,7 +99,7 @@ export default function PetaniRiwayatSemaiPage() {
               <div>
                 <p className="text-sm text-gray-700 leading-relaxed">
                   Setiap siklus semai direkap otomatis saat diakhiri — mencakup durasi, kestabilan
-                  sensor, stres tanaman, dan efisiensi aktuator otomatis.
+                  sensor, stres tanaman, dan efisiensi peralatan otomatis.
                 </p>
               </div>
             </div>

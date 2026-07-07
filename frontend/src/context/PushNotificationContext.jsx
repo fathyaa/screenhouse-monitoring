@@ -5,6 +5,53 @@ import { API_URL } from "../config/api";
 
 const PushNotificationContext = createContext(null);
 
+function isIosDevice() {
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
+}
+
+function isStandalonePwa() {
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.navigator.standalone === true
+  );
+}
+
+function detectPushSupport() {
+  if (!("serviceWorker" in navigator)) {
+    return { supported: false, reason: "no-service-worker" };
+  }
+  if (!("Notification" in window)) {
+    return { supported: false, reason: "no-notification-api" };
+  }
+  if (!window.isSecureContext) {
+    return { supported: false, reason: "insecure-context" };
+  }
+  if (!("PushManager" in window)) {
+    if (isIosDevice() && !isStandalonePwa()) {
+      return { supported: false, reason: "ios-need-install" };
+    }
+    return { supported: false, reason: "no-push-api" };
+  }
+  return { supported: true, reason: null };
+}
+
+const PUSH_UNSUPPORTED_MESSAGES = {
+  "insecure-context":
+    "Notifikasi ke HP butuh HTTPS. Saat uji di jaringan lokal, peringatan tetap muncul saat aplikasi dibuka.",
+  "ios-need-install":
+    "Di iPhone, tambahkan BibitLive ke Layar Utama dulu, lalu aktifkan notifikasi.",
+  "no-push-api": "Browser ini belum mendukung notifikasi ke HP.",
+  "no-service-worker": "Browser ini belum mendukung notifikasi latar belakang.",
+  "no-notification-api": "Browser ini belum mendukung notifikasi.",
+};
+
+function getPushUnsupportedMessage(reason) {
+  return PUSH_UNSUPPORTED_MESSAGES[reason] ?? PUSH_UNSUPPORTED_MESSAGES["no-push-api"];
+}
+
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -29,13 +76,12 @@ export function PushNotificationProvider({ children }) {
   const [enabled, setEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
   const [supported, setSupported] = useState(false);
+  const [supportReason, setSupportReason] = useState(null);
 
   useEffect(() => {
-    setSupported(
-      "serviceWorker" in navigator &&
-        "PushManager" in window &&
-        "Notification" in window
-    );
+    const { supported: ok, reason } = detectPushSupport();
+    setSupported(ok);
+    setSupportReason(reason);
   }, []);
 
   const syncFromBrowser = useCallback(async () => {
@@ -79,8 +125,8 @@ export function PushNotificationProvider({ children }) {
 
   const enable = useCallback(async () => {
     if (!supported) {
-      toast.error("Browser ini tidak mendukung notifikasi push");
-      return { ok: false, reason: "unsupported" };
+      toast.error(getPushUnsupportedMessage(supportReason));
+      return { ok: false, reason: supportReason ?? "unsupported" };
     }
 
     if (localStorage.getItem("role") !== "petani") {
@@ -98,7 +144,7 @@ export function PushNotificationProvider({ children }) {
 
       const publicKey = await getVapidPublicKey();
       if (!publicKey) {
-        toast.error("Push notification belum dikonfigurasi di server");
+        toast.error("Notifikasi belum siap di server. Hubungi operator sistem.");
         return { ok: false, reason: "no-vapid" };
       }
 
@@ -124,22 +170,22 @@ export function PushNotificationProvider({ children }) {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.message || "Gagal menyimpan subscription push");
+        throw new Error(data.message || "Gagal menyimpan pengaturan notifikasi");
       }
 
       localStorage.setItem("push_subscribed", "true");
       localStorage.removeItem("push_muted");
       setEnabled(true);
-      toast.success("Notifikasi push aktif");
+      toast.success("Notifikasi ke HP aktif");
       return { ok: true };
     } catch (err) {
       console.error("[push]", err);
-      toast.error("Gagal mengaktifkan notifikasi push");
+      toast.error("Gagal mengaktifkan notifikasi ke HP");
       return { ok: false, reason: err.message };
     } finally {
       setLoading(false);
     }
-  }, [supported]);
+  }, [supported, supportReason]);
 
   const disable = useCallback(async () => {
     setLoading(true);
@@ -167,7 +213,7 @@ export function PushNotificationProvider({ children }) {
       localStorage.setItem("push_muted", "true");
       localStorage.removeItem("push_subscribed");
       setEnabled(false);
-      toast("Notifikasi push dimatikan", { icon: "🔕" });
+      toast("Notifikasi ke HP dimatikan", { icon: "🔕" });
       return { ok: true };
     } catch (err) {
       console.error("[push/unsubscribe]", err);
@@ -191,6 +237,8 @@ export function PushNotificationProvider({ children }) {
         enabled,
         loading,
         supported,
+        supportReason,
+        getUnsupportedMessage: () => getPushUnsupportedMessage(supportReason),
         enable,
         disable,
         toggle,

@@ -73,7 +73,7 @@ function PetaniAjukanScreenhousePage() {
 
     const trayCount = Number(screenhouse.tray_count);
     if (!Number.isInteger(trayCount) || trayCount < 1 || trayCount > 20) {
-      toast.error("Jumlah tray harus antara 1 dan 20");
+      toast.error("Jumlah rak bibit harus antara 1 dan 20");
       return;
     }
 
@@ -181,7 +181,7 @@ function PetaniAjukanScreenhousePage() {
 
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                Jumlah tray terpasang
+                Jumlah rak bibit terpasang
               </label>
               <div className="flex items-center gap-2 h-10 px-3 border border-gray-200 rounded-lg bg-gray-50">
                 <Layers size={14} className="text-gray-600 shrink-0" />
@@ -197,7 +197,7 @@ function PetaniAjukanScreenhousePage() {
                 />
               </div>
               <p className="text-[11px] text-gray-600 mt-1">
-                Satu tray = satu sensor node. Operator dapat menyesuaikan saat verifikasi.
+                Satu rak bibit memakai satu alat pengukur. Operator dapat menyesuaikan saat verifikasi.
               </p>
             </div>
 

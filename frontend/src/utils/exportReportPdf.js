@@ -157,7 +157,7 @@ function drawExecutiveSummary(doc, report, startY) {
   doc.setFontSize(8.5);
   doc.setTextColor(51, 65, 85);
   doc.text(
-    `Sehat: ${totals.healthy ?? 0}  ·  Peringatan: ${totals.warning ?? 0}  ·  Kritis: ${totals.critical ?? 0}  ·  Offline: ${totals.offline ?? 0}`,
+    `Sehat: ${totals.healthy ?? 0}, Peringatan: ${totals.warning ?? 0}, Kritis: ${totals.critical ?? 0}, Tidak terhubung: ${totals.offline ?? 0}`,
     14,
     nextY
   );
@@ -233,7 +233,7 @@ function drawStatusTablePage(doc, report) {
 
   autoTable(doc, {
     startY: y + 4,
-    head: [[groupLabel, "Total", "Sehat", "Peringatan", "Kritis", "Offline", "Uptime", "Skor rata-rata"]],
+    head: [[groupLabel, "Total", "Sehat", "Peringatan", "Kritis", "Tidak terhubung", "Waktu aktif", "Skor rata-rata"]],
     body: (report.regions ?? []).map((row) => [
       row.region_name,
       row.total,

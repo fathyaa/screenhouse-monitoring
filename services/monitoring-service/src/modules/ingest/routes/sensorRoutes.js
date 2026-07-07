@@ -11,11 +11,13 @@ const {
   getScreenhouseDashboardSummary,
   getScreenhouseStressScore,
   getSinkNodeByScreenhouse,
+  patchSensorNodeName,
 } = require("../controllers/sensorController");
 const { postScreenhouseActuators } = require("../controllers/actuatorController");
 
 const router = express.Router();
 
+router.patch("/sensor-nodes/:nodeId", authMiddleware, patchSensorNodeName);
 router.get(
   "/screenhouse/:screenhouseId/stress-score",
   getScreenhouseStressScore

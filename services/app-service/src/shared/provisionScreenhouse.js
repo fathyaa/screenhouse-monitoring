@@ -166,7 +166,7 @@ async function provisionMonitoringInfrastructure(screenhouse) {
           VALUES ($1, $2, $3, 60, true)
           ON CONFLICT (node_code) DO NOTHING
           `,
-          [screenhouseId, formatTrayCode(screenhouseId, i), `Tray T${String(i).padStart(2, "0")}`]
+          [screenhouseId, formatTrayCode(screenhouseId, i), `Rak bibit ${i}`]
         );
       }
 
@@ -210,6 +210,34 @@ async function postActivationProvisioning(screenhouses) {
   }
 }
 
+/** Sinkronkan nama screenhouse ke monitoring DB + Redis setelah rename. */
+async function syncScreenhouseRegistryName(screenhouse) {
+  const screenhouseId = Number(screenhouse.id);
+  if (!screenhouseId) return;
+
+  const name = String(screenhouse.name ?? "").trim() || `Screenhouse ${screenhouseId}`;
+  const ownerUserId = screenhouse.owner_user_id ?? null;
+  const status = screenhouse.status ?? "active";
+
+  if (monitoringPool) {
+    await monitoringPool.query(
+      `
+      UPDATE screenhouse_registry
+      SET screenhouse_name = $1, updated_at = NOW()
+      WHERE screenhouse_id = $2
+      `,
+      [name, screenhouseId]
+    );
+  }
+
+  await publishEvent("screenhouse.registry", {
+    screenhouse_id: screenhouseId,
+    owner_user_id: ownerUserId,
+    screenhouse_name: name,
+    status,
+  });
+}
+
 module.exports = {
   MAX_TRAY_COUNT,
   DEFAULT_THRESHOLD,
@@ -218,4 +246,5 @@ module.exports = {
   insertDefaultThreshold,
   activateScreenhouseRecord,
   postActivationProvisioning,
+  syncScreenhouseRegistryName,
 };

@@ -226,7 +226,7 @@ function OperatorLaporanPage() {
         Sehat: row.healthy,
         Peringatan: row.warning,
         Kritis: row.critical,
-        Offline: row.offline,
+        "Tidak terhubung": row.offline,
       })),
     [report]
   );
@@ -312,7 +312,7 @@ function OperatorLaporanPage() {
         <OperatorTopbar
           onToggleSidebar={toggleSidebar}
           title="Laporan wilayah"
-          subtitle="Insight screenhouse per periode · filter & export"
+          subtitle="Ringkasan screenhouse per periode, filter dan unduh"
           onExport={handleExportPdf}
           onExportCsv={handleExportCsv}
           exportDisabled={loading || !report?.regions?.length}
@@ -494,7 +494,7 @@ function OperatorLaporanPage() {
                   tone={report.kpis.active_alerts > 0 ? "red" : "slate"}
                 />
                 <KpiCard
-                  label="Offline"
+                  label="Tidak terhubung"
                   value={report.kpis.offline_count}
                   hint={
                     report.period_comparison?.alerts_delta != null
@@ -802,7 +802,7 @@ function OperatorLaporanPage() {
                     Status screenhouse per {groupLabel.toLowerCase()}
                   </div>
                   <div className="text-xs text-gray-600 mb-3">
-                    Distribusi sehat, peringatan, kritis, dan offline
+                    Distribusi sehat, peringatan, kritis, dan tidak terhubung
                   </div>
                   {statusChartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height={280}>
@@ -927,7 +927,7 @@ function OperatorLaporanPage() {
                   Parameter alert terbanyak
                 </div>
                 <div className="text-xs text-gray-600 mb-3">
-                  Ranking parameter yang paling sering melanggar threshold
+                  Ranking parameter yang paling sering melanggar batas aman
                 </div>
                 {paramChartData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={260}>
@@ -994,7 +994,7 @@ function OperatorLaporanPage() {
                           <th className="px-4 py-3 font-medium text-center">Sehat</th>
                           <th className="px-4 py-3 font-medium text-center">Peringatan</th>
                           <th className="px-4 py-3 font-medium text-center">Kritis</th>
-                          <th className="px-4 py-3 font-medium text-center">Offline</th>
+                          <th className="px-4 py-3 font-medium text-center">Tidak terhubung</th>
                           <th className="px-4 py-3 font-medium text-center">Uptime</th>
                           <th className="px-4 py-3 font-medium text-center">Skor rata-rata</th>
                         </tr>

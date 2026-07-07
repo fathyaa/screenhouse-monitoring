@@ -113,7 +113,7 @@ export default function ThresholdPage() {
 
   const handleSave = async () => {
     if (!saveTargets.length) {
-      toast.error("Centang screenhouse yang akan disamakan threshold-nya");
+      toast.error("Centang screenhouse yang akan disamakan batas amannya");
       return;
     }
     setSaving(true);
@@ -131,18 +131,18 @@ export default function ThresholdPage() {
       );
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.message || "Gagal menyimpan threshold");
+        toast.error(data.message || "Gagal menyimpan batas aman");
         return;
       }
       toast.success(
         isBulk
-          ? `Threshold disamakan ke ${data.updated_count ?? saveTargets.length} screenhouse`
-          : "Threshold berhasil disimpan"
+          ? `Batas aman disamakan ke ${data.updated_count ?? saveTargets.length} screenhouse`
+          : "Batas aman berhasil disimpan"
       );
       loadList();
     } catch (err) {
       console.error(err);
-      toast.error("Gagal menyimpan threshold");
+      toast.error("Gagal menyimpan batas aman");
     } finally {
       setSaving(false);
     }
@@ -150,8 +150,8 @@ export default function ThresholdPage() {
 
   return (
     <AdminPageShell
-      title="Kelola Threshold"
-      subtitle="Atur batas min/maks. Centang beberapa screenhouse untuk samakan sekaligus (mis. satu kecamatan)."
+      title="Kelola batas aman"
+      subtitle="Atur batas minimum dan maksimum. Centang beberapa screenhouse untuk menyamakan sekaligus (misalnya satu kecamatan)."
     >
       <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
         <WilayahFilter value={wilayah} onChange={setWilayah} />

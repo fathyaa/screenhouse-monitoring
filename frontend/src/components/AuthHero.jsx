@@ -26,7 +26,7 @@ export default function AuthHero({
         />
         <div>
           <div className="text-xl font-bold text-white">BibitLive</div>
-          <div className="text-sm text-bl-mint">Pantau bibit, langsung live</div>
+          <div className="text-sm text-bl-mint">Pantau bibit langsung</div>
         </div>
       </div>
 

@@ -1,5 +1,5 @@
 import { Sprout, Calendar, Clock } from "lucide-react";
-import { StressScoreDetailCard } from "./StressScoreDisplay";
+import { StressScoreDetailCard, StressScoreCardBadge } from "./StressScoreDisplay";
 
 function parseValidDate(dateStr) {
   if (!dateStr) return null;
@@ -166,8 +166,8 @@ export function EstimasiTanamDisclaimer({ className = "" }) {
 function InfoCard({ icon: Icon, title, children, className = "", compact = false }) {
   return (
     <div
-      className={`flex flex-col rounded-xl bg-white border border-gray-200/80 min-h-[120px] ${
-        compact ? "p-3 min-h-[100px]" : "p-4"
+      className={`flex flex-col rounded-xl bg-white border border-gray-200/80 ${
+        compact ? "p-3" : "p-4"
       } ${className}`}
     >
       <div
@@ -178,14 +178,14 @@ function InfoCard({ icon: Icon, title, children, className = "", compact = false
         {Icon && <Icon size={compact ? 12 : 14} className="shrink-0 text-gray-500" />}
         {title}
       </div>
-      <div className="flex-1 flex flex-col justify-center">{children}</div>
+      <div className="flex flex-col">{children}</div>
     </div>
   );
 }
 
 function InlineSegment({ icon: Icon, title, children, compact = false }) {
   return (
-    <div className="flex-1 min-w-0 px-3 first:pl-0 last:pr-0 py-2 sm:py-0">
+    <div className="w-full lg:flex-1 lg:min-w-0 py-3 first:pt-0 last:pb-0 border-b border-gray-200/80 last:border-b-0 lg:border-b-0 lg:py-0 lg:px-4 lg:first:pl-0 lg:last:pr-0">
       <div
         className={`flex items-center gap-1.5 font-semibold uppercase tracking-wide text-gray-500 mb-1.5 ${
           compact ? "text-[9px]" : "text-[10px]"
@@ -241,7 +241,7 @@ export default function EstimasiTanamPanel({
         </div>
       </div>
       {countdownTimelineText(timeline.sisaHari, timeline.targetLabel) && (
-        <p className={`text-gray-700 leading-snug mt-1.5 ${compact ? "text-[11px]" : "text-xs"}`}>
+        <p className={`text-gray-700 leading-snug mt-1.5 break-words ${compact ? "text-[11px]" : "text-xs"}`}>
           {countdownTimelineText(timeline.sisaHari, timeline.targetLabel)}
         </p>
       )}
@@ -256,19 +256,95 @@ export default function EstimasiTanamPanel({
     </>
   );
 
+  if (layout === "dashboard") {
+    return (
+      <section className="space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">
+              <Sprout size={11} className="shrink-0 text-emerald-600" />
+              Varietas
+            </div>
+            {varietas ? (
+              <p className="text-base font-bold text-gray-900 leading-tight break-words">{varietas}</p>
+            ) : (
+              <p className="text-sm text-gray-500">Belum dipilih</p>
+            )}
+            <p className="text-xs text-gray-600 mt-0.5">
+              Semai{" "}
+              <span className="font-medium text-gray-800">{semaiLabel ?? "belum mulai"}</span>
+            </p>
+            {varietasFooter}
+          </div>
+
+          {showStressScore && (
+            <div className="shrink-0">
+              <StressScoreCardBadge
+                scoreData={stressScore}
+                offline={deviceOffline}
+                compact
+              />
+            </div>
+          )}
+        </div>
+
+        {timeline ? (
+          <div className="rounded-xl bg-gradient-to-br from-emerald-50/90 via-white to-white border border-emerald-100 p-3">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800/80">
+                <Calendar size={11} className="shrink-0" />
+                Estimasi siap tanam
+              </div>
+              <span className="text-xs font-bold text-emerald-800 tabular-nums">
+                {timeline.progressPct}%
+              </span>
+            </div>
+
+            <div className="h-2 rounded-full bg-white border border-emerald-100 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                style={{ width: `${timeline.progressPct}%` }}
+              />
+            </div>
+
+            <div className="flex items-end justify-between gap-3 mt-2.5">
+              <div>
+                <p className="text-lg font-bold text-gray-900 leading-none tabular-nums">
+                  Hari {timeline.hariKe}
+                  <span className="text-sm font-medium text-gray-500"> / {timeline.totalDays}</span>
+                </p>
+              </div>
+              {countdownTimelineText(timeline.sisaHari, timeline.targetLabel) && (
+                <p className="text-[11px] text-gray-600 text-right leading-snug max-w-[55%]">
+                  {countdownTimelineText(timeline.sisaHari, timeline.targetLabel)}
+                </p>
+              )}
+            </div>
+            {estimasiFooter}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/80 px-3 py-2.5 text-[11px] text-gray-600">
+            Mulai siklus semai untuk melihat timeline pembibitan.
+            {estimasiFooter}
+          </div>
+        )}
+      </section>
+    );
+  }
+
   if (layout === "inline") {
     return (
-      <section className={`rounded-xl bg-slate-50/90 border border-gray-200/60 ${compact ? "p-2.5" : "p-3"}`}>
-        <div className="flex flex-col sm:flex-row sm:divide-x divide-gray-200/80 divide-y sm:divide-y-0">
+      <section className={`rounded-xl bg-slate-50/90 border border-gray-200/60 ${compact ? "p-3" : "p-4"}`}>
+        <div className="flex flex-col lg:flex-row lg:divide-x divide-gray-200/80">
           <InlineSegment icon={Sprout} title="Varietas & semai" compact={compact}>
             {varietas ? (
-              <p className={`font-semibold text-gray-800 ${compact ? "text-sm" : "text-base"}`}>
+              <p className={`font-semibold text-gray-800 break-words ${compact ? "text-sm" : "text-base"}`}>
                 {varietas}
               </p>
             ) : (
               <p className="text-xs text-gray-500">Belum dipilih</p>
             )}
-            <p className="text-[11px] text-gray-600 mt-0.5">
+            <p className="text-[11px] text-gray-600 mt-0.5 break-words">
               Semai:{" "}
               <span className="font-medium text-gray-700">
                 {semaiLabel ?? "Belum mulai"}
@@ -287,7 +363,7 @@ export default function EstimasiTanamPanel({
             </InlineSegment>
           )}
         </div>
-        <EstimasiTanamDisclaimer className="mt-2 pt-2 border-t border-gray-200/60" />
+        <EstimasiTanamDisclaimer className="mt-3 pt-3 border-t border-gray-200/60" />
       </section>
     );
   }
@@ -297,13 +373,13 @@ export default function EstimasiTanamPanel({
       <div className={`grid grid-cols-1 md:grid-cols-3 ${compact ? "gap-2" : "gap-3"}`}>
         <InfoCard icon={Sprout} title="Varietas & semai" compact={compact}>
           {varietas ? (
-            <p className={`font-semibold text-gray-800 ${compact ? "text-sm" : "text-base"}`}>
+            <p className={`font-semibold text-gray-800 break-words ${compact ? "text-sm" : "text-base"}`}>
               {varietas}
             </p>
           ) : (
             <p className="text-sm text-gray-500">Varietas belum dipilih</p>
           )}
-          <p className={`text-gray-600 mt-1 ${compact ? "text-[11px]" : "text-xs mt-1.5"}`}>
+          <p className={`text-gray-600 mt-1 break-words ${compact ? "text-[11px]" : "text-xs mt-1.5"}`}>
             Semai:{" "}
             <span className="font-medium text-gray-700">
               {semaiLabel ?? "Belum mulai siklus"}

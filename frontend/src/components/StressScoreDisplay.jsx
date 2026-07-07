@@ -2,9 +2,10 @@ import { getStressScoreStyle } from "../constants/stressScore";
 
 export function StressScoreDonut({ score = 0, color = "#16a34a", size = 52, strokeWidth = 5 }) {
   const pct = Math.min(100, Math.max(0, Number(score) || 0));
+  const visualPct = pct > 0 ? pct : color === "#dc2626" ? 8 : 0;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (pct / 100) * circumference;
+  const offset = circumference - (visualPct / 100) * circumference;
   const center = size / 2;
 
   return (
@@ -69,7 +70,7 @@ export function StressScoreCardBadge({ scoreData, compact = false, offline = fal
     return (
       <div className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600 font-medium">
         <span className="text-lg font-bold text-slate-400 tabular-nums">—</span>
-        <span>Menunggu perangkat online</span>
+        <span>Menunggu alat terhubung</span>
       </div>
     );
   }
@@ -88,13 +89,16 @@ export function StressScoreCardBadge({ scoreData, compact = false, offline = fal
   if (compact) {
     return (
       <div
-        className={`inline-flex items-center gap-2 px-2 py-1 rounded-lg border ${style.bg} ${style.border}`}
-        title={`Skor Kondisi Bibit: ${score} — ${scoreData.category}`}
+        className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-xl border ${style.bg} ${style.border}`}
+        title={`Skor kondisi bibit: ${score} — ${scoreData.category}`}
       >
-        <StressScoreDonut score={score} color={style.color} size={36} strokeWidth={4} />
-        <div className="text-left leading-tight">
-          <div className={`text-lg font-bold tabular-nums ${style.text}`}>{score}</div>
-          <div className={`text-[10px] font-medium ${style.text}`}>{scoreData.category}</div>
+        <StressScoreDonut score={score} color={style.color} size={40} strokeWidth={4} />
+        <div className="text-left leading-tight min-w-0">
+          <div className="text-[9px] uppercase tracking-wide text-gray-500 font-semibold">
+            Skor bibit
+          </div>
+          <div className={`text-lg font-bold tabular-nums leading-none ${style.text}`}>{score}</div>
+          <div className={`text-[10px] font-semibold ${style.text}`}>{scoreData.category}</div>
         </div>
       </div>
     );
@@ -139,7 +143,7 @@ export function StressScoreDetailCard({ scoreData, offline = false, compact = fa
           textClassName="text-slate-400"
         />
         <p className={`font-medium text-slate-600 mt-1 leading-snug ${compact ? "text-[10px]" : "text-xs"}`}>
-          Menunggu perangkat online
+          Menunggu alat terhubung
         </p>
       </div>
     );
@@ -182,7 +186,7 @@ export function StressScoreNodeGauge({ scoreData, nodeName }) {
   return (
     <div
       className={`flex items-center gap-2 px-2.5 py-2 rounded-xl border ${style.bg} ${style.border}`}
-      title={`Skor tray ${nodeName ?? ""}: ${score} (${scoreData.category})`}
+      title={`Skor rak bibit ${nodeName ?? ""}: ${score} (${scoreData.category})`}
     >
       <StressScoreDonutWithValue
         score={score}

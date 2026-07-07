@@ -27,7 +27,7 @@ function TrayCountField({ value, onChange, disabled }) {
     return (
         <div className="flex items-center gap-2 text-sm text-gray-600">
             <Layers size={16} className="shrink-0 text-gray-600" />
-            <span className="font-semibold text-gray-700">Tray terpasang:</span>
+            <span className="font-semibold text-gray-700">Jumlah rak bibit:</span>
             <input
                 type="number"
                 min={1}
@@ -37,7 +37,7 @@ function TrayCountField({ value, onChange, disabled }) {
                 onChange={(e) => onChange(Number(e.target.value))}
                 className="w-16 h-8 px-2 border border-gray-200 rounded-lg text-sm text-gray-800 bg-white disabled:opacity-50"
             />
-            <span className="text-xs text-gray-600">(1 tray = 1 sensor node)</span>
+            <span className="text-xs text-gray-600">(1 rak bibit = 1 alat pengukur)</span>
         </div>
     );
 }
@@ -388,7 +388,7 @@ function ApprovalPage() {
     const requestApproveUser = (farmer) => {
         if (!farmer.screenhouse_id && !farmer.screenhouse_name) return;
         const trayCount = getTrayCount(`u-${farmer.id}`, farmer.tray_count ?? 1);
-        const nodeLabel = trayCount === 1 ? "1 sensor node" : `${trayCount} sensor node`;
+        const nodeLabel = trayCount === 1 ? "1 alat pengukur" : `${trayCount} alat pengukur`;
         setConfirmDialog({
             action: "approve",
             entity: "user",
@@ -410,7 +410,7 @@ function ApprovalPage() {
 
     const requestApproveScreenhouse = (sh) => {
         const trayCount = getTrayCount(`s-${sh.id}`, sh.tray_count ?? 1);
-        const nodeLabel = trayCount === 1 ? "1 sensor node" : `${trayCount} sensor node`;
+        const nodeLabel = trayCount === 1 ? "1 alat pengukur" : `${trayCount} alat pengukur`;
         setConfirmDialog({
             action: "approve",
             entity: "screenhouse",
@@ -476,7 +476,7 @@ function ApprovalPage() {
                     </div>
                     <div className="hidden sm:flex items-center gap-2 bg-green-50 text-green-800 text-xs font-medium px-3 py-1.5 rounded-full shrink-0">
                         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                        Online
+                        Siap pantau
                     </div>
                 </header>
 

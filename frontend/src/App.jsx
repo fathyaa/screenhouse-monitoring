@@ -22,6 +22,7 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import RegisterScreenhousePage from "./pages/RegisterScreenhousePage";
 import PetaniAjukanScreenhousePage from "./pages/PetaniAjukanScreenhousePage";
+import PengaturanAkunPage from "./pages/PengaturanAkunPage";
 
 function PrivateRoute({ children, allowedRole, allowedRoles }) {
   const token = localStorage.getItem("token");
@@ -57,6 +58,7 @@ function AppRoutes() {
       <Route path="/petani/screenhouse/:id" element={<PrivateRoute allowedRole="petani"><ScreenhouseDetailPage basePath="/petani" /></PrivateRoute>} />
       <Route path="/petani/ajukan-screenhouse" element={<PrivateRoute allowedRole="petani"><PetaniAjukanScreenhousePage /></PrivateRoute>} />
       <Route path="/petani/peringatan" element={<PrivateRoute allowedRole="petani"><NotifikasiPage /></PrivateRoute>} />
+      <Route path="/petani/pengaturan" element={<PrivateRoute allowedRole="petani"><PengaturanAkunPage /></PrivateRoute>} />
       <Route path="/petani/notifikasi" element={<Navigate to="/petani/peringatan" replace />} />
 
       {/* OPERATOR (+ super_admin) */}
@@ -66,6 +68,7 @@ function AppRoutes() {
       <Route path="/operator/approval" element={<PrivateRoute allowedRoles={OPERATOR}><ApprovalPage /></PrivateRoute>} />
       <Route path="/operator/petani" element={<PrivateRoute allowedRoles={OPERATOR}><DaftarPetaniPage /></PrivateRoute>} />
       <Route path="/operator/petani/:userId" element={<PrivateRoute allowedRoles={OPERATOR}><FarmerScreenhousesPage /></PrivateRoute>} />
+      <Route path="/operator/pengaturan" element={<PrivateRoute allowedRoles={OPERATOR}><PengaturanAkunPage /></PrivateRoute>} />
       <Route path="/operator/approval/petani/:userId" element={<RedirectLegacyFarmerPath />} />
 
       {/* SUPER ADMIN */}
@@ -73,6 +76,7 @@ function AppRoutes() {
       <Route path="/admin/kelola-screenhouse" element={<PrivateRoute allowedRoles={SUPER_ADMIN}><KelolaScreenhousePage /></PrivateRoute>} />
       <Route path="/admin/kelola-threshold" element={<PrivateRoute allowedRoles={SUPER_ADMIN}><ThresholdPage /></PrivateRoute>} />
       <Route path="/admin/konfigurasi" element={<PrivateRoute allowedRoles={SUPER_ADMIN}><KonfigurasiPage /></PrivateRoute>} />
+      <Route path="/admin/pengaturan" element={<PrivateRoute allowedRoles={SUPER_ADMIN}><PengaturanAkunPage /></PrivateRoute>} />
 
       {/* FALLBACK */}
       <Route path="*" element={<Navigate to="/login" replace />} />
