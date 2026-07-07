@@ -106,7 +106,7 @@ async function resetAppDb() {
   await appPool.query("BEGIN");
   await appPool.query(seedMain);
   const migration = readFileSync(
-    path.join(__dirname, "../app/migrations/001_screenhouse_profile_fields.sql"),
+    path.join(__dirname, "../app/migrations.sql"),
     "utf8"
   );
   await appPool.query(migration);

@@ -49,6 +49,14 @@ psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring -f database/moni
 
 Jalankan **App DB** dulu (`database/app/schema.sql` + `seed.sql`), lalu monitoring di atas.
 
+## Migrasi (DB lama)
+
+Fresh install cukup `schema.sql` + `seed.sql`. Untuk DB yang sudah jalan:
+
+```bash
+psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring -f database/monitoring/migrations.sql
+```
+
 ## Seed tambahan (peta)
 
 30+ screenhouse di peta — lewat `database/scripts/`:

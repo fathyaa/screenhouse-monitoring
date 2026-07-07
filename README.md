@@ -503,9 +503,9 @@ Service worker custom: `frontend/src/pwa/sw.js` (push handler + notification cli
 
 ### Migrasi DB (instalasi yang sudah jalan)
 
-Jalankan sekali jika database dibuat sebelum penambahan kolom profil pembibitan & catatan resolve alert:
+Jalankan sekali jika database dibuat sebelum perubahan schema terbaru:
 
 ```bash
-psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/migrations/001_screenhouse_profile_fields.sql
-psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring -f database/monitoring/migrations/001_alert_resolve_fields.sql
+psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/migrations.sql
+psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring -f database/monitoring/migrations.sql
 ```
