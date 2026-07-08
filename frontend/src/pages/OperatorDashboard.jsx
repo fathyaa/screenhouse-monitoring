@@ -2,10 +2,11 @@ import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import L from "leaflet";
-import { RefreshCw, Phone, MessageCircle, AlertTriangle } from "lucide-react";
+import { RefreshCw, Phone, MessageCircle, AlertTriangle, User, MapPin, Lightbulb, CheckCircle2, ChevronDown, ArrowUp, ArrowDown } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
 import OperatorTopbar from "../layouts/OperatorTopbar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
+import { useScreenhouseStats } from "../context/ScreenhouseStatsContext";
 import { API_URL } from "../config/api";
 import { getSocket } from "../lib/socket";
 import { formatRackName } from "../utils/rackNames";
@@ -60,9 +61,11 @@ function statusIcon(status) {
 }
 
 const PRIORITY_RANK = { critical: 4, warning: 3, offline: 2, healthy: 1 };
+const PRIORITY_VISIBLE_LIMIT = 12;
 
+/** @returns {{ all: object[], visible: object[] }} — `all` dipakai untuk hitung total asli & insight, `visible` yang dirender. */
 function buildPriorityList(screenhouses, mapSummary) {
-  return screenhouses
+  const all = screenhouses
     .map((sh) => {
       const summary = mapSummary[sh.id];
       const status = summary?.status ?? "offline";
@@ -80,25 +83,50 @@ function buildPriorityList(screenhouses, mapSummary) {
       if (b.rank !== a.rank) return b.rank - a.rank;
       if (b.activeAlerts !== a.activeAlerts) return b.activeAlerts - a.activeAlerts;
       return a.name.localeCompare(b.name, "id");
-    })
-    .slice(0, 12);
+    });
+  return { all, visible: all.slice(0, PRIORITY_VISIBLE_LIMIT) };
+}
+
+/** Satu kalimat ringkas: berapa banyak yang perlu perhatian & penyebab terbanyak. */
+function buildDashboardInsight(priorityAll, statusCounts) {
+  const total = priorityAll.length;
+  if (total === 0) return null;
+
+  const causeCounts = {};
+  priorityAll.forEach((sh) => {
+    (sh.summary?.abnormal ?? []).forEach((a) => {
+      causeCounts[a.label] = (causeCounts[a.label] ?? 0) + 1;
+    });
+  });
+  const topCause = Object.entries(causeCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+
+  let text = `${total} screenhouse perlu perhatian`;
+  if (statusCounts.critical > 0) text += ` (${statusCounts.critical} kritis)`;
+  text += ".";
+  if (topCause) text += ` Penyebab terbanyak: ${topCause.toLowerCase()}.`;
+  return text;
 }
 
 function OperatorDashboard() {
   const navigate = useNavigate();
   const [screenhouses, setScreenhouses] = useState([]);
   const { isOpen: sidebarOpen, toggle: toggleSidebar, close: closeSidebar } = useSidebarOpen();
+  const { footerStats } = useScreenhouseStats();
   const user = JSON.parse(
     localStorage.getItem("user")
   );
   const [selectedId, setSelectedId] = useState(null);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [mobileView, setMobileView] = useState("map");
   const [mapSummary, setMapSummary] = useState({});
   const [summaryRefreshing, setSummaryRefreshing] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
   const [mapSummaryLoading, setMapSummaryLoading] = useState(true);
+  const [attentionDelta, setAttentionDelta] = useState(null);
   const mapRef = useRef(null);
   const markerRefs = useRef({});
+  const prevAttentionCountRef = useRef(null);
 
   const loadMapSummary = useCallback(async () => {
     try {
@@ -194,15 +222,18 @@ function OperatorDashboard() {
 
   const filteredScreenhouses = screenhouses.filter((sh) => {
     const keyword = search.toLowerCase();
-
-    return (
+    const matchesSearch =
       sh.name?.toLowerCase().includes(keyword) ||
       sh.owner_name?.toLowerCase().includes(keyword) ||
       sh.address_detail?.toLowerCase().includes(keyword) ||
       sh.village?.toLowerCase().includes(keyword) ||
       sh.district?.toLowerCase().includes(keyword) ||
-      sh.province?.toLowerCase().includes(keyword)
-    );
+      sh.province?.toLowerCase().includes(keyword);
+    if (!matchesSearch) return false;
+
+    if (statusFilter === "all") return true;
+    const status = mapSummary[sh.id]?.status ?? "offline";
+    return status === statusFilter;
   });
 
   const statusCounts = useMemo(() => {
@@ -219,8 +250,21 @@ function OperatorDashboard() {
     [screenhouses, mapSummary]
   );
 
+  const dashboardInsight = useMemo(
+    () => buildDashboardInsight(priorityList.all, statusCounts),
+    [priorityList, statusCounts]
+  );
+
+  useEffect(() => {
+    const total = priorityList.all.length;
+    if (prevAttentionCountRef.current != null && prevAttentionCountRef.current !== total) {
+      setAttentionDelta(total - prevAttentionCountRef.current);
+    }
+    prevAttentionCountRef.current = total;
+  }, [priorityList.all.length]);
+
   const priorityIds = useMemo(
-    () => new Set(priorityList.map((sh) => sh.id)),
+    () => new Set(priorityList.all.map((sh) => sh.id)),
     [priorityList]
   );
 
@@ -261,28 +305,45 @@ function OperatorDashboard() {
           subtitle="Pantau langsung, peta screenhouse"
         />
 
-        {/* Legend status — di luar peta, di bawah topbar */}
-        <div className="shrink-0 border-b border-gray-200 bg-white px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-2">
-          <div className="text-[10px] uppercase tracking-wider text-gray-600 font-semibold shrink-0">
+        {/* Legend status — sekaligus filter cepat, di luar peta, di bawah topbar.
+            Mobile: satu baris scroll horizontal supaya tidak wrap ke banyak baris. */}
+        <div className="shrink-0 border-b border-gray-200 bg-white px-4 py-2.5 flex items-center gap-2 sm:gap-3">
+          <div className="text-[10px] uppercase tracking-wider text-gray-600 font-semibold shrink-0 hidden sm:block">
             Status screenhouse
           </div>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 overflow-x-auto sm:flex-wrap flex-1 min-w-0 -mx-1 px-1">
+            <button
+              type="button"
+              onClick={() => setStatusFilter("all")}
+              className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition shrink-0 whitespace-nowrap ${
+                statusFilter === "all" ? "bg-gray-800 text-white" : "text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              Semua
+              <span className="tabular-nums">{screenhouses.length}</span>
+            </button>
             {STATUS_ORDER.map((key) => {
               const meta = SCREENHOUSE_STATUS[key];
+              const active = statusFilter === key;
               return (
-                <div
+                <button
+                  type="button"
                   key={key}
-                  className="flex items-center gap-1.5 text-xs text-gray-700"
+                  onClick={() => setStatusFilter(active ? "all" : key)}
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium transition shrink-0 whitespace-nowrap ${
+                    active ? "ring-1 ring-inset" : "hover:bg-gray-100"
+                  }`}
+                  style={active ? { backgroundColor: `${meta.color}1a`, color: meta.color } : undefined}
                 >
                   <span
                     className="w-2.5 h-2.5 rounded-full shrink-0"
                     style={{ backgroundColor: meta.color }}
                   />
-                  <span>{meta.label}</span>
-                  <span className="tabular-nums font-semibold text-gray-800">
+                  <span className={active ? "" : "text-gray-700"}>{meta.label}</span>
+                  <span className={`tabular-nums font-semibold ${active ? "" : "text-gray-800"}`}>
                     {statusCounts[key]}
                   </span>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -290,7 +351,7 @@ function OperatorDashboard() {
             type="button"
             onClick={loadMapSummary}
             disabled={summaryRefreshing}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 disabled:opacity-50 shrink-0"
+            className="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 disabled:opacity-50 shrink-0"
             aria-label="Refresh status peta"
             title="Refresh status peta"
           >
@@ -298,12 +359,54 @@ function OperatorDashboard() {
               size={14}
               className={summaryRefreshing ? "animate-spin" : undefined}
             />
-            Refresh
+            <span className="hidden sm:inline">Refresh</span>
           </button>
         </div>
 
+        {dashboardInsight && (
+          <div className="shrink-0 border-b border-gray-200 bg-amber-50/60 px-4 py-2 flex items-center gap-2">
+            <Lightbulb size={14} className="text-amber-700 shrink-0" aria-hidden />
+            <p className="text-xs text-amber-900 flex-1 min-w-0">
+              {dashboardInsight}
+              {attentionDelta != null && attentionDelta !== 0 && (
+                <span
+                  className={`ml-2 font-semibold ${attentionDelta > 0 ? "text-red-700" : "text-emerald-700"}`}
+                >
+                  {attentionDelta > 0 ? "+" : ""}
+                  {attentionDelta} sejak refresh terakhir
+                </span>
+              )}
+            </p>
+          </div>
+        )}
+
+        {/* Segment Peta/Daftar — HP saja, di lg: dua panel selalu tampil berdampingan */}
+        <div className="lg:hidden shrink-0 border-b border-gray-200 bg-white px-4 py-2">
+          <div className="flex bg-gray-100 rounded-xl p-1">
+            {[
+              { key: "map", label: "Peta" },
+              { key: "list", label: "Daftar" },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setMobileView(tab.key)}
+                className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                  mobileView === tab.key ? "bg-white text-emerald-800 shadow-sm" : "text-gray-600"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="flex flex-1 flex-col lg:flex-row overflow-hidden min-h-0">
-          <div className="dashboard-map flex-1 relative overflow-hidden min-h-[45dvh] lg:min-h-0 isolate z-0">
+          <div
+            className={`dashboard-map relative overflow-hidden isolate z-0 min-h-0 ${
+              mobileView === "map" ? "flex-1" : "hidden"
+            } lg:block lg:flex-1`}
+          >
             {(pageLoading || mapSummaryLoading) && (
               <MapLoadingOverlay
                 message={pageLoading ? "Memuat screenhouse..." : "Memuat status peta..."}
@@ -352,58 +455,17 @@ function OperatorDashboard() {
                           </span>
                         </div>
 
-                        {sh.owner_name && (
-                          <p className="text-xs text-slate-600 font-medium mt-1">
-                            👤 {sh.owner_name}
-                          </p>
-                        )}
-
-                        {sh.owner_phone && (
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            <a
-                              href={telUrl(sh.owner_phone)}
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-medium hover:bg-slate-200"
-                            >
-                              <Phone size={12} />
-                              Telepon
-                            </a>
-                            {whatsAppUrl(sh.owner_phone) && (
-                              <a
-                                href={whatsAppUrl(sh.owner_phone)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-green-50 text-green-800 text-[11px] font-medium hover:bg-green-100"
-                              >
-                                <MessageCircle size={12} />
-                                WhatsApp
-                              </a>
-                            )}
-                          </div>
-                        )}
-
-                        <p className="text-xs text-slate-600 font-medium mt-1">
-                          📍{" "}
-                          {[sh.address_detail, sh.village, sh.district]
-                            .filter(Boolean)
-                            .join(", ")}
-                        </p>
-
-                        {/* INSIGHT */}
-                        <div className="mt-3 space-y-2">
-                          {!summary && (
-                            <div className="text-xs text-slate-600">
-                              Memuat status...
-                            </div>
-                          )}
-
-                          {summary && (
+                        {/* Isu paling mendesak duluan */}
+                        <div className="mt-2 space-y-1.5">
+                          {!summary ? (
+                            <div className="text-xs text-slate-600">Memuat status...</div>
+                          ) : (
                             <>
                               <div
                                 className={`rounded-lg px-3 py-2 text-xs font-medium ${meta.badgeClass}`}
                               >
                                 {summary.insight}
                               </div>
-
                               <div className="flex items-center justify-between text-[11px] text-slate-600 font-medium">
                                 <span className="flex items-center gap-1">
                                   <span
@@ -425,53 +487,97 @@ function OperatorDashboard() {
                                   </span>
                                 )}
                               </div>
-
-                              {abnormal.length > 0 ? (
-                                <div className="flex flex-wrap gap-1">
-                                  {abnormal.map((a) => (
-                                    <span
-                                      key={a.key}
-                                      className="inline-flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-md px-1.5 py-0.5 text-[10px] text-slate-600"
-                                    >
-                                      <span
-                                        className={
-                                          a.direction === "high"
-                                            ? "text-red-500"
-                                            : "text-amber-500"
-                                        }
-                                      >
-                                        {a.direction === "high" ? "▲" : "▼"}
-                                      </span>
-                                      {a.label}: {a.value}
-                                      {METRIC_UNIT[a.key] || ""}
-                                      <span className="text-slate-600">
-                                        (≤{a.max}
-                                        {METRIC_UNIT[a.key] || ""})
-                                      </span>
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : summary.alerts_pending_review ? (
-                                <p className="text-[11px] text-amber-700">
-                                  Sensor normal, alert menunggu ditinjau petani
-                                </p>
-                              ) : (
-                                status !== "offline" &&
-                                summary.has_threshold && (
-                                  <p className="text-[11px] text-bl-primary">
-                                    ✓ Semua parameter dalam batas normal
-                                  </p>
-                                )
-                              )}
-
-                              {summary.node_name && (
-                                <p className="text-[10px] text-slate-600">
-                                  {formatRackName(summary.node_name)}
-                                </p>
-                              )}
                             </>
                           )}
                         </div>
+
+                        {sh.owner_phone && (
+                          <div className="flex flex-wrap gap-2 mt-2.5">
+                            <a
+                              href={telUrl(sh.owner_phone)}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-medium hover:bg-slate-200"
+                            >
+                              <Phone size={12} />
+                              Telepon
+                            </a>
+                            {whatsAppUrl(sh.owner_phone) && (
+                              <a
+                                href={whatsAppUrl(sh.owner_phone)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-green-50 text-green-800 text-[11px] font-medium hover:bg-green-100"
+                              >
+                                <MessageCircle size={12} />
+                                WhatsApp
+                              </a>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Detail pendukung — alamat, pemilik, parameter lain */}
+                        <details className="mt-2.5 group">
+                          <summary className="text-[11px] font-medium text-slate-500 cursor-pointer list-none flex items-center gap-1">
+                            Detail alamat &amp; parameter lain
+                            <ChevronDown size={12} className="transition-transform group-open:rotate-180" aria-hidden />
+                          </summary>
+                          <div className="mt-1.5 space-y-1.5">
+                            {sh.owner_name && (
+                              <p className="text-xs text-slate-600 font-medium flex items-center gap-1">
+                                <User size={11} className="shrink-0" />
+                                {sh.owner_name}
+                              </p>
+                            )}
+                            <p className="text-xs text-slate-600 font-medium flex items-start gap-1">
+                              <MapPin size={11} className="shrink-0 mt-0.5" />
+                              {[sh.address_detail, sh.village, sh.district]
+                                .filter(Boolean)
+                                .join(", ")}
+                            </p>
+                            {summary && (
+                              <>
+                                {abnormal.length > 0 ? (
+                                  <div className="flex flex-wrap gap-1">
+                                    {abnormal.map((a) => (
+                                      <span
+                                        key={a.key}
+                                        className="inline-flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-md px-1.5 py-0.5 text-[10px] text-slate-600"
+                                      >
+                                        {a.direction === "high" ? (
+                                          <ArrowUp size={10} className="text-red-500 shrink-0" aria-hidden />
+                                        ) : (
+                                          <ArrowDown size={10} className="text-amber-500 shrink-0" aria-hidden />
+                                        )}
+                                        {a.label}: {a.value}
+                                        {METRIC_UNIT[a.key] || ""}
+                                        <span className="text-slate-600">
+                                          (≤{a.max}
+                                          {METRIC_UNIT[a.key] || ""})
+                                        </span>
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : summary.alerts_pending_review ? (
+                                  <p className="text-[11px] text-amber-700">
+                                    Sensor normal, alert menunggu ditinjau petani
+                                  </p>
+                                ) : (
+                                  status !== "offline" &&
+                                  summary.has_threshold && (
+                                    <p className="text-[11px] text-bl-primary flex items-center gap-1">
+                                      <CheckCircle2 size={12} className="shrink-0" aria-hidden />
+                                      Semua parameter dalam batas normal
+                                    </p>
+                                  )
+                                )}
+                                {summary.node_name && (
+                                  <p className="text-[10px] text-slate-600">
+                                    {formatRackName(summary.node_name)}
+                                  </p>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </details>
                       </div>
                     </Popup>
                   </Marker>
@@ -481,18 +587,51 @@ function OperatorDashboard() {
           </div>
 
           {/* Panel kanan — dua section terpisah, masing-masing scroll sendiri */}
-          <div className="w-full lg:w-[380px] shrink-0 border-t lg:border-t-0 lg:border-l border-gray-200 bg-white flex flex-col overflow-hidden max-h-[45dvh] lg:max-h-none min-h-0">
-            {priorityList.length > 0 && (
+          <div
+            className={`w-full lg:w-[380px] shrink-0 border-t lg:border-t-0 lg:border-l border-gray-200 bg-white flex-col overflow-hidden min-h-0 ${
+              mobileView === "list" ? "flex" : "hidden"
+            } lg:flex lg:max-h-none`}
+          >
+            <div className="shrink-0 border-b border-gray-100 px-4 py-3">
+              <p className="text-[10px] uppercase tracking-widest text-gray-500 font-semibold mb-2">Status sistem</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-gray-50 rounded-xl p-3">
+                  <div className="text-xs text-gray-500">Screenhouse aktif</div>
+                  <div className="text-2xl font-semibold text-gray-900 mt-1 tabular-nums">
+                    {footerStats.screenhouseCount}
+                  </div>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-3">
+                  <div className="text-xs text-gray-500">Kirim data 24 jam</div>
+                  <div className="text-2xl font-semibold text-gray-900 mt-1 tabular-nums">
+                    {footerStats.onlineSinkCount}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Pencarian — selalu di posisi tetap, tidak ikut terdesak konten "Perlu tindak lanjut". */}
+            <div className="shrink-0 px-4 py-3 border-b border-gray-100">
+              <input
+                type="text"
+                placeholder="Cari nama, owner, alamat..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-green-100 focus:border-green-300"
+              />
+            </div>
+
+            {priorityList.all.length > 0 && (
               <section className="flex flex-col flex-1 min-h-0 border-b border-gray-200">
                 <div className="px-4 py-3 border-b border-amber-100 bg-amber-50/50 shrink-0">
                   <div className="flex items-center gap-2 text-xs font-semibold text-amber-900">
                     <AlertTriangle size={14} className="shrink-0" />
-                    Perlu tindak lanjut ({priorityList.length})
+                    Perlu tindak lanjut ({priorityList.all.length})
                   </div>
                 </div>
                 <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
                   <div className="space-y-2">
-                    {priorityList.map((sh) => (
+                    {priorityList.visible.map((sh) => (
                       <button
                         key={`prio-${sh.id}`}
                         type="button"
@@ -522,22 +661,28 @@ function OperatorDashboard() {
                       </button>
                     ))}
                   </div>
+                  {priorityList.all.length > PRIORITY_VISIBLE_LIMIT && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileView("list");
+                        setStatusFilter("all");
+                        setSearch("");
+                      }}
+                      className="w-full text-center text-xs font-semibold text-amber-800 hover:text-amber-900 py-2"
+                    >
+                      Lihat {priorityList.all.length - PRIORITY_VISIBLE_LIMIT} lainnya di daftar bawah ›
+                    </button>
+                  )}
                 </div>
               </section>
             )}
 
             <section className="flex flex-col flex-1 min-h-0">
-              <div className="px-4 py-3 border-b border-gray-100 shrink-0">
-                <div className="text-xs uppercase tracking-widest text-gray-600 font-medium mb-2.5">
+              <div className="px-4 py-2.5 border-b border-gray-100 shrink-0">
+                <div className="text-xs uppercase tracking-widest text-gray-600 font-medium">
                   Daftar screenhouse
                 </div>
-                <input
-                  type="text"
-                  placeholder="Cari nama, owner, alamat..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-green-100 focus:border-green-300"
-                />
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto p-2">
                 {pageLoading ? (

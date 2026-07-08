@@ -1,4 +1,4 @@
-import { Clock, Bot } from "lucide-react";
+import { Clock, Bot, CheckCircle2 } from "lucide-react";
 import { buildHealthList, getActions, markerPosition } from "../constants/paramHealth";
 import { FARMER_LABELS } from "../constants/farmerLabels";
 import { formatRackName } from "../utils/rackNames";
@@ -186,7 +186,7 @@ export default function ParamHealthCards({
         <div className="mt-3">
           {actions.length === 0 ? (
             <div className="flex items-center gap-2 text-xs text-bl-primary bg-bl-surface-muted rounded-xl px-3 py-2">
-              <span>✓</span>
+              <CheckCircle2 size={14} className="shrink-0" aria-hidden />
               {stale
                 ? "Data terakhir masih dalam batas aman. Tunggu alat terhubung untuk pembacaan langsung."
                 : "Semua ukuran tanah masih pas. Tidak perlu tindakan."}

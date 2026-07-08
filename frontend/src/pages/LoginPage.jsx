@@ -70,7 +70,7 @@ function LoginPage() {
             }
         } catch (err) {
             console.error("[login] Network error", err);
-            toast.error("Tidak dapat terhubung ke server. Pastikan app-service (VITE_API_URL) berjalan.");
+            toast.error("Tidak bisa terhubung ke server. Coba lagi beberapa saat lagi.");
         } finally {
             setLoading(false);
         }

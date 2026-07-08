@@ -1,20 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useScreenhouseStats } from "../context/ScreenhouseStatsContext";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard,
   Map,
   Radio,
   Leaf,
   Plus,
-  Wifi,
-  CheckCircle,
   LogOut,
   User,
   Users,
   SlidersHorizontal,
   FileBarChart,
   Bell,
-  RefreshCw,
   Settings,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -39,18 +35,18 @@ const MENUS_BY_ROLE = {
     { icon: <FileBarChart size={17} />, label: "Riwayat Semai", path: "/petani/riwayat-semai" },
   ],
   super_admin: [
-    { icon: <User size={17} />, label: "Kelola User", path: "/admin/kelola-user" },
-    { icon: <Leaf size={17} />, label: "Kelola Screenhouse", path: "/admin/kelola-screenhouse" },
-    { icon: <SlidersHorizontal size={17} />, label: "Kelola batas aman", path: "/admin/kelola-threshold" },
-    { icon: <Radio size={17} />, label: "Konfigurasi", path: "/admin/konfigurasi" },
-    { icon: <LayoutDashboard size={17} />, label: "Dashboard Operator", path: "/operator" },
-    { icon: <FileBarChart size={17} />, label: "Laporan Wilayah", path: "/operator/laporan" },
-    { icon: <Map size={17} />, label: "Approval Petani", path: "/operator/approval" },
-    { icon: <Users size={17} />, label: "Daftar Petani", path: "/operator/petani" },
+    { icon: <User size={17} />, label: "Kelola User", path: "/admin/kelola-user", section: "Admin" },
+    { icon: <Leaf size={17} />, label: "Kelola Screenhouse", path: "/admin/kelola-screenhouse", section: "Admin" },
+    { icon: <SlidersHorizontal size={17} />, label: "Kelola batas aman", path: "/admin/kelola-threshold", section: "Admin" },
+    { icon: <Radio size={17} />, label: "Konfigurasi", path: "/admin/konfigurasi", section: "Admin" },
+    { icon: <LayoutDashboard size={17} />, label: "Dashboard Operator", path: "/operator", section: "Operator" },
+    { icon: <FileBarChart size={17} />, label: "Laporan Wilayah", path: "/operator/laporan", section: "Operator" },
+    { icon: <Map size={17} />, label: "Approval Petani", path: "/operator/approval", section: "Operator" },
+    { icon: <Users size={17} />, label: "Daftar Petani", path: "/operator/petani", section: "Operator" },
   ],
 };
 
-function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user: userProp }) {
+function Sidebar({ isOpen, onClose, role = "operator", user: userProp }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [profileUser, setProfileUser] = useState(() => {
@@ -64,7 +60,6 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user: 
   const { unreadCount } = useAlerts();
   const { muted: notifMuted, loading: pushLoading, toggle: togglePush, supported: pushSupported, getUnsupportedMessage } = usePushNotifications();
   const notifEnabled = !notifMuted;
-  const { footerStats, footerStatsLoading, refetch: fetchFooterStats } = useScreenhouseStats();
   const [pendingApprovals, setPendingApprovals] = useState(0);
 
   const fetchPendingApprovals = useCallback(() => {
@@ -136,11 +131,6 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user: 
       clearInterval(interval);
     };
   }, [fetchPendingApprovals]);
-
-  const screenhouseCount =
-    role === "operator" || role === "super_admin"
-      ? footerStats.screenhouseCount
-      : screenhouses.length || footerStats.screenhouseCount;
 
   const handleNavigate = (path) => {
     navigate(path);
@@ -258,94 +248,42 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user: 
         </div>
       </div>
 
-      {/* MENU */}
+      {/* MENU — dikelompokkan per section kalau ada (mis. super_admin: Admin vs Operator) */}
       <div className="px-3 flex flex-col gap-0.5 overflow-y-auto flex-1">
-        <p className="text-[10px] uppercase tracking-widest text-white/30 font-medium px-3 py-2 whitespace-nowrap text-left">Menu</p>
-        {menus.map(({ icon, label, badge, path }) => {
+        {menus.map(({ icon, label, badge, path, section }, idx) => {
           const active = isActive(path);
+          const prevSection = idx > 0 ? menus[idx - 1].section : undefined;
+          const showSectionHeader = idx === 0 || section !== prevSection;
           return (
-            <button
-              key={path}
-              onClick={() => handleNavigate(path)}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium whitespace-nowrap transition w-full text-left ${active ? "bg-bl-primary text-white shadow-sm shadow-black/10" : "text-white/55 hover:bg-white/5 hover:text-white"}`}
-            >
-              {icon}
-              {label}
-              {badge > 0 && (
-                <span className="ml-auto min-w-5 h-5 px-1 rounded-full bg-bl-live text-white text-[10px] font-bold flex items-center justify-center">
-                  {badge > 9 ? "9+" : badge}
-                </span>
+            <Fragment key={path}>
+              {showSectionHeader && (
+                <p
+                  className={`text-[10px] uppercase tracking-widest text-white/30 font-medium px-3 py-2 whitespace-nowrap text-left ${
+                    idx === 0 ? "" : "mt-2"
+                  }`}
+                >
+                  {section ?? "Menu"}
+                </p>
               )}
-            </button>
+              <button
+                onClick={() => handleNavigate(path)}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium whitespace-nowrap transition w-full text-left ${active ? "bg-bl-primary text-white shadow-sm shadow-black/10" : "text-white/55 hover:bg-white/5 hover:text-white"}`}
+              >
+                {icon}
+                {label}
+                {badge > 0 && (
+                  <span className="ml-auto min-w-5 h-5 px-1 rounded-full bg-bl-live text-white text-[10px] font-bold flex items-center justify-center">
+                    {badge > 9 ? "9+" : badge}
+                  </span>
+                )}
+              </button>
+            </Fragment>
           );
         })}
       </div>
 
-      {/* STATUS */}
-      {role === "petani" ? (
-        <>
-          <div className="mx-4 border-t border-white/10 mt-4" />
-          <div className="p-3 flex flex-col gap-0.5 text-left shrink-0">
-            <div className="flex items-center justify-between px-3 py-2">
-              <p className="text-[10px] uppercase tracking-widest text-white/30 font-medium">Status screenhouse</p>
-              <button
-                type="button"
-                onClick={() => fetchFooterStats()}
-                disabled={footerStatsLoading}
-                title="Perbarui status"
-                aria-label="Perbarui status screenhouse"
-                className="p-1.5 rounded-lg text-white/40 hover:text-white/70 hover:bg-white/5 transition disabled:opacity-50"
-              >
-                <RefreshCw size={14} className={footerStatsLoading ? "animate-spin" : ""} />
-              </button>
-            </div>
-            <div className="flex items-center gap-3 px-3 py-2 text-sm text-white/55">
-              <CheckCircle size={17} className="text-bl-mint shrink-0" />
-              {footerStats.screenhouseCount > 0
-                ? `${footerStats.screenhouseCount} screenhouse aktif`
-                : "Belum ada screenhouse aktif"}
-            </div>
-            <div className="flex items-center gap-3 px-3 py-2 text-sm text-white/55">
-              <Wifi size={17} className="text-bl-mint shrink-0" />
-              {footerStats.sinkNodeCount > 0
-                ? `${footerStats.onlineSinkCount}/${footerStats.sinkNodeCount} alat terhubung`
-                : `Ketuk ${FARMER_LABELS.refresh.toLowerCase()} untuk cek alat`}
-            </div>
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="mx-4 border-t border-white/10 mt-4" />
-          <div className="p-3 flex flex-col gap-0.5 text-left shrink-0">
-            <p className="text-[10px] uppercase tracking-widest text-white/30 font-medium px-3 py-2">Status sistem</p>
-            <div className="flex items-center gap-3 px-3 py-2 text-sm text-white/55">
-              <CheckCircle size={17} className="text-bl-mint shrink-0" />
-              {footerStats.screenhouseCount > 0
-                ? `${footerStats.onlineSinkCount}/${footerStats.sinkNodeCount} screenhouse kirim data`
-                : "Menunggu data screenhouse"}
-            </div>
-            <div className="flex items-center gap-3 px-3 py-2 text-sm text-white/55">
-              <Wifi size={17} className="text-bl-mint shrink-0" />
-              Pembaruan otomatis aktif
-            </div>
-          </div>
-        </>
-      )}
-
       {/* FOOTER */}
       <div className="mt-auto p-4 border-t border-white/10 text-left shrink-0">
-        {role !== "petani" && (
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <div className="bg-white/5 rounded-xl p-3 text-left">
-              <div className="text-xs text-white/40">Screenhouse aktif</div>
-              <div className="text-2xl font-semibold mt-1">{screenhouseCount}</div>
-            </div>
-            <div className="bg-white/5 rounded-xl p-3 text-left">
-              <div className="text-xs text-white/40">Kirim data 24 jam</div>
-              <div className="text-2xl font-semibold mt-1">{footerStats.onlineSinkCount}</div>
-            </div>
-          </div>
-        )}
         <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-white/5 hover:bg-red-500/20 border border-white/10 text-sm font-medium text-white/70 hover:text-red-200 transition">
           <LogOut size={16} />Logout
         </button>

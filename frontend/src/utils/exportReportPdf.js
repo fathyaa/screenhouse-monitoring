@@ -41,6 +41,27 @@ function periodLabel(days) {
   return `${days} hari terakhir`;
 }
 
+/** Satu kalimat ringkas dari data yang sudah ada di report — selaras dengan versi web. */
+function buildPdfInsight(report) {
+  const problematicCount = report.problematic_screenhouses?.length ?? 0;
+  const terlambat = report.bibit_summary?.terlambat ?? 0;
+  const topParam = report.top_alert_params?.[0]?.label;
+  const delta = report.period_comparison?.alerts_delta;
+
+  const parts = [];
+  if (problematicCount > 0) parts.push(`${problematicCount} screenhouse perlu tindak lanjut`);
+  if (terlambat > 0) parts.push(`${terlambat} pembibitan terlambat dari target`);
+
+  if (!parts.length) return "Semua screenhouse dalam kondisi baik pada periode ini.";
+
+  let text = `${parts.join(", ")}.`;
+  if (topParam) text += ` Penyebab alert terbanyak: ${topParam.toLowerCase()}.`;
+  if (delta != null && delta !== 0) {
+    text += ` Alert ${delta > 0 ? "naik" : "turun"} ${Math.abs(delta)} dibanding periode sebelumnya.`;
+  }
+  return text;
+}
+
 async function loadLogoDataUrl() {
   try {
     const res = await fetch("/logo-bibitlive.png");
@@ -147,6 +168,20 @@ function drawExecutiveSummary(doc, report, startY) {
 
   let nextY = y + 40;
 
+  // Kotak insight — satu kalimat ringkas, sebelum detail mentah di bawahnya.
+  const insightText = buildPdfInsight(report);
+  const insightLines = doc.splitTextToSize(insightText, w - 34);
+  const insightH = 6 + insightLines.length * 4.5;
+  doc.setFillColor(...BRAND.light);
+  doc.setDrawColor(187, 240, 208);
+  doc.roundedRect(14, nextY, w - 28, insightH, 2, 2, "FD");
+  doc.setFillColor(...BRAND.mid);
+  doc.circle(17, nextY + 4, 1.4, "F");
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(20, 83, 45);
+  doc.text(insightLines, 24, nextY + 6);
+  nextY += insightH + 6;
+
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.setTextColor(...BRAND.dark);
@@ -222,17 +257,32 @@ function drawExecutiveSummary(doc, report, startY) {
   return nextY + 6;
 }
 
-function drawStatusTablePage(doc, report) {
+/**
+ * Halaman lampiran — gabungan tabel mentah (status/uptime, sensor, durasi varietas)
+ * yang sebelumnya tersebar di 2 halaman terpisah. Ini data pendukung, bukan sorotan utama,
+ * jadi ditaruh di akhir setelah ringkasan & grafik.
+ */
+function drawAppendixPage(doc, report) {
   const groupLabel = GROUP_LABELS[report.group_by] ?? "Wilayah";
-  const y = 48;
+  let y = 48;
 
   doc.setTextColor(...BRAND.dark);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
+  doc.text("Lampiran — Data Mentah", 14, y);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(...BRAND.slate);
+  doc.text("Rincian pendukung di balik ringkasan & grafik pada halaman sebelumnya.", 14, y + 5);
+  y += 10;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  doc.setTextColor(...BRAND.dark);
   doc.text(`Status & Uptime per ${groupLabel}`, 14, y);
 
   autoTable(doc, {
-    startY: y + 4,
+    startY: y + 3,
     head: [[groupLabel, "Total", "Sehat", "Peringatan", "Kritis", "Tidak terhubung", "Waktu aktif", "Skor rata-rata"]],
     body: (report.regions ?? []).map((row) => [
       row.region_name,
@@ -245,8 +295,8 @@ function drawStatusTablePage(doc, report) {
       row.avg_stress_score != null ? Math.round(row.avg_stress_score) : "—",
     ]),
     theme: "grid",
-    headStyles: { fillColor: BRAND.dark, textColor: BRAND.white, fontSize: 8, halign: "center" },
-    bodyStyles: { fontSize: 8, textColor: [51, 65, 85] },
+    headStyles: { fillColor: BRAND.dark, textColor: BRAND.white, fontSize: 7.5, halign: "center" },
+    bodyStyles: { fontSize: 7.5, textColor: [51, 65, 85] },
     columnStyles: {
       0: { fontStyle: "bold", cellWidth: 52 },
       1: { halign: "center" },
@@ -259,19 +309,16 @@ function drawStatusTablePage(doc, report) {
     },
     margin: { left: 14, right: 14 },
   });
-}
 
-function drawSensorTablePage(doc, report) {
-  const groupLabel = GROUP_LABELS[report.group_by] ?? "Wilayah";
-  const y = 48;
+  y = doc.lastAutoTable.finalY + 8;
 
-  doc.setTextColor(...BRAND.dark);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
+  doc.setFontSize(9.5);
+  doc.setTextColor(...BRAND.dark);
   doc.text(`Data Sensor Rata-rata per ${groupLabel}`, 14, y);
 
   autoTable(doc, {
-    startY: y + 4,
+    startY: y + 3,
     head: [[groupLabel, "N", "P", "K", "Kelembapan", "Suhu tanah", "Alert"]],
     body: (report.regions ?? []).map((row) => [
       row.region_name,
@@ -283,31 +330,83 @@ function drawSensorTablePage(doc, report) {
       row.active_alerts,
     ]),
     theme: "grid",
-    headStyles: { fillColor: BRAND.mid, textColor: BRAND.white, fontSize: 8, halign: "center" },
-    bodyStyles: { fontSize: 8 },
+    headStyles: { fillColor: BRAND.mid, textColor: BRAND.white, fontSize: 7.5, halign: "center" },
+    bodyStyles: { fontSize: 7.5 },
     margin: { left: 14, right: 14 },
   });
+
+  if (report.varietas_duration_stats?.length) {
+    y = doc.lastAutoTable.finalY + 8;
+    if (y > doc.internal.pageSize.getHeight() - 40) {
+      doc.addPage();
+      y = 48;
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor(...BRAND.dark);
+    doc.text("Durasi Pembibitan Aktual vs Standar Biologis (per Varietas)", 14, y);
+
+    autoTable(doc, {
+      startY: y + 3,
+      head: [["Varietas", "Screenhouse", "Rata-rata aktual", "Standar biologis", "Indeks keterlambatan"]],
+      body: report.varietas_duration_stats.map((row) => [
+        row.nama,
+        row.screenhouse_count,
+        row.avg_actual_days != null ? `${row.avg_actual_days} hari` : "—",
+        row.avg_standard_days != null ? `${row.avg_standard_days} hari` : "—",
+        row.delay_index_days == null
+          ? "—"
+          : `${row.delay_index_days > 0 ? "+" : ""}${row.delay_index_days} hari`,
+      ]),
+      theme: "grid",
+      headStyles: { fillColor: BRAND.mid, textColor: BRAND.white, fontSize: 7.5, halign: "center" },
+      bodyStyles: { fontSize: 7.5, textColor: [51, 65, 85] },
+      columnStyles: {
+        0: { fontStyle: "bold" },
+        1: { halign: "center" },
+        2: { halign: "center" },
+        3: { halign: "center" },
+        4: { halign: "center" },
+      },
+      didParseCell: (data) => {
+        if (data.section !== "body" || data.column.index !== 4) return;
+        const raw = report.varietas_duration_stats[data.row.index]?.delay_index_days;
+        if (raw > 0) data.cell.styles.textColor = STATUS_COLORS.warning;
+        else if (raw < 0) data.cell.styles.textColor = STATUS_COLORS.healthy;
+      },
+      margin: { left: 14, right: 14 },
+    });
+  }
 }
+
+const SEVERITY_ORDER = { critical: 0, offline: 1, warning: 2, healthy: 3 };
 
 function drawProblematicTablePage(doc, report) {
   const y = 48;
-  const items = report.problematic_screenhouses ?? [];
+  const items = [...(report.problematic_screenhouses ?? [])].sort(
+    (a, b) => (SEVERITY_ORDER[a.status] ?? 9) - (SEVERITY_ORDER[b.status] ?? 9)
+  );
 
   doc.setTextColor(...BRAND.dark);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
   doc.text("Screenhouse Perlu Tindak Lanjut", 14, y);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(...BRAND.slate);
+  doc.text("Diurutkan dari paling mendesak — garis warna di kiri menandai tingkat keparahan.", 14, y + 5);
 
   if (!items.length) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
     doc.setTextColor(...BRAND.slate);
-    doc.text("Tidak ada screenhouse yang memerlukan tindak lanjut prioritas.", 14, y + 8);
+    doc.text("Tidak ada screenhouse yang memerlukan tindak lanjut prioritas.", 14, y + 14);
     return;
   }
 
   autoTable(doc, {
-    startY: y + 4,
+    startY: y + 9,
     head: [["Screenhouse", "Petani", "Telepon", "Varietas", "Skor", "Estimasi siap", "Status", "Alert"]],
     body: items.map((row) => [
       row.name,
@@ -333,6 +432,13 @@ function drawProblematicTablePage(doc, report) {
       7: { halign: "center", cellWidth: 14 },
     },
     margin: { left: 14, right: 14 },
+    didDrawCell: (data) => {
+      if (data.section !== "body" || data.column.index !== 0) return;
+      const row = items[data.row.index];
+      const color = STATUS_COLORS[row?.status] ?? BRAND.slate;
+      doc.setFillColor(...color);
+      doc.rect(data.cell.x, data.cell.y, 1.4, data.cell.height, "F");
+    },
   });
 }
 
@@ -673,17 +779,7 @@ export async function exportOperatorReportPdf(report, meta = {}) {
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
 
   doc.setPage(1);
-  const y = drawExecutiveSummary(doc, report, drawPageHeader(doc, report, meta, logoDataUrl));
-  drawPageFooter(doc);
-
-  doc.addPage();
-  drawPageHeader(doc, report, meta, logoDataUrl);
-  drawStatusTablePage(doc, report);
-  drawPageFooter(doc);
-
-  doc.addPage();
-  drawPageHeader(doc, report, meta, logoDataUrl);
-  drawSensorTablePage(doc, report);
+  drawExecutiveSummary(doc, report, drawPageHeader(doc, report, meta, logoDataUrl));
   drawPageFooter(doc);
 
   doc.addPage();
@@ -699,6 +795,11 @@ export async function exportOperatorReportPdf(report, meta = {}) {
   doc.addPage();
   drawPageHeader(doc, report, meta, logoDataUrl);
   drawAlertTrendPage(doc, report);
+  drawPageFooter(doc);
+
+  doc.addPage();
+  drawPageHeader(doc, report, meta, logoDataUrl);
+  drawAppendixPage(doc, report);
   drawPageFooter(doc);
 
   const stamp = new Date().toISOString().slice(0, 10);

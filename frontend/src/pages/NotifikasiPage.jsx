@@ -22,6 +22,48 @@ import { isAlertCritical, getAdviceForAlert } from "../constants/paramHealth";
 import PullToRefresh from "../components/PullToRefresh";
 import { AlertListSkeleton } from "../components/LoadingUI";
 
+function dayKeyOf(dateStr) {
+    return new Date(dateStr).toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
+}
+
+function dayLabelOf(dateStr) {
+    const key = dayKeyOf(dateStr);
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
+    const yesterday = new Date(Date.now() - 86400000).toLocaleDateString("en-CA", {
+        timeZone: "Asia/Jakarta",
+    });
+    if (key === today) return "Hari ini";
+    if (key === yesterday) return "Kemarin";
+    return new Date(dateStr).toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        timeZone: "Asia/Jakarta",
+    });
+}
+
+/** Kelompokkan alert per hari (created_at), lalu per screenhouse dalam hari itu. */
+function groupAlertsByDayAndScreenhouse(alerts) {
+    const days = new Map();
+    for (const alert of alerts) {
+        const dKey = dayKeyOf(alert.created_at);
+        if (!days.has(dKey)) {
+            days.set(dKey, { key: dKey, label: dayLabelOf(alert.created_at), screenhouses: new Map() });
+        }
+        const day = days.get(dKey);
+        const shKey = alert.screenhouse_id;
+        if (!day.screenhouses.has(shKey)) {
+            day.screenhouses.set(shKey, {
+                id: shKey,
+                name: alert.screenhouse_name,
+                alerts: [],
+            });
+        }
+        day.screenhouses.get(shKey).alerts.push(alert);
+    }
+    return Array.from(days.values());
+}
+
 function NotifikasiPage() {
     const navigate = useNavigate();
     const { isOpen: sidebarOpen, toggle: toggleSidebar, close: closeSidebar } = useSidebarOpen();
@@ -111,6 +153,10 @@ function NotifikasiPage() {
         () => sortAlertsForDisplay(filtered),
         [filtered]
     );
+    const grouped = useMemo(
+        () => groupAlertsByDayAndScreenhouse(sortedFiltered),
+        [sortedFiltered]
+    );
     const showLoadingSkeleton = alertsLoading && alerts.length === 0;
 
     const submitResolve = async () => {
@@ -167,155 +213,52 @@ function NotifikasiPage() {
                         ))}
                     </div>
 
-                    {/* ALERT LIST */}
-                    <div className="space-y-3">
+                    {/* ALERT LIST — dikelompokkan per hari, lalu per screenhouse */}
+                    <div className="space-y-5">
                         {sortedFiltered.length === 0 && (
                             <div className="text-center py-12 text-gray-600">
                                 <CheckCircle2 size={32} className="mx-auto mb-3 text-gray-500" />
                                 <div className="text-sm font-medium">Tidak ada peringatan</div>
                             </div>
                         )}
-                        {sortedFiltered.map((alert) => {
-                            const autoHandled = isAutoHandledAlert(alert);
-                            const autoHandledExplanation = autoHandled
-                                ? getAutoHandledExplanation(alert)
-                                : null;
-                            const advice =
-                                alert.status === "active" && !autoHandled
-                                    ? getAdviceForAlert(alert)
-                                    : null;
-                            const category = getAlertCategory(alert);
-                            const categoryLabel = getAlertCategoryLabel(category);
-                            const iconBoxCls = getAlertIconClasses(alert);
-                            const cardCls = getAlertListItemClasses(alert, {
-                                blink: blinkId != null && String(blinkId) === String(alert.id),
-                            });
-                            const actionControl =
-                                alert.status === "active" ? (
-                                    autoHandled ? null : (
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setResolveTarget(alert.id);
-                                                setResolveNote(RESOLVE_ACTION_OPTIONS[0]);
-                                            }}
-                                            disabled={resolvingAlertId === alert.id}
-                                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-gray-300 bg-white text-gray-700 text-xs font-medium hover:bg-gray-50 transition disabled:opacity-50"
-                                        >
-                                            <CheckCircle2 size={13} />
-                                            {resolvingAlertId === alert.id ? "Menyimpan..." : "Tandai selesai"}
-                                        </button>
-                                    )
-                                ) : null;
-
-                            return (
-                            <div
-                                key={alert.id}
-                                id={`alert-${alert.id}`}
-                                className={cardCls}
-                            >
-
-                                <div className={iconBoxCls}>
-                                    {alert.status === "active"
-                                        ? (
-                                            <TriangleAlert
-                                                size={17}
-                                                className={
-                                                    category === ALERT_CATEGORY.DEVICE
-                                                        ? "text-slate-600 font-medium"
-                                                        : isAlertCritical(alert)
-                                                        ? "text-red-600"
-                                                        : "text-amber-600"
-                                                }
-                                            />
-                                        )
-                                        : <CheckCircle2 size={17} className="text-bl-primary" />
-                                    }
+                        {grouped.map((day) => (
+                            <div key={day.key}>
+                                <div className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold mb-2">
+                                    {day.label}
                                 </div>
-
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                                        <span className={getCategoryBadgeClasses(category)}>
-                                            {categoryLabel}
-                                        </span>
-                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${alert.status === "active" ? "bg-red-50 text-red-700" : "bg-gray-100 text-gray-600"}`}>
-                                            {alert.status === "active" ? "Aktif" : "Selesai"}
-                                        </span>
-                                        {autoHandled && alert.status === "active" && (
-                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-bl-surface-muted text-bl-primary">
-                                                <Bot size={12} aria-hidden />
-                                                Ditangani otomatis
-                                            </span>
-                                        )}
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={() =>
-                                            navigate(`/petani/screenhouse/${alert.screenhouse_id}`)
-                                        }
-                                        className="text-base font-semibold text-gray-900 text-left hover:text-bl-primary hover:underline leading-snug"
-                                    >
-                                        {getAlertDisplayMessage(alert)}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() =>
-                                            navigate(`/petani/screenhouse/${alert.screenhouse_id}`)
-                                        }
-                                        className="text-xs font-semibold text-gray-700 mt-0.5 hover:text-bl-primary hover:underline block text-left"
-                                    >
-                                        {alert.screenhouse_name}
-                                    </button>
-                                    <div className="text-xs text-gray-600 font-medium mt-1 tabular-nums">
-                                        {new Date(alert.created_at).toLocaleString("id-ID")}
-                                    </div>
-
-                                    <AlertValueDetail alert={alert} />
-
-                                    {autoHandledExplanation && alert.status === "active" && (
-                                        <p className="mt-2 text-xs text-gray-700 leading-relaxed bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2">
-                                            {autoHandledExplanation}
-                                        </p>
-                                    )}
-
-                                    {advice && (
-                                        <div className="mt-2 flex gap-2 rounded-lg bg-amber-50/70 border border-amber-100 px-2.5 py-2">
-                                            <Lightbulb size={14} className="shrink-0 text-amber-600 mt-0.5" aria-hidden />
-                                            <p className="text-xs leading-relaxed text-gray-700">{advice}</p>
+                                <div className="space-y-4">
+                                    {Array.from(day.screenhouses.values()).map((sh) => (
+                                        <div key={sh.id}>
+                                            <button
+                                                type="button"
+                                                onClick={() => navigate(`/petani/screenhouse/${sh.id}`)}
+                                                className="flex items-center gap-1.5 mb-2 text-xs font-semibold text-gray-700 hover:text-bl-primary hover:underline"
+                                            >
+                                                {sh.name}
+                                                <span className="px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-semibold">
+                                                    {sh.alerts.length}
+                                                </span>
+                                            </button>
+                                            <div className="space-y-3">
+                                                {sh.alerts.map((alert) => (
+                                                    <AlertRow
+                                                        key={alert.id}
+                                                        alert={alert}
+                                                        blinkId={blinkId}
+                                                        resolvingAlertId={resolvingAlertId}
+                                                        onOpenResolve={() => {
+                                                            setResolveTarget(alert.id);
+                                                            setResolveNote(RESOLVE_ACTION_OPTIONS[0]);
+                                                        }}
+                                                        navigate={navigate}
+                                                    />
+                                                ))}
+                                            </div>
                                         </div>
-                                    )}
-
-                                    {actionControl && (
-                                        <div className="mt-2.5 flex justify-end sm:hidden">
-                                            {actionControl}
-                                        </div>
-                                    )}
-
-                                    {alert.status === "resolved" && (
-                                        <div className="mt-2 text-xs text-gray-600 space-y-0.5">
-                                            {alert.resolved_at && (
-                                                <div className="flex items-center gap-1">
-                                                    <CheckCircle2 size={12} className="text-gray-500" />
-                                                    Diselesaikan {new Date(alert.resolved_at).toLocaleString("id-ID")}
-                                                </div>
-                                            )}
-                                            {alert.resolve_note && (
-                                                <div className="text-gray-700 font-medium pl-4">
-                                                    Tindakan: {alert.resolve_note}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
+                                    ))}
                                 </div>
-
-                                {actionControl && (
-                                    <div className="hidden sm:block shrink-0 self-start">
-                                        {actionControl}
-                                    </div>
-                                )}
                             </div>
-                            );
-                        })}
+                        ))}
                     </div>
 
                     </>
@@ -379,6 +322,115 @@ function NotifikasiPage() {
                     </div>
                 )}
             </div>
+        </div>
+    );
+}
+
+function AlertRow({ alert, blinkId, resolvingAlertId, onOpenResolve, navigate }) {
+    const autoHandled = isAutoHandledAlert(alert);
+    const autoHandledExplanation = autoHandled ? getAutoHandledExplanation(alert) : null;
+    const advice = alert.status === "active" && !autoHandled ? getAdviceForAlert(alert) : null;
+    const category = getAlertCategory(alert);
+    const categoryLabel = getAlertCategoryLabel(category);
+    const iconBoxCls = getAlertIconClasses(alert);
+    const cardCls = getAlertListItemClasses(alert, {
+        blink: blinkId != null && String(blinkId) === String(alert.id),
+    });
+    const actionControl =
+        alert.status === "active" ? (
+            autoHandled ? null : (
+                <button
+                    type="button"
+                    onClick={onOpenResolve}
+                    disabled={resolvingAlertId === alert.id}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-gray-300 bg-white text-gray-700 text-xs font-medium hover:bg-gray-50 transition disabled:opacity-50"
+                >
+                    <CheckCircle2 size={13} />
+                    {resolvingAlertId === alert.id ? "Menyimpan..." : "Tandai selesai"}
+                </button>
+            )
+        ) : null;
+
+    return (
+        <div id={`alert-${alert.id}`} className={cardCls}>
+            <div className={iconBoxCls}>
+                {alert.status === "active" ? (
+                    <TriangleAlert
+                        size={17}
+                        className={
+                            category === ALERT_CATEGORY.DEVICE
+                                ? "text-slate-600 font-medium"
+                                : isAlertCritical(alert)
+                                ? "text-red-600"
+                                : "text-amber-600"
+                        }
+                    />
+                ) : (
+                    <CheckCircle2 size={17} className="text-bl-primary" />
+                )}
+            </div>
+
+            <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                    <span className={getCategoryBadgeClasses(category)}>{categoryLabel}</span>
+                    <span
+                        className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            alert.status === "active" ? "bg-red-50 text-red-700" : "bg-gray-100 text-gray-600"
+                        }`}
+                    >
+                        {alert.status === "active" ? "Aktif" : "Selesai"}
+                    </span>
+                    {autoHandled && alert.status === "active" && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-bl-surface-muted text-bl-primary">
+                            <Bot size={12} aria-hidden />
+                            Ditangani otomatis
+                        </span>
+                    )}
+                </div>
+                <button
+                    type="button"
+                    onClick={() => navigate(`/petani/screenhouse/${alert.screenhouse_id}`)}
+                    className="text-base font-semibold text-gray-900 text-left hover:text-bl-primary hover:underline leading-snug"
+                >
+                    {getAlertDisplayMessage(alert)}
+                </button>
+                <div className="text-xs text-gray-600 font-medium mt-1 tabular-nums">
+                    {new Date(alert.created_at).toLocaleString("id-ID")}
+                </div>
+
+                <AlertValueDetail alert={alert} />
+
+                {autoHandledExplanation && alert.status === "active" && (
+                    <p className="mt-2 text-xs text-gray-700 leading-relaxed bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2">
+                        {autoHandledExplanation}
+                    </p>
+                )}
+
+                {advice && (
+                    <div className="mt-2 flex gap-2 rounded-lg bg-amber-50/70 border border-amber-100 px-2.5 py-2">
+                        <Lightbulb size={14} className="shrink-0 text-amber-600 mt-0.5" aria-hidden />
+                        <p className="text-xs leading-relaxed text-gray-700">{advice}</p>
+                    </div>
+                )}
+
+                {actionControl && <div className="mt-2.5 flex justify-end sm:hidden">{actionControl}</div>}
+
+                {alert.status === "resolved" && (
+                    <div className="mt-2 text-xs text-gray-600 space-y-0.5">
+                        {alert.resolved_at && (
+                            <div className="flex items-center gap-1">
+                                <CheckCircle2 size={12} className="text-gray-500" />
+                                Diselesaikan {new Date(alert.resolved_at).toLocaleString("id-ID")}
+                            </div>
+                        )}
+                        {alert.resolve_note && (
+                            <div className="text-gray-700 font-medium pl-4">Tindakan: {alert.resolve_note}</div>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {actionControl && <div className="hidden sm:block shrink-0 self-start">{actionControl}</div>}
         </div>
     );
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { Search, Pencil, KeyRound, Users } from "lucide-react";
 import AdminPageShell from "../components/AdminPageShell";
-import { TableRowsSkeleton } from "../components/LoadingUI";
+import { TableRowsSkeleton, ListPanelSkeleton } from "../components/LoadingUI";
 
 import { API_URL } from "../config/api";
 
@@ -189,61 +189,120 @@ export default function KelolaUserPage() {
           <span className="text-xs text-gray-600 ml-auto">{users.length} user</span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead>
-              <tr className="text-table-head">
-                <th className="px-4 py-3 font-medium">No</th>
-                <th className="px-4 py-3 font-medium">Nama</th>
-                <th className="px-4 py-3 font-medium">No HP</th>
-                <th className="px-4 py-3 font-medium">Role</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium text-center">Screenhouse</th>
-                <th className="px-4 py-3 font-medium">Terdaftar</th>
-                <th className="px-4 py-3 font-medium text-center">Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <TableRowsSkeleton rows={6} />
-              ) : users.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-gray-600">Tidak ada user</td>
-                </tr>
-              ) : (
-                users.map((u, i) => (
-                  <tr key={u.id} className="border-t border-gray-100 hover:bg-gray-50/50">
-                    <td className="px-4 py-3 text-gray-600">{i + 1}</td>
-                    <td className="px-4 py-3 font-medium text-gray-800">{u.name}</td>
-                    <td className="px-4 py-3 text-gray-600">{u.phone_number}</td>
-                    <td className="px-4 py-3 text-gray-600">{roleLabel(u.role)}</td>
-                    <td className="px-4 py-3">{statusBadge(u.status)}</td>
-                    <td className="px-4 py-3 text-center text-gray-600">{u.screenhouse_count ?? 0}</td>
-                    <td className="px-4 py-3 text-gray-600 font-medium">{formatDate(u.created_at)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={() => setEditUser({ ...u })}
-                          className="p-1.5 rounded-lg hover:bg-bl-surface-muted text-bl-primary transition"
-                          title="Edit user"
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        <button
-                          onClick={() => { setResetUser(u); setNewPassword(""); }}
-                          className="p-1.5 rounded-lg hover:bg-amber-50 text-amber-700 transition"
-                          title="Reset password"
-                        >
-                          <KeyRound size={15} />
-                        </button>
-                      </div>
-                    </td>
+        {loading ? (
+          <>
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead>
+                  <tr className="text-table-head">
+                    <th className="px-4 py-3 font-medium">No</th>
+                    <th className="px-4 py-3 font-medium">Nama</th>
+                    <th className="px-4 py-3 font-medium">No HP</th>
+                    <th className="px-4 py-3 font-medium">Role</th>
+                    <th className="px-4 py-3 font-medium">Status</th>
+                    <th className="px-4 py-3 font-medium text-center">Screenhouse</th>
+                    <th className="px-4 py-3 font-medium">Terdaftar</th>
+                    <th className="px-4 py-3 font-medium text-center">Aksi</th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  <TableRowsSkeleton rows={6} />
+                </tbody>
+              </table>
+            </div>
+            <div className="sm:hidden p-4">
+              <ListPanelSkeleton count={5} />
+            </div>
+          </>
+        ) : users.length === 0 ? (
+          <div className="px-4 py-8 text-center text-gray-600">Tidak ada user</div>
+        ) : (
+          <>
+            {/* Tabel — layar sm ke atas */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead>
+                  <tr className="text-table-head">
+                    <th className="px-4 py-3 font-medium">No</th>
+                    <th className="px-4 py-3 font-medium">Nama</th>
+                    <th className="px-4 py-3 font-medium">No HP</th>
+                    <th className="px-4 py-3 font-medium">Role</th>
+                    <th className="px-4 py-3 font-medium">Status</th>
+                    <th className="px-4 py-3 font-medium text-center">Screenhouse</th>
+                    <th className="px-4 py-3 font-medium">Terdaftar</th>
+                    <th className="px-4 py-3 font-medium text-center">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((u, i) => (
+                    <tr key={u.id} className="border-t border-gray-100 hover:bg-gray-50/50">
+                      <td className="px-4 py-3 text-gray-600">{i + 1}</td>
+                      <td className="px-4 py-3 font-medium text-gray-800">{u.name}</td>
+                      <td className="px-4 py-3 text-gray-600">{u.phone_number}</td>
+                      <td className="px-4 py-3 text-gray-600">{roleLabel(u.role)}</td>
+                      <td className="px-4 py-3">{statusBadge(u.status)}</td>
+                      <td className="px-4 py-3 text-center text-gray-600">{u.screenhouse_count ?? 0}</td>
+                      <td className="px-4 py-3 text-gray-600 font-medium">{formatDate(u.created_at)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => setEditUser({ ...u })}
+                            className="p-1.5 rounded-lg hover:bg-bl-surface-muted text-bl-primary transition"
+                            title="Edit user"
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            onClick={() => { setResetUser(u); setNewPassword(""); }}
+                            className="p-1.5 rounded-lg hover:bg-amber-50 text-amber-700 transition"
+                            title="Reset password"
+                          >
+                            <KeyRound size={15} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Kartu — layar sempit di bawah sm */}
+            <div className="sm:hidden divide-y divide-gray-100">
+              {users.map((u) => (
+                <div key={u.id} className="p-4 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-gray-800 truncate">{u.name}</div>
+                    <div className="text-xs text-gray-600 mt-0.5">{u.phone_number}</div>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                      <span className="text-[11px] text-gray-600 font-medium">{roleLabel(u.role)}</span>
+                      {statusBadge(u.status)}
+                    </div>
+                    <div className="text-[11px] text-gray-500 mt-1">
+                      {u.screenhouse_count ?? 0} screenhouse · Terdaftar {formatDate(u.created_at)}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => setEditUser({ ...u })}
+                      className="p-1.5 rounded-lg hover:bg-bl-surface-muted text-bl-primary transition"
+                      title="Edit user"
+                    >
+                      <Pencil size={15} />
+                    </button>
+                    <button
+                      onClick={() => { setResetUser(u); setNewPassword(""); }}
+                      className="p-1.5 rounded-lg hover:bg-amber-50 text-amber-700 transition"
+                      title="Reset password"
+                    >
+                      <KeyRound size={15} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {editUser && (

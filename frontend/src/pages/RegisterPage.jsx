@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { User, Phone, Lock } from "lucide-react";
+import toast from "react-hot-toast";
 import AuthHero from "../components/AuthHero";
 import BrandBar from "../components/BrandBar";
 import { sanitizePhoneInput, validateIndonesianPhone } from "../utils/phoneNumber";
@@ -55,19 +56,19 @@ function RegisterPage() {
 
     const handleContinue = () => {
         if (!form.name.trim() || !form.phone_number.trim() || !form.password) {
-            alert("Lengkapi semua data akun terlebih dahulu");
+            toast.error("Lengkapi semua data akun terlebih dahulu");
             return;
         }
 
         if (form.password.length < 6) {
-            alert("Password minimal 6 karakter");
+            toast.error("Kata sandi minimal 6 karakter");
             return;
         }
 
         const phoneResult = validateIndonesianPhone(form.phone_number);
         if (!phoneResult.ok) {
             setPhoneError(phoneResult.message);
-            alert(phoneResult.message);
+            toast.error(phoneResult.message);
             return;
         }
 
@@ -166,10 +167,10 @@ function RegisterPage() {
                         )}
                     </div>
 
-                    {/* PASSWORD */}
+                    {/* KATA SANDI */}
                     <div>
                         <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                            Password
+                            Kata sandi
                         </label>
 
                         <div className="flex items-center gap-2 h-10 px-3 border border-gray-200 rounded-lg bg-gray-50">

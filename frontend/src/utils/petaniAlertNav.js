@@ -1,6 +1,7 @@
 import { isAlertCritical } from "../constants/paramHealth";
 import { ALERT_PARAM_MAP } from "../constants/sensorMetrics";
 import { getAlertCategory, ALERT_CATEGORY } from "./alertDisplay";
+import { isAutoHandledAlert } from "../constants/actuatorRules";
 
 export function buildPetaniAlertUrl({ alertId, screenhouseId } = {}) {
   const params = new URLSearchParams();
@@ -12,9 +13,13 @@ export function buildPetaniAlertUrl({ alertId, screenhouseId } = {}) {
 
 export function pickPrimaryAlert(alerts = []) {
   if (!alerts.length) return null;
-  const soilAlerts = alerts.filter((a) => getAlertCategory(a) === ALERT_CATEGORY.SOIL);
-  const pool = soilAlerts.length ? soilAlerts : alerts;
-  return pool.find(isAlertCritical) ?? pool[0];
+  // Alert yang masih butuh aksi petani diprioritaskan sebagai "primary" —
+  // kalau semuanya sudah ditangani otomatis, baru tampilkan salah satu itu.
+  const needsAction = alerts.filter((a) => !isAutoHandledAlert(a));
+  const pool = needsAction.length ? needsAction : alerts;
+  const soilAlerts = pool.filter((a) => getAlertCategory(a) === ALERT_CATEGORY.SOIL);
+  const finalPool = soilAlerts.length ? soilAlerts : pool;
+  return finalPool.find(isAlertCritical) ?? finalPool[0];
 }
 
 export function findAlertForScreenhouse(alerts, screenhouseId, paramKey = null) {

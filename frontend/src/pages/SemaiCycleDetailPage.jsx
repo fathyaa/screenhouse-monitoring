@@ -5,6 +5,7 @@ import {
   Bot,
   Clock,
   Gauge,
+  Lightbulb,
   Menu,
   Sprout,
   Thermometer,
@@ -32,6 +33,38 @@ function formatIdDate(dateStr) {
     year: "numeric",
     timeZone: "Asia/Jakarta",
   });
+}
+
+/** Terjemahkan angka stabilitas/uptime/grade jadi 1-3 saran konkret untuk siklus berikutnya. */
+function buildNextCycleRecommendations(analytics) {
+  const recs = [];
+
+  const withPct = (analytics.stability ?? []).filter((s) => s.pct != null);
+  if (withPct.length) {
+    const sorted = [...withPct].sort((a, b) => a.pct - b.pct);
+    const worst = sorted[0];
+    const best = sorted[sorted.length - 1];
+    if (worst.pct < 85) {
+      recs.push(
+        `${worst.label} paling sering naik-turun (${worst.pct}%) — pertimbangkan penyesuaian jadwal atau alat bantu di siklus berikutnya.`
+      );
+    }
+    if (best.key !== worst.key && best.pct >= 85) {
+      recs.push(`${best.label} sudah stabil (${best.pct}%) — pengaturan saat ini bisa dipertahankan.`);
+    }
+  }
+
+  if (analytics.uptime?.offline_pct != null && analytics.uptime.offline_pct > 10) {
+    recs.push(
+      `Alat sempat tidak terhubung ${analytics.uptime.offline_pct}% dari masa pembibitan — cek daya/koneksi alat sebelum siklus berikutnya.`
+    );
+  }
+
+  if (analytics.grade?.letter === "C" && recs.length < 3) {
+    recs.push("Grade C — pertimbangkan evaluasi menyeluruh kondisi screenhouse sebelum memulai siklus baru.");
+  }
+
+  return recs.slice(0, 3);
 }
 
 function MetricCard({ icon: Icon, title, children, className = "" }) {
@@ -70,6 +103,7 @@ export default function SemaiCycleDetailPage() {
   const analytics = cycle?.analytics ?? {};
   const grade = analytics.grade ?? (cycle?.grade ? { letter: cycle.grade } : null);
   const gradeStyle = GRADE_STYLE[grade?.letter] ?? GRADE_STYLE.B;
+  const recommendations = buildNextCycleRecommendations(analytics);
 
   if (loading) {
     return (
@@ -203,6 +237,25 @@ export default function SemaiCycleDetailPage() {
                 ))}
               </div>
             </MetricCard>
+          )}
+
+          {recommendations.length > 0 && (
+            <div className="rounded-2xl bg-bl-surface-muted border border-bl-accent/25 p-4">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-bl-primary mb-2.5">
+                <Lightbulb size={14} />
+                Rekomendasi siklus berikutnya
+              </div>
+              <ul className="space-y-1.5">
+                {recommendations.map((rec, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-gray-800 leading-relaxed">
+                    <span className="text-bl-primary mt-1" aria-hidden>
+                      •
+                    </span>
+                    <span>{rec}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
 
           {cycle.catatan && (

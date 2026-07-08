@@ -14,6 +14,12 @@ const GRADE_STYLE = {
   C: "bg-red-50 text-red-800 border-red-100",
 };
 
+const GRADE_LABEL = {
+  A: "Sangat baik",
+  B: "Cukup baik",
+  C: "Perlu evaluasi",
+};
+
 function formatIdDate(dateStr) {
   if (!dateStr) return "—";
   const d = new Date(`${String(dateStr).slice(0, 10)}T12:00:00+07:00`);
@@ -98,8 +104,8 @@ export default function PetaniRiwayatSemaiPage() {
               <FileBarChart size={20} className="shrink-0 text-bl-primary mt-0.5" />
               <div>
                 <p className="text-sm text-gray-700 leading-relaxed">
-                  Setiap siklus semai direkap otomatis saat diakhiri — mencakup durasi, kestabilan
-                  sensor, stres tanaman, dan efisiensi peralatan otomatis.
+                  Setelah satu siklus selesai, Anda dapat melihat ringkasannya: berapa lama,
+                  seberapa stabil kondisinya, dan apakah alat bekerja baik.
                 </p>
               </div>
             </div>
@@ -159,13 +165,18 @@ export default function PetaniRiwayatSemaiPage() {
                       </div>
                     </div>
                     {cycle.grade && (
-                      <span
-                        className={`shrink-0 px-2 py-0.5 rounded-full text-xs font-bold border ${
-                          GRADE_STYLE[cycle.grade] ?? "bg-slate-100 text-slate-600"
-                        }`}
-                      >
-                        Grade {cycle.grade}
-                      </span>
+                      <div className="shrink-0 flex flex-col items-end gap-0.5">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-xs font-bold border ${
+                            GRADE_STYLE[cycle.grade] ?? "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          Grade {cycle.grade}
+                        </span>
+                        {GRADE_LABEL[cycle.grade] && (
+                          <span className="text-[10px] text-gray-500">{GRADE_LABEL[cycle.grade]}</span>
+                        )}
+                      </div>
                     )}
                     {cycle.status === "completed" && (
                       <ChevronRight size={18} className="shrink-0 text-gray-400" />

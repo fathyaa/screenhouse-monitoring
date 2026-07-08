@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Menu, Search, Users } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
-import { KpiGridSkeleton, TableRowsSkeleton } from "../components/LoadingUI";
+import { KpiGridSkeleton, TableRowsSkeleton, ListPanelSkeleton } from "../components/LoadingUI";
 
 import { API_URL } from "../config/api";
 
@@ -109,12 +109,15 @@ function DaftarPetaniPage() {
                     {loading ? (
                         <>
                             <KpiGridSkeleton count={3} className="grid-cols-3" />
-                            <div className="bg-white rounded-2xl border border-bl-accent/20 overflow-hidden">
+                            <div className="hidden sm:block bg-white rounded-2xl border border-bl-accent/20 overflow-hidden">
                                 <table className="w-full min-w-[720px]">
                                     <tbody>
                                         <TableRowsSkeleton rows={8} />
                                     </tbody>
                                 </table>
+                            </div>
+                            <div className="sm:hidden bg-white rounded-2xl border border-bl-accent/20 p-4">
+                                <ListPanelSkeleton count={5} />
                             </div>
                         </>
                     ) : (
@@ -171,50 +174,73 @@ function DaftarPetaniPage() {
                                         <span className="text-xs text-gray-500">dari {farmers.length} total</span>
                                     )}
                                 </div>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full min-w-[720px]">
-                                        <thead>
-                                            <tr className="border-b border-gray-100">
-                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 w-12">No</th>
-                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">Nama</th>
-                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">No HP</th>
-                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">Screenhouse</th>
-                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">Status</th>
-                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">Terdaftar</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {filteredFarmers.length === 0 ? (
-                                                <tr>
-                                                    <td colSpan={6} className="px-4 py-6 text-left text-sm text-gray-600">
-                                                        {farmers.length === 0
-                                                            ? "Belum ada petani terdaftar"
-                                                            : "Tidak ada petani yang cocok dengan filter"}
-                                                    </td>
-                                                </tr>
-                                            ) : (
-                                                filteredFarmers.map((farmer, index) => (
-                                                    <tr key={farmer.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition text-left">
-                                                        <td className="px-4 py-3 text-xs text-gray-600 font-medium">{index + 1}</td>
-                                                        <td className="px-4 py-3 text-sm font-medium text-gray-800">{farmer.name}</td>
-                                                        <td className="px-4 py-3 text-xs text-gray-600">{farmer.phone_number ?? "-"}</td>
-                                                        <td className="px-4 py-3 text-xs">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => navigate(`/operator/petani/${farmer.id}`)}
-                                                                className="text-bl-primary font-medium hover:underline"
-                                                            >
-                                                                {farmer.screenhouse_count ?? 0} screenhouse
-                                                            </button>
-                                                        </td>
-                                                        <td className="px-4 py-3">{statusBadge(farmer.status)}</td>
-                                                        <td className="px-4 py-3 text-xs text-gray-600 font-medium whitespace-nowrap">{formatDate(farmer.created_at)}</td>
+                                {filteredFarmers.length === 0 ? (
+                                    <div className="px-4 py-6 text-left text-sm text-gray-600">
+                                        {farmers.length === 0
+                                            ? "Belum ada petani terdaftar"
+                                            : "Tidak ada petani yang cocok dengan filter"}
+                                    </div>
+                                ) : (
+                                    <>
+                                        {/* Tabel — layar sm ke atas */}
+                                        <div className="hidden sm:block overflow-x-auto">
+                                            <table className="w-full min-w-[720px]">
+                                                <thead>
+                                                    <tr className="border-b border-gray-100">
+                                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 w-12">No</th>
+                                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">Nama</th>
+                                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">No HP</th>
+                                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">Screenhouse</th>
+                                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">Status</th>
+                                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">Terdaftar</th>
                                                     </tr>
-                                                ))
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                                </thead>
+                                                <tbody>
+                                                    {filteredFarmers.map((farmer, index) => (
+                                                        <tr key={farmer.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition text-left">
+                                                            <td className="px-4 py-3 text-xs text-gray-600 font-medium">{index + 1}</td>
+                                                            <td className="px-4 py-3 text-sm font-medium text-gray-800">{farmer.name}</td>
+                                                            <td className="px-4 py-3 text-xs text-gray-600">{farmer.phone_number ?? "-"}</td>
+                                                            <td className="px-4 py-3 text-xs">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => navigate(`/operator/petani/${farmer.id}`)}
+                                                                    className="text-bl-primary font-medium hover:underline"
+                                                                >
+                                                                    {farmer.screenhouse_count ?? 0} screenhouse
+                                                                </button>
+                                                            </td>
+                                                            <td className="px-4 py-3">{statusBadge(farmer.status)}</td>
+                                                            <td className="px-4 py-3 text-xs text-gray-600 font-medium whitespace-nowrap">{formatDate(farmer.created_at)}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+
+                                        {/* Kartu — layar sempit di bawah sm */}
+                                        <div className="sm:hidden divide-y divide-gray-100">
+                                            {filteredFarmers.map((farmer, index) => (
+                                                <div key={farmer.id} className="p-4 flex items-start justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <div className="text-xs text-gray-500">#{index + 1}</div>
+                                                        <div className="text-sm font-medium text-gray-800 truncate">{farmer.name}</div>
+                                                        <div className="text-xs text-gray-600 mt-0.5">{farmer.phone_number ?? "-"}</div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => navigate(`/operator/petani/${farmer.id}`)}
+                                                            className="text-xs text-bl-primary font-medium hover:underline mt-1"
+                                                        >
+                                                            {farmer.screenhouse_count ?? 0} screenhouse
+                                                        </button>
+                                                        <div className="text-[11px] text-gray-500 mt-1">Terdaftar {formatDate(farmer.created_at)}</div>
+                                                    </div>
+                                                    <div className="shrink-0">{statusBadge(farmer.status)}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         </>
                     )}

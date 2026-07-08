@@ -9,6 +9,20 @@ import { ListPanelSkeleton } from "../components/LoadingUI";
 
 import { API_URL } from "../config/api";
 
+/** Penjelasan singkat per parameter — form ini sebelumnya cuma kolom angka kosong. */
+const METRIC_HINTS = {
+  nitrogen: "Nutrisi utama untuk pertumbuhan daun.",
+  phosphorus: "Mendukung perkembangan akar & bunga.",
+  potassium: "Mendukung pembentukan buah & ketahanan tanaman.",
+  soil_moisture: "Kadar air dalam tanah — menentukan kebutuhan penyiraman.",
+  soil_temperature: "Suhu di sekitar akar — memengaruhi penyerapan hara.",
+  soil_ph: "Tingkat keasaman tanah — memengaruhi penyerapan nutrisi.",
+  conductivity: "Kepekatan larutan pupuk/garam di dalam tanah.",
+  air_temperature: "Suhu udara di dalam screenhouse.",
+  air_humidity: "Kelembapan udara — memengaruhi penguapan & risiko jamur.",
+  light_intensity: "Intensitas cahaya yang diterima bibit.",
+};
+
 function rowToForm(row) {
   const form = {};
   THRESHOLD_METRICS.forEach((m) => {
@@ -33,6 +47,12 @@ export default function ThresholdPage() {
   const [checkedIds, setCheckedIds] = useState(new Set());
   const [form, setForm] = useState(rowToForm(null));
   const [saving, setSaving] = useState(false);
+
+  const hasInvalidRange = THRESHOLD_METRICS.some((m) => {
+    const minVal = form[m.minCol];
+    const maxVal = form[m.maxCol];
+    return minVal !== "" && maxVal !== "" && Number(minVal) >= Number(maxVal);
+  });
 
   const selected = list.find((r) => r.screenhouse_id === selectedId);
   const allChecked = list.length > 0 && list.every((r) => checkedIds.has(r.screenhouse_id));
@@ -114,6 +134,10 @@ export default function ThresholdPage() {
   const handleSave = async () => {
     if (!saveTargets.length) {
       toast.error("Centang screenhouse yang akan disamakan batas amannya");
+      return;
+    }
+    if (hasInvalidRange) {
+      toast.error("Perbaiki dulu rentang yang nilai minimumnya tidak lebih kecil dari maksimum");
       return;
     }
     setSaving(true);
@@ -259,38 +283,60 @@ export default function ThresholdPage() {
                 )}
               </div>
 
-              {THRESHOLD_METRICS.map((m) => (
-                <div key={m.key} className="bg-white rounded-2xl border border-gray-200 p-4 flex items-center gap-4">
-                  <div className="flex-1 min-w-0 text-left">
-                    <div className="text-sm font-semibold text-gray-800">{m.label}</div>
-                    <div className="text-xs text-gray-600 mt-0.5">Satuan: {m.unit}</div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="flex flex-col gap-1">
-                      <div className="text-[10px] uppercase tracking-wide text-gray-600">Min</div>
-                      <input
-                        type="number"
-                        step="any"
-                        value={form[m.minCol]}
-                        onChange={(e) => updateField(m.minCol, e.target.value)}
-                        className="w-20 h-8 rounded-lg border border-gray-200 bg-gray-50 px-2 text-sm font-semibold text-gray-800 outline-none focus:ring-1 focus:ring-green-300 text-center"
-                      />
+              {THRESHOLD_METRICS.map((m) => {
+                const minVal = form[m.minCol];
+                const maxVal = form[m.maxCol];
+                const invalidRange =
+                  minVal !== "" && maxVal !== "" && Number(minVal) >= Number(maxVal);
+                return (
+                <div key={m.key} className="bg-white rounded-2xl border border-gray-200 p-4">
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1 min-w-0 text-left">
+                      <div className="text-sm font-semibold text-gray-800">{m.label}</div>
+                      {METRIC_HINTS[m.key] && (
+                        <div className="text-xs text-gray-600 mt-0.5">{METRIC_HINTS[m.key]}</div>
+                      )}
+                      <div className="text-[11px] text-gray-500 mt-1">
+                        Rentang standar: {DEFAULT_THRESHOLD[m.minCol]}–{DEFAULT_THRESHOLD[m.maxCol]} {m.unit}
+                      </div>
                     </div>
-                    <div className="text-gray-600 text-xs mt-4 font-medium">s/d</div>
-                    <div className="flex flex-col gap-1">
-                      <div className="text-[10px] uppercase tracking-wide text-gray-600">Maks</div>
-                      <input
-                        type="number"
-                        step="any"
-                        value={form[m.maxCol]}
-                        onChange={(e) => updateField(m.maxCol, e.target.value)}
-                        className="w-20 h-8 rounded-lg border border-gray-200 bg-gray-50 px-2 text-sm font-semibold text-gray-800 outline-none focus:ring-1 focus:ring-green-300 text-center"
-                      />
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex flex-col gap-1">
+                        <div className="text-[10px] uppercase tracking-wide text-gray-600">Min</div>
+                        <input
+                          type="number"
+                          step="any"
+                          value={minVal}
+                          onChange={(e) => updateField(m.minCol, e.target.value)}
+                          className={`w-20 h-8 rounded-lg border bg-gray-50 px-2 text-sm font-semibold text-gray-800 outline-none focus:ring-1 focus:ring-green-300 text-center ${
+                            invalidRange ? "border-red-300" : "border-gray-200"
+                          }`}
+                        />
+                      </div>
+                      <div className="text-gray-600 text-xs mt-4 font-medium">s/d</div>
+                      <div className="flex flex-col gap-1">
+                        <div className="text-[10px] uppercase tracking-wide text-gray-600">Maks</div>
+                        <input
+                          type="number"
+                          step="any"
+                          value={maxVal}
+                          onChange={(e) => updateField(m.maxCol, e.target.value)}
+                          className={`w-20 h-8 rounded-lg border bg-gray-50 px-2 text-sm font-semibold text-gray-800 outline-none focus:ring-1 focus:ring-green-300 text-center ${
+                            invalidRange ? "border-red-300" : "border-gray-200"
+                          }`}
+                        />
+                      </div>
+                      <div className="text-xs text-gray-600 mt-4">{m.unit}</div>
                     </div>
-                    <div className="text-xs text-gray-600 mt-4">{m.unit}</div>
                   </div>
+                  {invalidRange && (
+                    <p className="text-[11px] text-red-600 mt-2">
+                      Nilai minimum harus lebih kecil dari maksimum.
+                    </p>
+                  )}
                 </div>
-              ))}
+                );
+              })}
 
               {checkedIds.size > 0 && (
                 <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-2.5 text-xs text-amber-900">
@@ -314,7 +360,7 @@ export default function ThresholdPage() {
                   </button>
                   <button
                     onClick={handleSave}
-                    disabled={saving || saveTargets.length === 0}
+                    disabled={saving || saveTargets.length === 0 || hasInvalidRange}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl bg-bl-primary hover:bg-bl-primary-hover text-white text-sm font-medium transition disabled:opacity-50"
                   >
                     <Save size={15} />

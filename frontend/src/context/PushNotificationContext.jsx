@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import { BellOff } from "lucide-react";
 import { API_URL } from "../config/api";
 
 const PushNotificationContext = createContext(null);
@@ -264,7 +265,7 @@ export function PushNotificationProvider({ children }) {
       localStorage.setItem("push_muted", "true");
       localStorage.removeItem("push_subscribed");
       setEnabled(false);
-      toast("Notifikasi ke HP dimatikan", { icon: "🔕" });
+      toast("Notifikasi ke HP dimatikan", { icon: <BellOff size={16} /> });
       return { ok: true };
     } catch (err) {
       console.error("[push/unsubscribe]", err);

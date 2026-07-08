@@ -112,13 +112,6 @@ body {
   z-index: 0;
 }
 
-/* Tipografi lebih compact di HP — skala rem Tailwind ikut mengecil */
-@media (max-width: 1023px) {
-  html {
-    font-size: 14px;
-  }
-}
-
 @keyframes alertHighlightBlink {
   0%,
   100% {

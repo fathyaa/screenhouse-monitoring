@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Lightbulb, Timer, Sprout } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -59,6 +60,36 @@ const STATUS_BAR_COLORS = {
   offline: SCREENHOUSE_STATUS.offline.color,
 };
 
+/** Satu kalimat ringkas dari data yang sudah ada di report — bukan data baru. */
+function buildInsightText(report) {
+  if (!report) return null;
+  const problematicCount = report.problematic_screenhouses?.length ?? 0;
+  const terlambat = report.bibit_summary?.terlambat ?? 0;
+  const topParam = report.top_alert_params?.[0]?.label;
+  const delta = report.period_comparison?.alerts_delta;
+
+  const parts = [];
+  if (problematicCount > 0) {
+    parts.push(`${problematicCount} screenhouse perlu tindak lanjut`);
+  }
+  if (terlambat > 0) {
+    parts.push(`${terlambat} pembibitan terlambat dari target`);
+  }
+
+  if (!parts.length) {
+    return "Semua screenhouse dalam kondisi baik pada periode ini.";
+  }
+
+  let text = `${parts.join(", ")}.`;
+  if (topParam) {
+    text += ` Penyebab alert terbanyak: ${topParam.toLowerCase()}.`;
+  }
+  if (delta != null && delta !== 0) {
+    text += ` Alert ${delta > 0 ? "naik" : "turun"} ${Math.abs(delta)} dibanding periode sebelumnya.`;
+  }
+  return text;
+}
+
 function KpiCard({ label, value, hint, tone = "slate" }) {
   const tones = {
     slate: "border-gray-200 bg-white text-gray-900",
@@ -92,6 +123,7 @@ function OperatorLaporanPage() {
   const [screenhouses, setScreenhouses] = useState([]);
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   const [draftFilters, setDraftFilters] = useState(DEFAULT_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState(DEFAULT_FILTERS);
@@ -266,6 +298,9 @@ function OperatorLaporanPage() {
     [report]
   );
 
+  const insightText = useMemo(() => buildInsightText(report), [report]);
+  const regionsTruncated = (report?.regions?.length ?? 0) > 8;
+
   const filterLabel = useMemo(() => {
     const parts = [
       appliedWilayahNames.province,
@@ -282,10 +317,15 @@ function OperatorLaporanPage() {
 
   const handleExportPdf = async () => {
     if (!report) return;
-    await exportOperatorReportPdf(report, {
-      operatorName: user?.name,
-      filterLabel,
-    });
+    setExportingPdf(true);
+    try {
+      await exportOperatorReportPdf(report, {
+        operatorName: user?.name,
+        filterLabel,
+      });
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
   const handleExportCsv = () => {
@@ -315,8 +355,9 @@ function OperatorLaporanPage() {
           subtitle="Ringkasan screenhouse per periode, filter dan unduh"
           onExport={handleExportPdf}
           onExportCsv={handleExportCsv}
-          exportDisabled={loading || !report?.regions?.length}
+          exportDisabled={loading || !report?.regions?.length || exportingPdf}
           exportCsvDisabled={loading || !report?.regions?.length}
+          exportLoading={exportingPdf}
         />
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
@@ -505,6 +546,98 @@ function OperatorLaporanPage() {
                 />
               </div>
 
+              {insightText && (
+                <div className="flex items-start gap-2.5 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3">
+                  <Lightbulb size={16} className="text-emerald-700 mt-0.5 shrink-0" aria-hidden />
+                  <p className="text-sm text-emerald-950 leading-relaxed">{insightText}</p>
+                </div>
+              )}
+
+              {report.problematic_screenhouses?.length > 0 && (
+                <div className="bg-white rounded-2xl border border-red-100 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-red-50 flex items-center justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-semibold text-gray-800">
+                        Screenhouse perlu tindak lanjut
+                      </div>
+                      <div className="text-xs text-gray-600 mt-0.5">
+                        Prioritas kunjungan / hubungi petani
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleExportProblematicCsv}
+                      className="text-xs font-medium text-bl-primary hover:underline shrink-0"
+                    >
+                      Unduh CSV
+                    </button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                      <thead>
+                        <tr className="text-table-head">
+                          <th className="px-4 py-3 font-medium">Screenhouse</th>
+                          <th className="px-4 py-3 font-medium">Varietas</th>
+                          <th className="px-4 py-3 font-medium">Petani</th>
+                          <th className="px-4 py-3 font-medium">Wilayah</th>
+                          <th className="px-4 py-3 font-medium text-center">Skor kondisi</th>
+                          <th className="px-4 py-3 font-medium">Estimasi siap tanam</th>
+                          <th className="px-4 py-3 font-medium text-center">Status</th>
+                          <th className="px-4 py-3 font-medium text-center">Alert</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {report.problematic_screenhouses.map((row) => {
+                          const scoreStyle =
+                            row.stress_score != null
+                              ? getStressScoreStyle({
+                                  score: row.stress_score,
+                                  category_key: categoryKeyFromScore(row.stress_score),
+                                })
+                              : null;
+                          return (
+                          <tr key={row.id} className="border-t border-gray-100 hover:bg-slate-50/80">
+                            <td className="px-4 py-3 font-medium text-gray-800">{row.name}</td>
+                            <td className="px-4 py-3 text-gray-600 text-xs">{row.varietas_nama ?? "—"}</td>
+                            <td className="px-4 py-3 text-gray-600">
+                              <div>{row.owner_name ?? "—"}</div>
+                              {row.owner_phone && (
+                                <div className="text-xs text-gray-600">{row.owner_phone}</div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-gray-600 text-xs">
+                              {[row.village, row.district].filter(Boolean).join(", ")}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              {row.stress_score != null ? (
+                                <span
+                                  className={`inline-flex min-w-[2.25rem] px-2 py-0.5 rounded-lg text-sm font-bold tabular-nums ${scoreStyle?.badge ?? ""}`}
+                                  title={row.stress_category ?? undefined}
+                                >
+                                  {row.stress_score}
+                                </span>
+                              ) : (
+                                <span className="text-gray-500 text-xs">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-gray-600 text-xs">
+                              {row.estimasi_siap_label ?? "—"}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-800">
+                                {row.status_label}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-center tabular-nums">{row.active_alerts}</td>
+                          </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               {(report.varietas_distribution?.length > 0 ||
                 report.seedling_progress_by_district?.length > 0) && (
                 <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-4">
@@ -581,7 +714,7 @@ function OperatorLaporanPage() {
                         </div>
                         <div className="pt-3 mt-1 border-t border-emerald-100 space-y-2 text-sm text-gray-700">
                           <div className="flex items-start gap-2">
-                            <span aria-hidden>⚡</span>
+                            <Timer size={14} className="shrink-0 mt-0.5" aria-hidden />
                             <span>
                               Rata-rata durasi siklus:{" "}
                               <strong className="text-gray-900 tabular-nums">
@@ -593,7 +726,7 @@ function OperatorLaporanPage() {
                           </div>
                           {report.bibit_summary.most_stable_varietas && (
                             <div className="flex items-start gap-2">
-                              <span aria-hidden>🌾</span>
+                              <Sprout size={14} className="shrink-0 mt-0.5" aria-hidden />
                               <span>
                                 Varietas paling stabil:{" "}
                                 <strong className="text-gray-900">
@@ -874,20 +1007,27 @@ function OperatorLaporanPage() {
                     Rata-rata kelembapan tanah
                   </div>
                   <div className="text-xs text-gray-600 mb-3">
-                    Per {groupLabel.toLowerCase()} · maks. 8 wilayah · satuan %
+                    Per {groupLabel.toLowerCase()} · satuan %
                   </div>
                   {sensorTrendData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={240}>
-                      <BarChart data={sensorTrendData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                        <YAxis tick={{ fontSize: 10 }} unit="%" />
-                        <Tooltip formatter={(v) => (v != null ? `${v}%` : "—")} />
-                        <Bar dataKey="kelembapan" name="Kelembapan (%)" fill="#2563eb" radius={[4, 4, 0, 0]}>
-                          <VerticalCountLabels dataKey="kelembapan" suffix="%" />
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <>
+                      <ResponsiveContainer width="100%" height={240}>
+                        <BarChart data={sensorTrendData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                          <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                          <YAxis tick={{ fontSize: 10 }} unit="%" />
+                          <Tooltip formatter={(v) => (v != null ? `${v}%` : "—")} />
+                          <Bar dataKey="kelembapan" name="Kelembapan (%)" fill="#2563eb" radius={[4, 4, 0, 0]}>
+                            <VerticalCountLabels dataKey="kelembapan" suffix="%" />
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                      {regionsTruncated && (
+                        <p className="text-[11px] text-gray-500 text-right mt-1">
+                          Menampilkan 8 dari {report.regions.length} {groupLabel.toLowerCase()}
+                        </p>
+                      )}
+                    </>
                   ) : (
                     <div className="h-[240px] flex items-center text-sm text-gray-600">
                       Belum ada data kelembapan
@@ -900,20 +1040,27 @@ function OperatorLaporanPage() {
                     Rata-rata suhu tanah
                   </div>
                   <div className="text-xs text-gray-600 mb-3">
-                    Per {groupLabel.toLowerCase()} · maks. 8 wilayah · satuan °C
+                    Per {groupLabel.toLowerCase()} · satuan °C
                   </div>
                   {sensorTrendData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={240}>
-                      <BarChart data={sensorTrendData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                        <YAxis tick={{ fontSize: 10 }} unit="°C" />
-                        <Tooltip formatter={(v) => (v != null ? `${v}°C` : "—")} />
-                        <Bar dataKey="suhu" name="Suhu tanah (°C)" fill="#d97706" radius={[4, 4, 0, 0]}>
-                          <VerticalCountLabels dataKey="suhu" suffix="°C" />
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <>
+                      <ResponsiveContainer width="100%" height={240}>
+                        <BarChart data={sensorTrendData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                          <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                          <YAxis tick={{ fontSize: 10 }} unit="°C" />
+                          <Tooltip formatter={(v) => (v != null ? `${v}°C` : "—")} />
+                          <Bar dataKey="suhu" name="Suhu tanah (°C)" fill="#d97706" radius={[4, 4, 0, 0]}>
+                            <VerticalCountLabels dataKey="suhu" suffix="°C" />
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                      {regionsTruncated && (
+                        <p className="text-[11px] text-gray-500 text-right mt-1">
+                          Menampilkan 8 dari {report.regions.length} {groupLabel.toLowerCase()}
+                        </p>
+                      )}
+                    </>
                   ) : (
                     <div className="h-[240px] flex items-center text-sm text-gray-600">
                       Belum ada data suhu tanah
@@ -1078,90 +1225,6 @@ function OperatorLaporanPage() {
                 </div>
               </div>
 
-              {report.problematic_screenhouses?.length > 0 && (
-                <div className="bg-white rounded-2xl border border-red-100 overflow-hidden">
-                  <div className="px-4 py-3 border-b border-red-50 flex items-center justify-between gap-2">
-                    <div>
-                      <div className="text-sm font-semibold text-gray-800">
-                        Screenhouse perlu tindak lanjut
-                      </div>
-                      <div className="text-xs text-gray-600 mt-0.5">
-                        Prioritas kunjungan / hubungi petani
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleExportProblematicCsv}
-                      className="text-xs font-medium text-bl-primary hover:underline shrink-0"
-                    >
-                      Unduh CSV
-                    </button>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                      <thead>
-                        <tr className="text-table-head">
-                          <th className="px-4 py-3 font-medium">Screenhouse</th>
-                          <th className="px-4 py-3 font-medium">Varietas</th>
-                          <th className="px-4 py-3 font-medium">Petani</th>
-                          <th className="px-4 py-3 font-medium">Wilayah</th>
-                          <th className="px-4 py-3 font-medium text-center">Skor kondisi</th>
-                          <th className="px-4 py-3 font-medium">Estimasi siap tanam</th>
-                          <th className="px-4 py-3 font-medium text-center">Status</th>
-                          <th className="px-4 py-3 font-medium text-center">Alert</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {report.problematic_screenhouses.map((row) => {
-                          const scoreStyle =
-                            row.stress_score != null
-                              ? getStressScoreStyle({
-                                  score: row.stress_score,
-                                  category_key: categoryKeyFromScore(row.stress_score),
-                                })
-                              : null;
-                          return (
-                          <tr key={row.id} className="border-t border-gray-100 hover:bg-slate-50/80">
-                            <td className="px-4 py-3 font-medium text-gray-800">{row.name}</td>
-                            <td className="px-4 py-3 text-gray-600 text-xs">{row.varietas_nama ?? "—"}</td>
-                            <td className="px-4 py-3 text-gray-600">
-                              <div>{row.owner_name ?? "—"}</div>
-                              {row.owner_phone && (
-                                <div className="text-xs text-gray-600">{row.owner_phone}</div>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-gray-600 text-xs">
-                              {[row.village, row.district].filter(Boolean).join(", ")}
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              {row.stress_score != null ? (
-                                <span
-                                  className={`inline-flex min-w-[2.25rem] px-2 py-0.5 rounded-lg text-sm font-bold tabular-nums ${scoreStyle?.badge ?? ""}`}
-                                  title={row.stress_category ?? undefined}
-                                >
-                                  {row.stress_score}
-                                </span>
-                              ) : (
-                                <span className="text-gray-500 text-xs">—</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-gray-600 text-xs">
-                              {row.estimasi_siap_label ?? "—"}
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-800">
-                                {row.status_label}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-center tabular-nums">{row.active_alerts}</td>
-                          </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
             </>
           ) : (
             <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center text-gray-600 font-medium text-sm">

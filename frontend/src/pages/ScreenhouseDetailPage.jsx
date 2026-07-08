@@ -10,6 +10,8 @@ import {
   Menu,
   User,
   WifiOff,
+  CheckCircle2,
+  TriangleAlert,
 } from "lucide-react";
 import {
   Bar,
@@ -45,6 +47,7 @@ import {
   buildHealthList,
   buildWorstCaseHealth,
   STATUS_STYLE,
+  PARAM_META,
 } from "../constants/paramHealth";
 import { getThresholdHint } from "../constants/varietasThresholdHints";
 import { EMPTY_VALUE } from "../constants/sensorMetrics";
@@ -200,6 +203,7 @@ function NodeCard({ node, threshold, canRename = false, onRenamed, nodeStressSco
                       const ev = evaluateParam(key, d[key], threshold);
                       const flagged = ev.status === "low" || ev.status === "high";
                       const style = STATUS_STYLE[ev.status];
+                      const purpose = PARAM_META[key]?.purpose;
                       return (
                         <div key={key} className="bg-gray-50 rounded-xl p-2.5 text-left">
                           <div className="flex items-start justify-between gap-1">
@@ -222,6 +226,11 @@ function NodeCard({ node, threshold, canRename = false, onRenamed, nodeStressSco
                           <div className="text-[11px] text-gray-600 font-medium">
                             {flagged ? style.label : unit}
                           </div>
+                          {purpose && (
+                            <div className="text-[10px] text-gray-500 mt-0.5 leading-snug">
+                              {purpose}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -825,15 +834,19 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
               }`}
             >
               <div
-                className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl shrink-0 ${
+                className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${
                   rollupStatus === "healthy"
                     ? "bg-white/70 text-bl-primary"
                     : rollupStatus === "warning"
-                    ? "bg-amber-100"
-                    : "bg-red-100"
+                    ? "bg-amber-100 text-amber-700"
+                    : "bg-red-100 text-red-700"
                 }`}
               >
-                {rollupStatus === "healthy" ? "✓" : "!"}
+                {rollupStatus === "healthy" ? (
+                  <CheckCircle2 size={24} aria-hidden />
+                ) : (
+                  <TriangleAlert size={24} aria-hidden />
+                )}
               </div>
               <div className="min-w-0">
                 <div
@@ -903,6 +916,51 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
                 onStarted={semaiCycle.handleCycleStarted}
               />
             </>
+          )}
+
+          {/* Ringkasan kondisi screenhouse — kondisi terburuk antar node + saran tindakan */}
+          {rollupHealth.length > 0 && (
+            <ParamHealthCards
+              list={rollupHealth}
+              threshold={threshold}
+              getThresholdHint={thresholdHintFn}
+              title="Ringkasan kondisi screenhouse"
+              stale={screenhouseOffline}
+              autoLocks={autoLocks}
+              snapshotLabel={
+                screenhouseOffline && latestLastSeen
+                  ? formatSnapshotTime(latestLastSeen)
+                  : null
+              }
+              subtitle={
+                screenhouseOffline
+                  ? undefined
+                  : onlineCount > 1
+                  ? "Ambil kondisi paling buruk dari semua rak bibit. Detail per rak ada di bawah."
+                  : "Hijau = pas, oranye = kurang, merah = berlebih"
+              }
+              showActions={!screenhouseOffline}
+            />
+          )}
+
+          {/* Grid sensor nodes */}
+          {dashboard?.sinkNode && (
+            <div className="bg-white rounded-2xl border border-gray-200 p-4 text-left">
+              <div className="text-sm font-semibold text-gray-800 mb-1">
+                {FARMER_LABELS.autoEquipmentControl}
+              </div>
+              <div className="text-xs text-gray-600 mb-3">{FARMER_LABELS.sinkControl}</div>
+              <ActuatorControls
+                screenhouseId={Number(id)}
+                fan_status={dashboard.sinkNode.fan_status}
+                irrigation_status={dashboard.sinkNode.irrigation_status}
+                lamp_status={dashboard.sinkNode.lamp_status}
+                autoAlerts={screenhouseAutoAlerts}
+                disabled={!dashboard.sinkNode.is_active}
+                readOnly={!isPetani}
+                onUpdated={patchSinkActuators}
+              />
+            </div>
           )}
 
           <button
@@ -1094,50 +1152,6 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
             </>
           )}
 
-          {/* Ringkasan kondisi screenhouse — kondisi terburuk antar node + saran tindakan */}
-          {rollupHealth.length > 0 && (
-            <ParamHealthCards
-              list={rollupHealth}
-              threshold={threshold}
-              getThresholdHint={thresholdHintFn}
-              title="Ringkasan kondisi screenhouse"
-              stale={screenhouseOffline}
-              autoLocks={autoLocks}
-              snapshotLabel={
-                screenhouseOffline && latestLastSeen
-                  ? formatSnapshotTime(latestLastSeen)
-                  : null
-              }
-              subtitle={
-                screenhouseOffline
-                  ? undefined
-                  : onlineCount > 1
-                  ? "Ambil kondisi paling buruk dari semua rak bibit. Detail per rak ada di bawah."
-                  : "Hijau = pas, oranye = kurang, merah = berlebih"
-              }
-              showActions={!screenhouseOffline}
-            />
-          )}
-
-          {/* Grid sensor nodes */}
-          {dashboard?.sinkNode && (
-            <div className="bg-white rounded-2xl border border-gray-200 p-4 text-left">
-              <div className="text-sm font-semibold text-gray-800 mb-1">
-                {FARMER_LABELS.autoEquipmentControl}
-              </div>
-              <div className="text-xs text-gray-600 mb-3">{FARMER_LABELS.sinkControl}</div>
-              <ActuatorControls
-                screenhouseId={Number(id)}
-                fan_status={dashboard.sinkNode.fan_status}
-                irrigation_status={dashboard.sinkNode.irrigation_status}
-                lamp_status={dashboard.sinkNode.lamp_status}
-                autoAlerts={screenhouseAutoAlerts}
-                disabled={!dashboard.sinkNode.is_active}
-                readOnly={!isPetani}
-                onUpdated={patchSinkActuators}
-              />
-            </div>
-          )}
 
           <div className="text-sm font-semibold text-gray-700 text-left">
             {isPetani ? FARMER_LABELS.traySensors : "Rak bibit dengan alat pengukur"}

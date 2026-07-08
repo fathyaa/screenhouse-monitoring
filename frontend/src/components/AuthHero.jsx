@@ -6,7 +6,7 @@ export default function AuthHero({
       Pembibitan Padi
     </>
   ),
-  subtitle = "Pantau kondisi NPK, kelembaban, dan suhu langsung dari genggaman tangan.",
+  subtitle = "Tahu kondisi bibit padi Anda kapan saja, tanpa harus ke lokasi.",
 }) {
   return (
     <div className="hidden lg:flex flex-1 relative overflow-hidden">

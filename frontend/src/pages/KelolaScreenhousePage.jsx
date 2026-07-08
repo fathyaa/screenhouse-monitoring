@@ -4,7 +4,7 @@ import toast from "react-hot-toast";
 import { Search, Leaf, ExternalLink } from "lucide-react";
 import AdminPageShell from "../components/AdminPageShell";
 import WilayahFilter, { buildWilayahQuery } from "../components/WilayahFilter";
-import { TableRowsSkeleton } from "../components/LoadingUI";
+import { TableRowsSkeleton, ListPanelSkeleton } from "../components/LoadingUI";
 
 import { API_URL } from "../config/api";
 
@@ -130,64 +130,128 @@ export default function KelolaScreenhousePage() {
           <span className="text-xs text-gray-600 ml-auto">{items.length} screenhouse</span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead>
-              <tr className="text-table-head">
-                <th className="px-4 py-3 font-medium">No</th>
-                <th className="px-4 py-3 font-medium">Nama</th>
-                <th className="px-4 py-3 font-medium">Pemilik</th>
-                <th className="px-4 py-3 font-medium">No HP</th>
-                <th className="px-4 py-3 font-medium">Wilayah</th>
-                <th className="px-4 py-3 font-medium text-center">Alat pengukur</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium text-center">Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <TableRowsSkeleton rows={6} />
-              ) : items.length === 0 ? (
-                <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-600">Tidak ada screenhouse</td></tr>
-              ) : (
-                items.map((row, i) => (
-                  <tr key={row.id} className="border-t border-gray-100 hover:bg-gray-50/50">
-                    <td className="px-4 py-3 text-gray-600">{i + 1}</td>
-                    <td className="px-4 py-3 font-medium text-gray-800">{row.name}</td>
-                    <td className="px-4 py-3 text-gray-600">{row.owner_name}</td>
-                    <td className="px-4 py-3 text-gray-600">{row.owner_phone}</td>
-                    <td className="px-4 py-3 text-gray-600 font-medium text-xs max-w-[200px]">{formatWilayah(row)}</td>
-                    <td className="px-4 py-3 text-center text-gray-600">{row.node_count ?? 0}</td>
-                    <td className="px-4 py-3">{statusBadge(row.status)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-2">
-                        <select
-                          value={row.status}
-                          disabled={updatingId === row.id}
-                          onChange={(e) => handleStatusChange(row.id, e.target.value)}
-                          className="h-8 px-2 rounded-lg border border-gray-200 text-xs outline-none focus:ring-1 focus:ring-green-300 disabled:opacity-50"
-                        >
-                          <option value="active">Aktif</option>
-                          <option value="pending">Pending</option>
-                          <option value="inactive">Nonaktif</option>
-                        </select>
-                        {row.status === "active" && (
-                          <button
-                            onClick={() => navigate(`/operator/screenhouse/${row.id}`)}
-                            className="p-1.5 rounded-lg hover:bg-bl-surface-muted text-bl-primary transition"
-                            title="Lihat detail"
-                          >
-                            <ExternalLink size={15} />
-                          </button>
-                        )}
-                      </div>
-                    </td>
+        {loading ? (
+          <>
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead>
+                  <tr className="text-table-head">
+                    <th className="px-4 py-3 font-medium">No</th>
+                    <th className="px-4 py-3 font-medium">Nama</th>
+                    <th className="px-4 py-3 font-medium">Pemilik</th>
+                    <th className="px-4 py-3 font-medium">No HP</th>
+                    <th className="px-4 py-3 font-medium">Wilayah</th>
+                    <th className="px-4 py-3 font-medium text-center">Alat pengukur</th>
+                    <th className="px-4 py-3 font-medium">Status</th>
+                    <th className="px-4 py-3 font-medium text-center">Aksi</th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  <TableRowsSkeleton rows={6} />
+                </tbody>
+              </table>
+            </div>
+            <div className="sm:hidden p-4">
+              <ListPanelSkeleton count={5} />
+            </div>
+          </>
+        ) : items.length === 0 ? (
+          <div className="px-4 py-8 text-center text-gray-600">Tidak ada screenhouse</div>
+        ) : (
+          <>
+            {/* Tabel — layar sm ke atas */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead>
+                  <tr className="text-table-head">
+                    <th className="px-4 py-3 font-medium">No</th>
+                    <th className="px-4 py-3 font-medium">Nama</th>
+                    <th className="px-4 py-3 font-medium">Pemilik</th>
+                    <th className="px-4 py-3 font-medium">No HP</th>
+                    <th className="px-4 py-3 font-medium">Wilayah</th>
+                    <th className="px-4 py-3 font-medium text-center">Alat pengukur</th>
+                    <th className="px-4 py-3 font-medium">Status</th>
+                    <th className="px-4 py-3 font-medium text-center">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((row, i) => (
+                    <tr key={row.id} className="border-t border-gray-100 hover:bg-gray-50/50">
+                      <td className="px-4 py-3 text-gray-600">{i + 1}</td>
+                      <td className="px-4 py-3 font-medium text-gray-800">{row.name}</td>
+                      <td className="px-4 py-3 text-gray-600">{row.owner_name}</td>
+                      <td className="px-4 py-3 text-gray-600">{row.owner_phone}</td>
+                      <td className="px-4 py-3 text-gray-600 font-medium text-xs max-w-[200px]">{formatWilayah(row)}</td>
+                      <td className="px-4 py-3 text-center text-gray-600">{row.node_count ?? 0}</td>
+                      <td className="px-4 py-3">{statusBadge(row.status)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-center gap-2">
+                          <select
+                            value={row.status}
+                            disabled={updatingId === row.id}
+                            onChange={(e) => handleStatusChange(row.id, e.target.value)}
+                            className="h-8 px-2 rounded-lg border border-gray-200 text-xs outline-none focus:ring-1 focus:ring-green-300 disabled:opacity-50"
+                          >
+                            <option value="active">Aktif</option>
+                            <option value="pending">Pending</option>
+                            <option value="inactive">Nonaktif</option>
+                          </select>
+                          {row.status === "active" && (
+                            <button
+                              onClick={() => navigate(`/operator/screenhouse/${row.id}`)}
+                              className="p-1.5 rounded-lg hover:bg-bl-surface-muted text-bl-primary transition"
+                              title="Lihat detail"
+                            >
+                              <ExternalLink size={15} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Kartu — layar sempit di bawah sm */}
+            <div className="sm:hidden divide-y divide-gray-100">
+              {items.map((row) => (
+                <div key={row.id} className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-gray-800 truncate">{row.name}</div>
+                      <div className="text-xs text-gray-600 mt-0.5">{row.owner_name} · {row.owner_phone}</div>
+                      <div className="text-[11px] text-gray-500 mt-1">{formatWilayah(row)}</div>
+                      <div className="text-[11px] text-gray-500 mt-1">{row.node_count ?? 0} alat pengukur</div>
+                    </div>
+                    {row.status === "active" && (
+                      <button
+                        onClick={() => navigate(`/operator/screenhouse/${row.id}`)}
+                        className="p-1.5 rounded-lg hover:bg-bl-surface-muted text-bl-primary transition shrink-0"
+                        title="Lihat detail"
+                      >
+                        <ExternalLink size={15} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-2.5">
+                    {statusBadge(row.status)}
+                    <select
+                      value={row.status}
+                      disabled={updatingId === row.id}
+                      onChange={(e) => handleStatusChange(row.id, e.target.value)}
+                      className="h-8 px-2 rounded-lg border border-gray-200 text-xs outline-none focus:ring-1 focus:ring-green-300 disabled:opacity-50 ml-auto"
+                    >
+                      <option value="active">Aktif</option>
+                      <option value="pending">Pending</option>
+                      <option value="inactive">Nonaktif</option>
+                    </select>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </AdminPageShell>
   );

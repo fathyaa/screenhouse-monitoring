@@ -102,7 +102,7 @@ function ActuatorSwitch({
         disabled={switchDisabled}
         onClick={() => {
           if (autoLocked) {
-            toast(AUTO_LOCK_TOAST, { icon: "🤖" });
+            toast(AUTO_LOCK_TOAST, { icon: <Bot size={16} /> });
             return;
           }
           onChange(!on);
@@ -161,7 +161,7 @@ export default function ActuatorControls({
   const executeToggle = async (actuatorKey, nextOn) => {
     if (readOnly) return;
     if (autoLocks[actuatorKey]) {
-      toast(AUTO_LOCK_TOAST, { icon: "🤖" });
+      toast(AUTO_LOCK_TOAST, { icon: <Bot size={16} /> });
       return;
     }
     if (!screenhouseId) {
@@ -190,7 +190,7 @@ export default function ActuatorControls({
       const data = await res.json();
       if (!res.ok) {
         if (res.status === 409 && data.code === "AUTO_ACTUATOR_LOCKED") {
-          toast(data.message || AUTO_LOCK_TOAST, { icon: "🤖" });
+          toast(data.message || AUTO_LOCK_TOAST, { icon: <Bot size={16} /> });
           return;
         }
         throw new Error(data.message || "Gagal mengubah peralatan");
@@ -218,7 +218,7 @@ export default function ActuatorControls({
   const handleToggleRequest = (actuatorKey, nextOn) => {
     if (readOnly) return;
     if (autoLocks[actuatorKey]) {
-      toast(AUTO_LOCK_TOAST, { icon: "🤖" });
+      toast(AUTO_LOCK_TOAST, { icon: <Bot size={16} /> });
       return;
     }
 

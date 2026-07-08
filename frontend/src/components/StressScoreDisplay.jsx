@@ -1,5 +1,8 @@
 import { getStressScoreStyle } from "../constants/stressScore";
 
+// Penjelasan permanen — jangan taruh hanya di title="" (tooltip tidak muncul di layar sentuh/HP).
+const SCORE_EXPLANATION = "Menilai kondisi tanah & udara dari sensor, 0–100. Makin tinggi makin baik.";
+
 export function StressScoreDonut({ score = 0, color = "#16a34a", size = 52, strokeWidth = 5 }) {
   const pct = Math.min(100, Math.max(0, Number(score) || 0));
   const visualPct = pct > 0 ? pct : color === "#dc2626" ? 8 : 0;
@@ -105,23 +108,23 @@ export function StressScoreCardBadge({ scoreData, compact = false, offline = fal
   }
 
   return (
-    <div
-      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border ${style.bg} ${style.border}`}
-      title="Skor Kondisi Bibit — ringkasan kondisi tanah 0–100"
-    >
-      <StressScoreDonutWithValue
-        score={score}
-        color={style.color}
-        size={56}
-        strokeWidth={5}
-        textClassName={style.text}
-      />
-      <div className="text-left min-w-0">
-        <div className="text-[10px] uppercase tracking-wide text-gray-600 font-semibold">
-          Skor kondisi bibit
+    <div className={`flex flex-col gap-1.5 px-3 py-2.5 rounded-xl border ${style.bg} ${style.border}`}>
+      <div className="flex items-center gap-3">
+        <StressScoreDonutWithValue
+          score={score}
+          color={style.color}
+          size={56}
+          strokeWidth={5}
+          textClassName={style.text}
+        />
+        <div className="text-left min-w-0">
+          <div className="text-[10px] uppercase tracking-wide text-gray-600 font-semibold">
+            Skor kondisi bibit
+          </div>
+          <div className={`text-sm font-semibold ${style.text}`}>{scoreData.category}</div>
         </div>
-        <div className={`text-sm font-semibold ${style.text}`}>{scoreData.category}</div>
       </div>
+      <p className="text-[10px] text-gray-600 leading-relaxed">{SCORE_EXPLANATION}</p>
     </div>
   );
 }
@@ -172,6 +175,11 @@ export function StressScoreDetailCard({ scoreData, offline = false, compact = fa
       <p className={`font-semibold mt-1 ${style.text} ${compact ? "text-[11px]" : "text-sm"}`}>
         {scoreData.category}
       </p>
+      {!compact && (
+        <p className="text-[10px] text-gray-600 leading-relaxed mt-1 max-w-[180px]">
+          {SCORE_EXPLANATION}
+        </p>
+      )}
     </div>
   );
 }

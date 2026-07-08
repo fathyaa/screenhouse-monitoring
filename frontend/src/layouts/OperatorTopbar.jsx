@@ -1,10 +1,4 @@
-import { NavLink } from "react-router-dom";
-import { Download, Menu } from "lucide-react";
-
-const NAV_ITEMS = [
-  { to: "/operator", label: "Peta realtime", end: true },
-  { to: "/operator/laporan", label: "Laporan wilayah", end: false },
-];
+import { Download, Loader2, Menu } from "lucide-react";
 
 export default function OperatorTopbar({
   onToggleSidebar,
@@ -14,6 +8,7 @@ export default function OperatorTopbar({
   onExportCsv,
   exportDisabled,
   exportCsvDisabled,
+  exportLoading,
 }) {
   return (
     <header className="app-topbar h-14 shrink-0 bg-white border-b border-gray-200 flex items-center justify-between z-10 gap-3">
@@ -34,25 +29,6 @@ export default function OperatorTopbar({
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
-        <nav className="flex items-center gap-0.5 sm:gap-1 bg-slate-100 rounded-xl p-0.5 sm:p-1 max-w-[200px] sm:max-w-none overflow-x-auto">
-          {NAV_ITEMS.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) =>
-                `px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                  isActive
-                    ? "bg-white text-emerald-800 shadow-sm"
-                    : "text-gray-600 hover:text-gray-800"
-                }`
-              }
-            >
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
-
         {onExport && (
           <button
             type="button"
@@ -60,8 +36,12 @@ export default function OperatorTopbar({
             disabled={exportDisabled}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
           >
-            <Download size={14} />
-            <span className="hidden sm:inline">PDF</span>
+            {exportLoading ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Download size={14} />
+            )}
+            <span className="hidden sm:inline">{exportLoading ? "Menyiapkan…" : "PDF"}</span>
           </button>
         )}
 
