@@ -39,6 +39,7 @@ import {
 } from "../components/siklus/SemaiCycleModals";
 import { useSemaiCycle } from "../components/siklus/useSemaiCycle";
 import { useAlerts } from "../context/AlertContext";
+import { buildAutoActuatorLocks } from "../constants/actuatorRules";
 import {
   evaluateParam,
   buildHealthList,
@@ -84,6 +85,7 @@ const PARAM_GROUPS = [
       { key: "nitrogen", label: "Nitrogen", unit: "mg/kg" },
       { key: "phosphorus", label: "Fosfor (P)", unit: "mg/kg" },
       { key: "potassium", label: "Kalium (K)", unit: "mg/kg" },
+      { key: "conductivity", label: "Konduktivitas (EC)", unit: "µS/cm" },
     ],
   },
   {
@@ -103,20 +105,13 @@ const PARAM_GROUPS = [
   },
 ];
 
-const PARAM_GROUPS_TECH = [
-  {
-    label: "Kondisi lingkungan (teknis)",
-    params: [{ key: "conductivity", label: "Konduktivitas", unit: "µS/cm" }],
-  },
-];
-
 function formatParamValue(value) {
   if (value === null || value === undefined) return EMPTY_VALUE;
   const n = Number(value);
   return Number.isFinite(n) ? n.toFixed(1) : String(value);
 }
 
-function NodeCard({ node, threshold, isPetani = false, canRename = false, onRenamed, nodeStressScore = null }) {
+function NodeCard({ node, threshold, canRename = false, onRenamed, nodeStressScore = null }) {
   const d = node.latest_data;
   const online = isNodeOnline(node);
   const lastSeen = node.last_seen ?? d?.created_at;
@@ -200,20 +195,20 @@ function NodeCard({ node, threshold, isPetani = false, canRename = false, onRena
                   <div className="text-[10px] uppercase tracking-wide text-gray-600 mb-1.5">
                     {group.label}
                   </div>
-                  <div className="grid grid-cols-3 gap-1.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                     {group.params.map(({ key, label, unit }) => {
                       const ev = evaluateParam(key, d[key], threshold);
                       const flagged = ev.status === "low" || ev.status === "high";
                       const style = STATUS_STYLE[ev.status];
                       return (
                         <div key={key} className="bg-gray-50 rounded-xl p-2.5 text-left">
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="text-[10px] uppercase tracking-wide text-gray-600 truncate">
+                          <div className="flex items-start justify-between gap-1">
+                            <span className="text-[10px] uppercase tracking-wide text-gray-600 leading-snug">
                               {label}
                             </span>
                             {flagged && (
                               <span
-                                className="w-1.5 h-1.5 rounded-full shrink-0"
+                                className="w-1.5 h-1.5 rounded-full shrink-0 mt-0.5"
                                 style={{ backgroundColor: style.color }}
                               />
                             )}
@@ -233,46 +228,6 @@ function NodeCard({ node, threshold, isPetani = false, canRename = false, onRena
                   </div>
                 </div>
               ))}
-
-              {!isPetani &&
-                PARAM_GROUPS_TECH.map((group) => (
-                  <div key={group.label} className="text-left">
-                    <div className="text-[10px] uppercase tracking-wide text-gray-600 mb-1.5">
-                      {group.label}
-                    </div>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {group.params.map(({ key, label, unit }) => {
-                        const ev = evaluateParam(key, d[key], threshold);
-                        const flagged = ev.status === "low" || ev.status === "high";
-                        const style = STATUS_STYLE[ev.status];
-                        return (
-                          <div key={key} className="bg-gray-50 rounded-xl p-2.5 text-left">
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="text-[10px] uppercase tracking-wide text-gray-600 truncate">
-                                {label}
-                              </span>
-                              {flagged && (
-                                <span
-                                  className="w-1.5 h-1.5 rounded-full shrink-0"
-                                  style={{ backgroundColor: style.color }}
-                                />
-                              )}
-                            </div>
-                            <div
-                              className="text-sm font-semibold mt-1 leading-tight"
-                              style={{ color: flagged ? style.color : "#1f2937" }}
-                            >
-                              {formatParamValue(d[key])}
-                            </div>
-                            <div className="text-[11px] text-gray-600 font-medium">
-                              {flagged ? style.label : unit}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
 
               <div>
                 <div className="text-[10px] uppercase tracking-wide text-gray-600 mb-1.5">
@@ -339,6 +294,11 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
         (a) => a.status === "active" && Number(a.screenhouse_id) === Number(id)
       ),
     [alerts, id]
+  );
+
+  const autoLocks = useMemo(
+    () => buildAutoActuatorLocks(screenhouseAutoAlerts, { screenhouseId: Number(id) }),
+    [screenhouseAutoAlerts, id]
   );
 
   useEffect(() => {
@@ -1142,6 +1102,7 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
               getThresholdHint={thresholdHintFn}
               title="Ringkasan kondisi screenhouse"
               stale={screenhouseOffline}
+              autoLocks={autoLocks}
               snapshotLabel={
                 screenhouseOffline && latestLastSeen
                   ? formatSnapshotTime(latestLastSeen)
@@ -1193,7 +1154,6 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
                   key={node.id}
                   node={node}
                   threshold={threshold}
-                  isPetani={isPetani}
                   canRename={canRenameRack}
                   onRenamed={handleNodeRenamed}
                   nodeStressScore={nodeScoreById[node.id]}

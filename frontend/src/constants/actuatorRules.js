@@ -131,3 +131,20 @@ export function buildAutoActuatorLocks(alerts = [], { screenhouseId } = {}) {
 
   return locks;
 }
+
+/**
+ * Cek apakah parameter (mis. "air_humidity") pada arah "low"/"high" sedang
+ * ditangani otomatis — dipakai ParamHealthCards untuk mengganti saran manual
+ * jadi info "ditangani otomatis" saat aktuator terkait sudah terkunci aktif.
+ */
+export function getParamAutoHandledHint(paramKey, status, autoLocks = {}) {
+  const hint = ACTUATOR_HINTS[paramKey]?.[status];
+  if (!hint) return null;
+
+  const actuatorKey = getActuatorKeyFromHint(hint);
+  const lock = autoLocks[actuatorKey];
+  if (!lock) return null;
+
+  const expectedOn = hint.includes("dinyalakan");
+  return lock.expectedOn === expectedOn ? hint : null;
+}

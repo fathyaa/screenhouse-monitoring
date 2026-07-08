@@ -633,7 +633,7 @@ async function getApprovedUsers(req, res) {
 async function getMe(req, res) {
   try {
     const result = await pool.query(
-      `SELECT id, name, phone_number, role, status, created_at FROM users WHERE id = $1`,
+      `SELECT id, name, phone_number, role, status, notifications_muted, created_at FROM users WHERE id = $1`,
       [req.user.id]
     );
     if (!result.rows[0]) {
@@ -670,6 +670,32 @@ async function updateMe(req, res) {
     res.json(result.rows[0]);
   } catch (err) {
     logAuth("update_me_error", { level: "error", message: err.message });
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+/** Satu flag akun untuk suara/toast in-app & push HP — sama di semua device. */
+async function updateMyNotificationPref(req, res) {
+  try {
+    const muted = Boolean(req.body?.muted);
+
+    const result = await pool.query(
+      `
+      UPDATE users
+      SET notifications_muted = $1
+      WHERE id = $2
+      RETURNING id, notifications_muted
+      `,
+      [muted, req.user.id]
+    );
+
+    if (!result.rows[0]) {
+      return res.status(404).json({ message: "User tidak ditemukan" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    logAuth("update_notification_pref_error", { level: "error", message: err.message });
     res.status(500).json({ message: "Internal server error" });
   }
 }
@@ -720,5 +746,6 @@ module.exports = {
   getApprovedUsers,
   getMe,
   updateMe,
+  updateMyNotificationPref,
   changeMyPassword,
 };

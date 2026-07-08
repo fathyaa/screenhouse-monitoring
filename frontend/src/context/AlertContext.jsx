@@ -2,11 +2,12 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { getSocket, authenticateSocket } from "../lib/socket";
 import toast from "react-hot-toast";
-import { TriangleAlert } from "lucide-react";
+import { TriangleAlert, Bot } from "lucide-react";
 import { ALERT_PARAM_MAP } from "../constants/sensorMetrics";
 import { getAutoHandledNotice, isAutoHandledAlert } from "../constants/actuatorRules";
 import { loadSeenAutoAlerts, markAutoAlertsSeen } from "../utils/seenAutoAlerts";
 import { installAlertSoundUnlock, playAlertSound } from "../utils/alertSound";
+import { usePushNotifications } from "./PushNotificationContext";
 import { API_URL } from "../config/api";
 import { dedupeOfflineAlerts, getAlertDisplayMessage } from "../utils/alertDisplay";
 
@@ -52,6 +53,12 @@ export function AlertProvider({ children }) {
   const alertsRef = useRef(alerts);
   const loadOptionsRef = useRef({ status: "active", limit: 500 });
   alertsRef.current = alerts;
+
+  const { muted: notifMuted } = usePushNotifications();
+  const notifMutedRef = useRef(notifMuted);
+  useEffect(() => {
+    notifMutedRef.current = notifMuted;
+  }, [notifMuted]);
 
   const normalizedAlerts = useMemo(() => dedupeOfflineAlerts(alerts), [alerts]);
 
@@ -169,40 +176,51 @@ export function AlertProvider({ children }) {
         loadAlerts();
       }
 
-      playAlertSound();
+      if (!notifMutedRef.current) {
+        const autoHandled = isAutoHandledAlert(newAlert);
+        playAlertSound({ volume: autoHandled ? 0.35 : 0.7 });
 
-      toast.dismiss(TOAST_ID);
-      const autoNotice = getAutoHandledNotice(newAlert);
-      toast.custom(
-        (t) => (
-          <div
-            className={`bg-white border border-red-100 shadow-xl rounded-2xl px-4 py-3 w-[320px] transition-all duration-300 ${t.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}`}
-          >
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center shrink-0">
-                <TriangleAlert size={18} className="text-red-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-gray-800">Peringatan baru</div>
-                <div className="text-xs text-gray-600 font-medium mt-1 truncate">
-                  {getAlertDisplayMessage(newAlert)}
+        toast.dismiss(TOAST_ID);
+        const autoNotice = getAutoHandledNotice(newAlert);
+        toast.custom(
+          (t) => (
+            <div
+              className={`bg-white border ${autoHandled ? "border-bl-accent/25" : "border-red-100"} shadow-xl rounded-2xl px-4 py-3 w-[320px] transition-all duration-300 ${t.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}`}
+            >
+              <div className="flex items-start gap-3">
+                <div
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${autoHandled ? "bg-bl-surface-muted" : "bg-red-50"}`}
+                >
+                  {autoHandled ? (
+                    <Bot size={18} className="text-bl-primary" />
+                  ) : (
+                    <TriangleAlert size={18} className="text-red-600" />
+                  )}
                 </div>
-                {autoNotice && (
-                  <div className="text-xs text-bl-primary mt-1 font-medium">{autoNotice}</div>
-                )}
-                <div className="text-xs text-gray-600 mt-0.5">{newAlert.screenhouse_name}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-gray-800">
+                    {autoHandled ? "Ditangani otomatis" : "Peringatan baru"}
+                  </div>
+                  <div className="text-xs text-gray-600 font-medium mt-1 truncate">
+                    {getAlertDisplayMessage(newAlert)}
+                  </div>
+                  {autoNotice && (
+                    <div className="text-xs text-bl-primary mt-1 font-medium">{autoNotice}</div>
+                  )}
+                  <div className="text-xs text-gray-600 mt-0.5">{newAlert.screenhouse_name}</div>
+                </div>
+                <button
+                  onClick={() => toast.dismiss(TOAST_ID)}
+                  className="text-gray-500 hover:text-gray-700 text-lg leading-none shrink-0"
+                >
+                  ×
+                </button>
               </div>
-              <button
-                onClick={() => toast.dismiss(TOAST_ID)}
-                className="text-gray-500 hover:text-gray-700 text-lg leading-none shrink-0"
-              >
-                ×
-              </button>
             </div>
-          </div>
-        ),
-        { id: TOAST_ID, duration: 5000, position: "bottom-right" }
-      );
+          ),
+          { id: TOAST_ID, duration: 5000, position: "bottom-right" }
+        );
+      }
     };
 
     socket.on("alert-update", handleAlert);

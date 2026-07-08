@@ -10,6 +10,13 @@ const {
   consolidateAllOfflineDuplicates,
 } = require("../../shared/offlineAlert");
 
+// Ambang toleransi (hysteresis) agar alert tidak langsung resolve begitu nilai
+// baru saja balik melewati batas — mencegah alert "kedap-kedip" saat pembacaan
+// sensor jitter tipis di sekitar min/max (paling terasa di parameter tanpa
+// aktuator penstabil, mis. conductivity, yang tidak punya kipas/irigasi yang
+// menariknya balik ke tengah rentang aman).
+const HYSTERESIS_RATIO = 0.05;
+
 /** Cocokkan pesan alert offline (per node). */
 function staleThresholdMs(sendIntervalSeconds) {
   const intervalSec = Math.max(Number(sendIntervalSeconds) || 60, 60);
@@ -20,7 +27,7 @@ async function resolveOfflineAlertsForNode(screenhouseId, sensorNodeId) {
   const result = await pool.query(
     `
     UPDATE alerts
-    SET status = 'resolved'
+    SET status = 'resolved', resolved_at = CURRENT_TIMESTAMP
     WHERE screenhouse_id = $1
       AND sensor_node_id = $2
       AND status = 'active'
@@ -245,7 +252,7 @@ async function resolveActiveAlertIfAny({ screenhouseId, sensorNodeId, message })
   const result = await pool.query(
     `
     UPDATE alerts
-    SET status = 'resolved'
+    SET status = 'resolved', resolved_at = CURRENT_TIMESTAMP
     WHERE screenhouse_id = $1
       AND sensor_node_id = $2
       AND message = $3
@@ -284,13 +291,22 @@ async function handleSensorDataCreated(message) {
     const value = sensorData[m.key];
     if (value == null) continue;
 
-    const min = threshold[m.minCol];
-    const max = threshold[m.maxCol];
+    const num = Number(value);
+    const min = threshold[m.minCol] != null ? Number(threshold[m.minCol]) : null;
+    const max = threshold[m.maxCol] != null ? Number(threshold[m.maxCol]) : null;
+    const range = min != null && max != null ? max - min : null;
+    const margin = range != null ? range * HYSTERESIS_RATIO : 0;
     const lowMsg = `${m.label} di bawah batas minimum`;
     const highMsg = `${m.label} melebihi batas maksimum`;
 
-    const isLow = min != null && Number(value) < Number(min);
-    const isHigh = max != null && Number(value) > Number(max);
+    const isLow = min != null && num < min;
+    // Baru dianggap "pulih" (dan boleh resolve) setelah nilai jelas melewati
+    // batas + margin, bukan cuma nyentuh batas — mencegah flap saat nilai
+    // berosilasi tepat di garis min/max.
+    const lowRecovered = min == null || num >= min + margin;
+
+    const isHigh = max != null && num > max;
+    const highRecovered = max == null || num <= max - margin;
 
     if (isLow) {
       violations.push({ key: m.key, direction: "low", label: m.label });
@@ -300,7 +316,7 @@ async function handleSensorDataCreated(message) {
         sensorNodeId,
         message: lowMsg,
       });
-    } else {
+    } else if (lowRecovered) {
       await resolveActiveAlertIfAny({
         screenhouseId,
         sensorNodeId,
@@ -316,7 +332,7 @@ async function handleSensorDataCreated(message) {
         sensorNodeId,
         message: highMsg,
       });
-    } else {
+    } else if (highRecovered) {
       await resolveActiveAlertIfAny({
         screenhouseId,
         sensorNodeId,

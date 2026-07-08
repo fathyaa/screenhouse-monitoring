@@ -29,12 +29,15 @@ export async function unlockAlertSound() {
   }
 }
 
-export function playAlertSound() {
+// volume lebih rendah dipakai untuk alert yang sudah ditangani otomatis oleh
+// sistem (kipas/irigasi/lampu) — tidak perlu semendesak alert yang butuh
+// tindakan manual dari petani.
+export function playAlertSound({ volume = 0.7 } = {}) {
   if (!unlocked) return;
 
   // Instance baru tiap alert — hindari tombol media laptop (F8/play) memutar ulang.
   const a = new Audio(SOUND_URL);
-  a.volume = 0.7;
+  a.volume = volume;
   a.play().catch(() => {});
 }
 

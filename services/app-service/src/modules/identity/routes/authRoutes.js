@@ -14,6 +14,7 @@ const {
   getApprovedUsers,
   getMe,
   updateMe,
+  updateMyNotificationPref,
   changeMyPassword,
 } = require("../controllers/authController");
 
@@ -24,6 +25,7 @@ const approveRoles = ["operator", "super_admin"];
 
 router.get("/me", authMiddleware, getMe);
 router.patch("/me", authMiddleware, updateMe);
+router.patch("/me/notifications", authMiddleware, updateMyNotificationPref);
 router.patch("/me/password", authMiddleware, changeMyPassword);
 
 router.patch(

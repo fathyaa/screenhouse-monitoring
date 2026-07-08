@@ -40,6 +40,7 @@ function ActuatorSwitch({
   disabled,
   loading,
   compact,
+  showSubtext = !compact,
   readOnly,
   autoLocked = false,
 }) {
@@ -83,7 +84,7 @@ function ActuatorSwitch({
           <div className={`font-medium text-gray-700 ${compact ? "text-[10px]" : "text-xs"}`}>
             {label}
           </div>
-          {!compact && (
+          {showSubtext && (
             <div className={`text-[10px] ${on ? "text-bl-primary" : "text-gray-600"}`}>
               {!hasValue ? "Belum diketahui" : on ? "Nyala" : "Mati"}
               {autoLocked && ", otomatis"}
@@ -130,6 +131,7 @@ export default function ActuatorControls({
   autoAlerts = [],
   disabled = false,
   compact = false,
+  wide = false,
   readOnly = false,
   onUpdated,
   className = "",
@@ -238,24 +240,37 @@ export default function ActuatorControls({
         </div>
       )}
 
-      {autoBannerMessages.length > 0 && (
-        <div className="space-y-2 mb-2.5">
-          {autoBannerMessages.map((message) => (
-            <div
-              key={message}
-              className="flex items-start gap-2.5 rounded-xl bg-bl-surface-muted border border-bl-accent/25 px-3 py-2.5"
+      {autoBannerMessages.length > 0 && (() => {
+        const terse = compact && !wide;
+        return (
+          <div
+            className={`flex items-start gap-2 rounded-xl bg-bl-surface-muted border border-bl-accent/25 mb-2 ${
+              terse ? "px-2.5 py-2" : "gap-2.5 px-3 py-2.5 mb-2.5"
+            }`}
+          >
+            <Bot
+              size={terse ? 14 : 16}
+              className="shrink-0 text-bl-primary mt-0.5"
+              aria-hidden
+            />
+            <p
+              className={`text-gray-800 leading-relaxed ${
+                terse ? "text-[11px]" : "text-xs sm:text-sm"
+              }`}
             >
-              <Bot size={16} className="shrink-0 text-bl-primary mt-0.5" aria-hidden />
-              <p className="text-xs sm:text-sm text-gray-800 leading-relaxed">
-                <span className="font-semibold text-bl-primary">Dikontrol otomatis:</span>{" "}
-                {message}. Tombol terkait dikunci sementara demi keamanan bibit.
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
+              <span className="font-semibold text-bl-primary">Dikontrol otomatis:</span>{" "}
+              {autoBannerMessages.join("; ")}
+              {!terse && ". Tombol terkait dikunci sementara demi keamanan bibit."}
+            </p>
+          </div>
+        );
+      })()}
 
-      <div className={`grid gap-1.5 ${compact ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-3"}`}>
+      <div
+        className={`grid gap-1.5 ${
+          compact ? (wide ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-1") : "grid-cols-1 sm:grid-cols-3"
+        }`}
+      >
         {ACTUATORS.map(({ key, field, label, icon }) => {
           const lock = autoLocks[key];
           const rawValue = values[field];
@@ -271,6 +286,7 @@ export default function ActuatorControls({
               icon={icon}
               value={displayValue}
               compact={compact}
+              showSubtext={!compact || wide}
               readOnly={readOnly}
               loading={loadingKey === key}
               disabled={disabled}

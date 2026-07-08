@@ -1,11 +1,21 @@
 import { useState } from "react";
-import { ChevronDown, Lightbulb } from "lucide-react";
+import { ChevronDown, Bot } from "lucide-react";
 import {
   ALERT_CATEGORY,
   getAlertCategoryLabel,
   getCategoryBadgeClasses,
   groupAlertsForDashboard,
 } from "../utils/alertDisplay";
+import { isAutoHandledAlert } from "../constants/actuatorRules";
+
+function AutoHandledBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-bl-surface-muted text-bl-primary align-middle">
+      <Bot size={11} aria-hidden />
+      Ditangani otomatis
+    </span>
+  );
+}
 
 const LOCATION_PREVIEW = 3;
 
@@ -28,16 +38,6 @@ function shortenScreenhouseName(name) {
   return String(name ?? "")
     .replace(/^Screenhouse\s+/i, "")
     .trim() || name;
-}
-
-function AdviceNote({ text }) {
-  if (!text) return null;
-  return (
-    <div className="mt-2.5 flex gap-2 rounded-lg bg-white/75 border border-black/5 px-2.5 py-2">
-      <Lightbulb size={14} className="shrink-0 text-amber-600 mt-0.5" aria-hidden />
-      <p className="text-[11px] leading-relaxed text-gray-600">{text}</p>
-    </div>
-  );
 }
 
 function LocationRows({ locations, showRacks, expanded, onNavigate }) {
@@ -84,6 +84,7 @@ function GroupAlertCard({ item, expanded, onToggleExpand, onNavigateAlert }) {
   const showRacks = item.category === ALERT_CATEGORY.DEVICE;
   const needsExpand = display.locations.length > LOCATION_PREVIEW;
   const isOpen = expanded;
+  const autoHandled = isAutoHandledAlert(item.alerts?.[0]);
 
   const openPrimary = () => {
     if (item.primaryAlertId) {
@@ -108,6 +109,7 @@ function GroupAlertCard({ item, expanded, onToggleExpand, onNavigateAlert }) {
               <span className={getCategoryBadgeClasses(item.category)}>
                 {getAlertCategoryLabel(item.category)}
               </span>
+              {autoHandled && <AutoHandledBadge />}
               <div className="mt-1.5 text-base font-bold text-gray-900 leading-snug">
                 {display.headline}
               </div>
@@ -120,8 +122,6 @@ function GroupAlertCard({ item, expanded, onToggleExpand, onNavigateAlert }) {
               expanded={!needsExpand || isOpen}
               onNavigate={onNavigateAlert}
             />
-
-            <AdviceNote text={item.advice} />
           </div>
 
           {needsExpand && (
@@ -181,6 +181,7 @@ export default function DashboardAlertList({ alerts, onNavigateAlert, onViewAll 
         {items.map((item) => {
           if (item.kind === "single") {
             const a = item.alert;
+            const autoHandled = isAutoHandledAlert(a);
             return (
               <button
                 key={item.id}
@@ -197,11 +198,11 @@ export default function DashboardAlertList({ alerts, onNavigateAlert, onViewAll 
                     <span className={getCategoryBadgeClasses(item.category)}>
                       {getAlertCategoryLabel(item.category)}
                     </span>
+                    {autoHandled && <AutoHandledBadge />}
                     <div className="mt-1.5 text-sm font-bold text-gray-900">
                       {shortenScreenhouseName(a.screenhouse_name)}
                     </div>
                     <div className="text-sm text-gray-800 mt-0.5 leading-snug">{a.message}</div>
-                    <AdviceNote text={item.advice} />
                   </div>
                 </div>
               </button>

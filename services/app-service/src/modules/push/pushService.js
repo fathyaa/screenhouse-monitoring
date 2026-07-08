@@ -47,6 +47,14 @@ async function removeSubscription(userId, endpoint) {
 async function sendPushToUser(userId, payload) {
   if (!pushReady) return { sent: 0, failed: 0, skipped: true };
 
+  const userRes = await pool.query(
+    `SELECT notifications_muted FROM users WHERE id = $1`,
+    [userId]
+  );
+  if (userRes.rows[0]?.notifications_muted) {
+    return { sent: 0, failed: 0, skipped: true, muted: true };
+  }
+
   const result = await pool.query(
     `SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = $1`,
     [userId]

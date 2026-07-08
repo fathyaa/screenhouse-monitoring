@@ -14,6 +14,7 @@ export const PARAM_META = {
   soil_ph: { label: "pH tanah", unit: "", purpose: "Penyerapan hara", minCol: "min_soil_ph", maxCol: "max_soil_ph" },
   air_temperature: { label: "Suhu udara", unit: "°C", purpose: "Lingkungan", minCol: "min_air_temperature", maxCol: "max_air_temperature" },
   air_humidity: { label: "Kelembapan udara", unit: "%", purpose: "Penguapan", minCol: "min_air_humidity", maxCol: "max_air_humidity" },
+  conductivity: { label: "Konduktivitas (EC)", unit: "µS/cm", purpose: "Kepekatan larutan hara", minCol: "min_conductivity", maxCol: "max_conductivity" },
 };
 
 // Parameter inti yang ditampilkan sebagai kartu verdict (urut prioritas tani).
@@ -22,6 +23,7 @@ export const HEALTH_PARAM_KEYS = [
   "nitrogen",
   "phosphorus",
   "potassium",
+  "conductivity",
   "soil_ph",
   "soil_temperature",
   "air_temperature",
@@ -45,6 +47,7 @@ const ADVICE = {
   soil_temperature: { low: "Kurangi naungan agar tanah lebih hangat.", high: "Tambah naungan / siram untuk mendinginkan tanah." },
   air_temperature: { low: "Tutup ventilasi, jaga kehangatan (terutama malam).", high: "Buka ventilasi atau nyalakan kipas." },
   air_humidity: { low: "Naikkan kelembapan (pengabutan / siram lantai).", high: "Tingkatkan sirkulasi udara untuk cegah jamur." },
+  conductivity: { low: "Larutan nutrisi terlalu encer, tambah pupuk cair/AB mix.", high: "Larutan terlalu pekat, siram air bersih untuk mengencerkan." },
 };
 
 export function evaluateParam(key, value, threshold) {

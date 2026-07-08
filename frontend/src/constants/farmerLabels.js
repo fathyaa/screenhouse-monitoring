@@ -15,7 +15,7 @@ export const FARMER_LABELS = {
   noDataHint: "Pastikan alat sudah dinyalakan dan terhubung",
   rawSensorData: "Data teknis (lanjutan)",
   nodeCount: (n) => `${n} alat pengukur`,
-  phoneNotifications: "Notifikasi ke HP",
+  phoneNotifications: "Notifikasi",
   lastSavedData: "Data terakhir tersimpan",
   lastReading: "Pembacaan terakhir",
   safeLimit: "Batas aman",

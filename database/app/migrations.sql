@@ -151,4 +151,7 @@ EXCEPTION
   WHEN duplicate_object THEN NULL;
 END $$;
 
+-- ─── 7. Preferensi notifikasi (satu flag akun, dipakai web & HP) ───
+ALTER TABLE users ADD COLUMN IF NOT EXISTS notifications_muted BOOLEAN NOT NULL DEFAULT false;
+
 COMMIT;

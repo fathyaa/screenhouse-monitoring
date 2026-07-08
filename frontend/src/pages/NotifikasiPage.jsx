@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Bell, TriangleAlert, CheckCircle2, Filter, Menu } from "lucide-react";
+import { TriangleAlert, CheckCircle2, Filter, Menu, Lightbulb, Bot } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import { useAlerts, getAlertDetail } from "../context/AlertContext";
@@ -18,9 +18,9 @@ import {
   getAlertDisplayMessage,
   sortAlertsForDisplay,
 } from "../utils/alertDisplay";
-import { isAlertCritical } from "../constants/paramHealth";
+import { isAlertCritical, getAdviceForAlert } from "../constants/paramHealth";
 import PullToRefresh from "../components/PullToRefresh";
-import { AlertListSkeleton, KpiGridSkeleton } from "../components/LoadingUI";
+import { AlertListSkeleton } from "../components/LoadingUI";
 
 function NotifikasiPage() {
     const navigate = useNavigate();
@@ -35,9 +35,6 @@ function NotifikasiPage() {
     const user = JSON.parse(localStorage.getItem("user"));
     const {
         alerts,
-        activeCount,
-        resolvedCount,
-        totalCount,
         alertsLoading,
         resolveAlert,
         resolvingAlertId,
@@ -148,35 +145,9 @@ function NotifikasiPage() {
                 <PullToRefresh onRefresh={refetchAlerts} className="p-4 sm:p-5 space-y-4">
 
                     {showLoadingSkeleton ? (
-                        <>
-                            <KpiGridSkeleton count={3} className="grid-cols-3" />
-                            <AlertListSkeleton count={4} />
-                        </>
+                        <AlertListSkeleton count={4} />
                     ) : (
                     <>
-                    {/* SUMMARY */}
-                    <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                        {[
-                            { label: "Total", fullLabel: "Total peringatan", value: totalCount, icon: Bell, bg: "bg-gray-50", color: "text-gray-600", valColor: "text-gray-800" },
-                            { label: "Belum ditangani", fullLabel: "Belum ditangani", value: activeCount, icon: TriangleAlert, bg: "bg-red-50", color: "text-red-600", valColor: "text-red-600" },
-                            { label: "Selesai", fullLabel: "Selesai", value: resolvedCount, icon: CheckCircle2, bg: "bg-gray-50", color: "text-gray-600", valColor: "text-gray-800" },
-                        ].map((s) => (
-                            <div key={s.fullLabel} className="bg-white rounded-xl sm:rounded-2xl border border-gray-200 p-2.5 sm:p-4 flex flex-col items-center text-center sm:flex-row sm:items-center sm:gap-3 sm:text-left min-w-0">
-                                <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 ${s.bg}`}>
-                                    <s.icon size={15} className={`sm:hidden ${s.color}`} />
-                                    <s.icon size={18} className={`hidden sm:block ${s.color}`} />
-                                </div>
-                                <div className="min-w-0 mt-1.5 sm:mt-0">
-                                    <div className={`text-lg sm:text-xl font-bold leading-none ${s.valColor}`}>{s.value}</div>
-                                    <div className="text-[10px] sm:text-xs text-gray-600 mt-1 leading-tight truncate w-full font-medium" title={s.fullLabel}>
-                                        <span className="sm:hidden">{s.label}</span>
-                                        <span className="hidden sm:inline">{s.fullLabel}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-
                     {/* FILTER */}
                     <div className="flex items-center gap-2">
                         <Filter size={14} className="text-gray-600" />
@@ -209,6 +180,10 @@ function NotifikasiPage() {
                             const autoHandledExplanation = autoHandled
                                 ? getAutoHandledExplanation(alert)
                                 : null;
+                            const advice =
+                                alert.status === "active" && !autoHandled
+                                    ? getAdviceForAlert(alert)
+                                    : null;
                             const category = getAlertCategory(alert);
                             const categoryLabel = getAlertCategoryLabel(category);
                             const iconBoxCls = getAlertIconClasses(alert);
@@ -266,6 +241,12 @@ function NotifikasiPage() {
                                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${alert.status === "active" ? "bg-red-50 text-red-700" : "bg-gray-100 text-gray-600"}`}>
                                             {alert.status === "active" ? "Aktif" : "Selesai"}
                                         </span>
+                                        {autoHandled && alert.status === "active" && (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-bl-surface-muted text-bl-primary">
+                                                <Bot size={12} aria-hidden />
+                                                Ditangani otomatis
+                                            </span>
+                                        )}
                                     </div>
                                     <button
                                         type="button"
@@ -295,6 +276,13 @@ function NotifikasiPage() {
                                         <p className="mt-2 text-xs text-gray-700 leading-relaxed bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2">
                                             {autoHandledExplanation}
                                         </p>
+                                    )}
+
+                                    {advice && (
+                                        <div className="mt-2 flex gap-2 rounded-lg bg-amber-50/70 border border-amber-100 px-2.5 py-2">
+                                            <Lightbulb size={14} className="shrink-0 text-amber-600 mt-0.5" aria-hidden />
+                                            <p className="text-xs leading-relaxed text-gray-700">{advice}</p>
+                                        </div>
                                     )}
 
                                     {actionControl && (

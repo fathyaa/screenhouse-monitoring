@@ -77,11 +77,62 @@ export function PushNotificationProvider({ children }) {
   const [loading, setLoading] = useState(false);
   const [supported, setSupported] = useState(false);
   const [supportReason, setSupportReason] = useState(null);
+  // Preferensi akun (bukan per-device) — sama di web maupun HP, dipakai
+  // untuk membisukan suara/toast in-app sekaligus push ke semua device.
+  const [muted, setMuted] = useState(false);
 
   useEffect(() => {
     const { supported: ok, reason } = detectPushSupport();
     setSupported(ok);
     setSupportReason(reason);
+  }, []);
+
+  const syncMutedFromServer = useCallback(async () => {
+    const role = localStorage.getItem("role");
+    const token = localStorage.getItem("token");
+    if (role !== "petani" || !token) {
+      setMuted(false);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setMuted(Boolean(data.notifications_muted));
+    } catch {
+      // Diamkan — biarkan nilai lokal terakhir dipakai.
+    }
+  }, []);
+
+  useEffect(() => {
+    syncMutedFromServer();
+    window.addEventListener("auth-changed", syncMutedFromServer);
+    return () => window.removeEventListener("auth-changed", syncMutedFromServer);
+  }, [syncMutedFromServer]);
+
+  const setNotificationsMuted = useCallback(async (nextMuted) => {
+    const token = localStorage.getItem("token");
+    if (!token) return { ok: false };
+
+    try {
+      const res = await fetch(`${API_URL}/auth/me/notifications`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ muted: nextMuted }),
+      });
+      if (!res.ok) throw new Error("Gagal menyimpan preferensi notifikasi");
+      setMuted(nextMuted);
+      return { ok: true };
+    } catch (err) {
+      console.error("[push] gagal ubah preferensi notifikasi", err);
+      return { ok: false };
+    }
   }, []);
 
   const syncFromBrowser = useCallback(async () => {
@@ -226,15 +277,25 @@ export function PushNotificationProvider({ children }) {
 
   const toggle = useCallback(async () => {
     if (loading) return;
-    if (enabled) return disable();
-    return enable();
-  }, [loading, enabled, enable, disable]);
+
+    if (muted) {
+      // Menyalakan notifikasi — aktifkan flag akun dulu, lalu coba daftar push di device ini.
+      await setNotificationsMuted(false);
+      if (!enabled) await enable();
+    } else {
+      // Mematikan notifikasi — flag akun mati duluan (langsung membisukan suara/toast
+      // di semua device untuk akun ini), baru bereskan subscription push device ini.
+      await setNotificationsMuted(true);
+      if (enabled) await disable();
+    }
+  }, [loading, muted, enabled, enable, disable, setNotificationsMuted]);
 
   return (
     <PushNotificationContext.Provider
       value={{
         permission,
         enabled,
+        muted,
         loading,
         supported,
         supportReason,
@@ -252,6 +313,7 @@ export function PushNotificationProvider({ children }) {
 const defaultPushContext = {
   permission: "default",
   enabled: false,
+  muted: false,
   loading: false,
   supported: false,
   enable: async () => ({ ok: false }),

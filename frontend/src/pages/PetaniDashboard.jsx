@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { MapPin, Clock3, Search, X, Radio, Plus } from "lucide-react";
+import { MapPin, Clock3, Search, X, Radio, Plus, Bot } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import { useAlerts } from "../context/AlertContext";
 import PetaniTopbar from "../layouts/PetaniTopbar";
 import ActuatorControls from "../components/ActuatorControls";
 import DashboardAlertList from "../components/DashboardAlertList";
+import { isAutoHandledAlert } from "../constants/actuatorRules";
 
 import { API_URL } from "../config/api";
 import { getSocket } from "../lib/socket";
@@ -442,6 +443,9 @@ function PetaniDashboard() {
               const cardMeta = getScreenhouseCardMeta(sensor, shAlerts, sh.status);
               const { chip: statusChip, status, primaryAlert } = cardMeta;
               const isPending = sh.status === "pending";
+              const hasAutoLock = shAlerts.some(
+                (a) => a.status === "active" && isAutoHandledAlert(a)
+              );
               const needsAttention = isAttentionStatus(status);
 
               return (
@@ -520,8 +524,15 @@ function PetaniDashboard() {
                             screenhouseId: sh.id,
                           })
                         }
-                        className="mt-2.5 w-full text-left text-xs text-red-800 bg-red-50 border border-red-100 rounded-lg px-2.5 py-2 leading-snug hover:bg-red-100/80 transition"
+                        className={`mt-2.5 w-full text-left text-xs rounded-lg px-2.5 py-2 leading-snug transition ${
+                          isAutoHandledAlert(primaryAlert)
+                            ? "text-bl-primary bg-bl-surface-muted border border-bl-accent/25 hover:bg-bl-surface-muted/70"
+                            : "text-red-800 bg-red-50 border border-red-100 hover:bg-red-100/80"
+                        }`}
                       >
+                        {isAutoHandledAlert(primaryAlert) && (
+                          <Bot size={12} className="inline-block mr-1 -mt-0.5" aria-hidden />
+                        )}
                         {primaryAlert.message}
                       </button>
                     )}
@@ -533,7 +544,11 @@ function PetaniDashboard() {
                         Pengajuan screenhouse menunggu persetujuan operator. Monitoring akan aktif setelah disetujui.
                       </p>
                     ) : (
-                      <div className="flex flex-col lg:flex-row gap-4 items-stretch">
+                      <div
+                        className={`flex gap-4 ${
+                          hasAutoLock ? "flex-col" : "flex-col lg:flex-row items-start"
+                        }`}
+                      >
                         <div className="flex-1 min-w-0 space-y-2">
                           <EstimasiTanamPanel
                             layout="dashboard"
@@ -547,12 +562,17 @@ function PetaniDashboard() {
                           />
                           <ScreenhouseMiniStats sensor={sensor} />
                         </div>
-                        <div className="lg:w-44 xl:w-48 shrink-0 rounded-xl bg-gray-50/80 border border-gray-100 p-3">
+                        <div
+                          className={`shrink-0 rounded-xl bg-gray-50/80 border border-gray-100 p-3 ${
+                            hasAutoLock ? "w-full" : "lg:w-44 xl:w-48"
+                          }`}
+                        >
                           <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-2 font-semibold">
                             Kontrol peralatan
                           </div>
                           <ActuatorControls
                             compact
+                            wide={hasAutoLock}
                             screenhouseId={sh.id}
                             fan_status={sensor?.fan_status}
                             irrigation_status={sensor?.irrigation_status}

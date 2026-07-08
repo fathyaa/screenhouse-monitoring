@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, useParams } from "react-router-dom";
 import AppToaster from "./components/AppToaster";
 import { AlertProvider } from "./context/AlertContext";
 import { PushNotificationProvider } from "./context/PushNotificationContext";
+import { ScreenhouseStatsProvider } from "./context/ScreenhouseStatsContext";
 import "./App.css";
 
 import OperatorDashboard from "./pages/OperatorDashboard";
@@ -91,7 +92,9 @@ function App() {
       <AppToaster />
       <PushNotificationProvider>
         <AlertProvider>
-          <AppRoutes />
+          <ScreenhouseStatsProvider>
+            <AppRoutes />
+          </ScreenhouseStatsProvider>
         </AlertProvider>
       </PushNotificationProvider>
     </>

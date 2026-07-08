@@ -1,8 +1,9 @@
-import { Clock } from "lucide-react";
+import { Clock, Bot } from "lucide-react";
 import { buildHealthList, getActions, markerPosition } from "../constants/paramHealth";
 import { FARMER_LABELS } from "../constants/farmerLabels";
 import { formatRackName } from "../utils/rackNames";
 import { EMPTY_VALUE } from "../constants/sensorMetrics";
+import { getParamAutoHandledHint } from "../constants/actuatorRules";
 
 const STALE_STYLE = {
   label: "Terakhir dicatat",
@@ -122,6 +123,7 @@ export default function ParamHealthCards({
   getThresholdHint,
   stale = false,
   snapshotLabel,
+  autoLocks = {},
 }) {
   const list = providedList ?? buildHealthList(latest, threshold, keys);
   if (!list.length) return null;
@@ -194,23 +196,48 @@ export default function ParamHealthCards({
               <div className="text-[10px] uppercase tracking-wide text-gray-600 font-medium">
                 {stale ? "Catatan dari data terakhir" : "Saran tindakan"}
               </div>
-              {actions.map((a) => (
-                <div
-                  key={a.key}
-                  className="flex items-start gap-2 text-xs text-gray-700 bg-slate-50 rounded-lg px-3 py-2"
-                >
-                  <span
-                    className="mt-0.5 w-1.5 h-1.5 rounded-full shrink-0"
-                    style={{ backgroundColor: stale ? "#94a3b8" : a.style.color }}
-                  />
-                  <span>
-                    <span className="font-semibold">{a.label}</span>{" "}
-                    {stale ? "menyimpang pada data terakhir" : a.style.label.toLowerCase()}
-                    {a.multiNode && a.nodeName ? ` (${a.nodeName})` : ""}
-                    {!stale && `. ${a.advice}`}
-                  </span>
-                </div>
-              ))}
+              {actions.map((a) => {
+                const autoHint = !stale
+                  ? getParamAutoHandledHint(a.key, a.status, autoLocks)
+                  : null;
+
+                if (autoHint) {
+                  return (
+                    <div
+                      key={a.key}
+                      className="flex items-start gap-2 text-xs text-gray-700 bg-bl-surface-muted rounded-lg px-3 py-2"
+                    >
+                      <Bot size={14} className="shrink-0 text-bl-primary mt-0.5" aria-hidden />
+                      <span>
+                        <span className="font-semibold">{a.label}</span>{" "}
+                        {a.style.label.toLowerCase()}
+                        {a.multiNode && a.nodeName ? ` (${a.nodeName})` : ""}
+                        {" — "}
+                        <span className="text-bl-primary font-medium">ditangani otomatis</span>:{" "}
+                        {autoHint.toLowerCase()}.
+                      </span>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={a.key}
+                    className="flex items-start gap-2 text-xs text-gray-700 bg-slate-50 rounded-lg px-3 py-2"
+                  >
+                    <span
+                      className="mt-0.5 w-1.5 h-1.5 rounded-full shrink-0"
+                      style={{ backgroundColor: stale ? "#94a3b8" : a.style.color }}
+                    />
+                    <span>
+                      <span className="font-semibold">{a.label}</span>{" "}
+                      {stale ? "menyimpang pada data terakhir" : a.style.label.toLowerCase()}
+                      {a.multiNode && a.nodeName ? ` (${a.nodeName})` : ""}
+                      {!stale && `. ${a.advice}`}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

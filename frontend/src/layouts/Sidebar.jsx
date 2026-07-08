@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useScreenhouseStats } from "../context/ScreenhouseStatsContext";
 import {
   LayoutDashboard,
   Map,
@@ -61,14 +62,10 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user: 
   });
   const user = profileUser ?? userProp;
   const { unreadCount } = useAlerts();
-  const { enabled: pushEnabled, loading: pushLoading, toggle: togglePush, supported: pushSupported, getUnsupportedMessage } = usePushNotifications();
-  const [footerStats, setFooterStats] = useState({
-    screenhouseCount: 0,
-    sinkNodeCount: 0,
-    onlineSinkCount: 0,
-  });
+  const { muted: notifMuted, loading: pushLoading, toggle: togglePush, supported: pushSupported, getUnsupportedMessage } = usePushNotifications();
+  const notifEnabled = !notifMuted;
+  const { footerStats, footerStatsLoading, refetch: fetchFooterStats } = useScreenhouseStats();
   const [pendingApprovals, setPendingApprovals] = useState(0);
-  const [footerStatsLoading, setFooterStatsLoading] = useState(false);
 
   const fetchPendingApprovals = useCallback(() => {
     if (role !== "operator" && role !== "super_admin") {
@@ -139,60 +136,6 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user: 
       clearInterval(interval);
     };
   }, [fetchPendingApprovals]);
-
-  const fetchFooterStats = useCallback(() => {
-    const token = localStorage.getItem("token");
-    if (!token) return Promise.resolve();
-
-    setFooterStatsLoading(true);
-
-    if (role === "operator" || role === "super_admin") {
-      return fetch(`${API_URL}/screenhouses/operator-stats`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data) {
-            setFooterStats({
-              screenhouseCount: data.screenhouse_count ?? 0,
-              sinkNodeCount: data.online_sink_node_count ?? data.sink_node_count ?? 0,
-              onlineSinkCount: data.online_sink_node_count ?? 0,
-            });
-          }
-        })
-        .catch(console.error)
-        .finally(() => setFooterStatsLoading(false));
-    }
-
-    if (role === "petani") {
-      return fetch(`${API_URL}/screenhouses/my-stats`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data) {
-            setFooterStats({
-              screenhouseCount: data.screenhouse_count ?? 0,
-              sinkNodeCount: data.online_nodes ?? data.active_sensors ?? 0,
-              onlineSinkCount: data.online_nodes ?? data.active_sensors ?? 0,
-            });
-          }
-        })
-        .catch(console.error)
-        .finally(() => setFooterStatsLoading(false));
-    }
-
-    setFooterStatsLoading(false);
-    return Promise.resolve();
-  }, [role]);
-
-  useEffect(() => {
-    if (role === "petani") return;
-
-    fetchFooterStats();
-    const interval = setInterval(fetchFooterStats, 30000);
-    return () => clearInterval(interval);
-  }, [fetchFooterStats, role]);
 
   const screenhouseCount =
     role === "operator" || role === "super_admin"
@@ -271,32 +214,32 @@ function Sidebar({ isOpen, onClose, screenhouses = [], role = "operator", user: 
                 <div className="min-w-0">
                   <div className="text-xs font-medium text-white/80">{FARMER_LABELS.phoneNotifications}</div>
                   <div className="text-[10px] text-white/40 mt-0.5 leading-snug">
-                    {pushEnabled
-                      ? "Aktif, peringatan dikirim ke HP"
-                      : "Nonaktif, hanya tampil di aplikasi"}
+                    {notifEnabled
+                      ? "Aktif — bunyi & peringatan menyala di semua perangkat"
+                      : "Nonaktif — bunyi & peringatan dimatikan di semua perangkat"}
                   </div>
                 </div>
                 <button
                   type="button"
                   role="switch"
-                  aria-checked={pushEnabled}
+                  aria-checked={notifEnabled}
                   onClick={togglePush}
                   disabled={pushLoading}
                   title={
-                    pushEnabled
-                      ? "Matikan notifikasi ke HP"
+                    notifEnabled
+                      ? "Matikan notifikasi"
                       : !pushSupported
                         ? getUnsupportedMessage()
-                        : "Aktifkan notifikasi ke HP"
+                        : "Aktifkan notifikasi"
                   }
-                  aria-label={pushEnabled ? "Matikan notifikasi ke HP" : "Aktifkan notifikasi ke HP"}
+                  aria-label={notifEnabled ? "Matikan notifikasi" : "Aktifkan notifikasi"}
                   className={`relative shrink-0 w-11 h-6 rounded-full transition disabled:opacity-50 ${
-                    pushEnabled ? "bg-bl-primary" : "bg-white/15"
+                    notifEnabled ? "bg-bl-primary" : "bg-white/15"
                   }`}
                 >
                   <span
                     className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                      pushEnabled ? "translate-x-5" : "translate-x-0"
+                      notifEnabled ? "translate-x-5" : "translate-x-0"
                     }`}
                   />
                 </button>
