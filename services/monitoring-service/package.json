@@ -8,6 +8,8 @@
     "dev": "node --watch src/index.js",
     "simulate": "node scripts/simulate-sensors.js",
     "simulate:once": "node scripts/simulate-sensors.js --once",
+    "simulate:mqtt": "node scripts/simulate-mqtt.js",
+    "simulate:mqtt:once": "node scripts/simulate-mqtt.js --once",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "license": "ISC",

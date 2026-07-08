@@ -275,12 +275,16 @@ async function handleMqttPayload(data, topicParts, screenhouseIdFromTopic) {
     pick(data, "destinationId") ??
     pick(data, "destination_code");
 
-  let sinkNode = destinationIdRaw ? await resolveSinkNodeByCode(destinationIdRaw) : null;
+  const [sinkByDestination, asSensor, asSink] = await Promise.all([
+    destinationIdRaw ? resolveSinkNodeByCode(destinationIdRaw) : null,
+    nodeIdRaw ? resolveSensorNodeByCode(nodeIdRaw) : null,
+    nodeIdRaw ? resolveSinkNodeByCode(nodeIdRaw) : null,
+  ]);
+
+  let sinkNode = sinkByDestination;
 
   let sensorNode = null;
   if (nodeIdRaw) {
-    const asSensor = await resolveSensorNodeByCode(nodeIdRaw);
-    const asSink = await resolveSinkNodeByCode(nodeIdRaw);
     if (asSensor && (!asSink || asSensor.node_code !== asSink.node_code)) {
       sensorNode = asSensor;
     }

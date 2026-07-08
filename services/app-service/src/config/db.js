@@ -9,8 +9,9 @@ const pool = new Pool({
 });
 
 pool.connect()
-    .then(() => {
+    .then((client) => {
         console.log("App Service connected to PostgreSQL");
+        client.release();
     })
     .catch((err) => {
         console.log("PostgreSQL connection error:", err);

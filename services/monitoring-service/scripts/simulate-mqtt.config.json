@@ -1,0 +1,29 @@
+{
+  "intervalMs": 60000,
+  "staggerMs": 2000,
+  "screenhouses": [
+    {
+      "screenhouseId": 1,
+      "sinkCode": "SH01-SINK",
+      "trays": [
+        { "nodeCode": "SN-01" },
+        { "nodeCode": "SN-02" }
+      ],
+      "actuators": {
+        "fan": false,
+        "irrigation": false,
+        "lamp": false
+      }
+    },
+    {
+      "screenhouseId": 2,
+      "sinkCode": "SH02-SINK",
+      "trays": [{ "nodeCode": "SH02-T01" }],
+      "actuators": {
+        "fan": false,
+        "irrigation": true,
+        "lamp": false
+      }
+    }
+  ]
+}
