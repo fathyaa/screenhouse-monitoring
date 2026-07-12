@@ -38,11 +38,12 @@ INSERT INTO users (id, name, phone_number, password, role, status) VALUES
 -- tray_count → jumlah sensor node di Monitoring DB (SH01: 2 tray, SH02/SH03: 1 tray)
 INSERT INTO screenhouses (
     id, name, province_id, regency_id, district_id, village_id,
-    owner_user_id, address_detail, latitude, longitude, tray_count, status
+    owner_user_id, address_detail, latitude, longitude, tray_count,
+    seed_variety, seedling_start_date, status
 ) VALUES
-(1, 'Screenhouse Sukabumi 01', 1, 1, 1, 1, 1, 'Dekat irigasi timur', -6.9175, 106.9287, 2, 'active'),
-(2, 'Screenhouse Sukabumi 02', 1, 1, 1, 2, 1, 'Area pembibitan selatan', -6.9200, 106.9310, 1, 'active'),
-(3, 'Screenhouse Kadudampit 01', 1, 1, 2, 3, 1, 'Dekat jalan desa', -6.8900, 106.9500, 1, 'active');
+(1, 'Screenhouse Sukabumi 01', 1, 1, 1, 1, 1, 'Dekat irigasi timur', -6.9175, 106.9287, 2, 'Inpari 32', CURRENT_DATE - INTERVAL '14 days', 'active'),
+(2, 'Screenhouse Sukabumi 02', 1, 1, 1, 2, 1, 'Area pembibitan selatan', -6.9200, 106.9310, 1, 'Inpari 42', CURRENT_DATE - INTERVAL '10 days', 'active'),
+(3, 'Screenhouse Kadudampit 01', 1, 1, 2, 3, 1, 'Dekat jalan desa', -6.8900, 106.9500, 1, 'Ciherang', CURRENT_DATE - INTERVAL '7 days', 'active');
 
 INSERT INTO thresholds (
     id, screenhouse_id,

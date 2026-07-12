@@ -7,7 +7,6 @@ import {
   Legend,
   Line,
   LineChart,
-  ReferenceArea,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -18,18 +17,26 @@ import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import PetaniTopbar from "../layouts/PetaniTopbar";
 import ParamHealthCards from "../components/ParamHealthCards";
 import {
-  CHART_LEGEND,
   ChartTooltip,
   ChartGuideToggle,
   PETANI_TREN_CHART_GUIDES,
   aggregateHourlyTrend,
   buildNpkFromLatest,
   getPkChartYDomain,
+  getNMoistureChartYDomains,
   PkThresholdBands,
+  NMoistureThresholdBands,
+  PkChartLegendContent,
+  NMoistureChartLegendContent,
 } from "../constants/chartGuide";
 import { API_URL } from "../config/api";
 import PullToRefresh from "../components/PullToRefresh";
 import { formatSnapshotTime } from "../constants/screenhouseStatus";
+import {
+  BannerSkeleton,
+  ChartGridSkeleton,
+  Skeleton,
+} from "../components/LoadingUI";
 
 function PetaniTrenPage() {
   const [screenhouses, setScreenhouses] = useState([]);
@@ -38,6 +45,8 @@ function PetaniTrenPage() {
   const [chartHistories, setChartHistories] = useState([]);
   const [chartThreshold, setChartThreshold] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [selectedScreenhouseId, setSelectedScreenhouseId] = useState("all");
   const [refreshKey, setRefreshKey] = useState(0);
   const { isOpen: sidebarOpen, toggle: toggleSidebar, close: closeSidebar } = useSidebarOpen();
 
@@ -50,28 +59,32 @@ function PetaniTrenPage() {
   }, []);
 
   useEffect(() => {
-    fetch(`${API_URL}/screenhouses/my-screenhouses`, { headers })
-      .then((res) => res.json())
-      .then((data) => setScreenhouses(Array.isArray(data) ? data : []))
-      .catch(console.error);
-  }, [refreshKey, headers]);
-
-  useEffect(() => {
-    fetch(`${API_URL}/sensor-data/latest`, { headers })
-      .then((res) => res.json())
-      .then((data) => {
-        if (!Array.isArray(data)) return;
-        const mapped = {};
-        data.forEach((item) => {
-          if (item.screenhouse_id != null) mapped[item.screenhouse_id] = item;
-        });
-        setLatestSensorData(mapped);
+    setPageLoading(true);
+    Promise.all([
+      fetch(`${API_URL}/screenhouses/my-screenhouses`, { headers }).then((res) => res.json()),
+      fetch(`${API_URL}/sensor-data/latest`, { headers }).then((res) => res.json()),
+    ])
+      .then(([shData, latestData]) => {
+        setScreenhouses(Array.isArray(shData) ? shData : []);
+        if (Array.isArray(latestData)) {
+          const mapped = {};
+          latestData.forEach((item) => {
+            if (item.screenhouse_id != null) mapped[item.screenhouse_id] = item;
+          });
+          setLatestSensorData(mapped);
+        }
       })
-      .catch(console.error);
+      .catch(console.error)
+      .finally(() => setPageLoading(false));
   }, [refreshKey, headers]);
 
   useEffect(() => {
-    if (!screenhouses.length || !token) {
+    const targets =
+      selectedScreenhouseId === "all"
+        ? screenhouses
+        : screenhouses.filter((sh) => String(sh.id) === String(selectedScreenhouseId));
+
+    if (!targets.length || !token) {
       setChartDashboards([]);
       setChartHistories([]);
       setChartThreshold(null);
@@ -80,7 +93,7 @@ function PetaniTrenPage() {
 
     setLoading(true);
     Promise.all(
-      screenhouses.map((sh) =>
+      targets.map((sh) =>
         Promise.all([
           fetch(`${API_URL}/sensor-data/screenhouse/${sh.id}/dashboard`, { headers }).then(
             (r) => r.json()
@@ -102,20 +115,29 @@ function PetaniTrenPage() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [screenhouses, token, refreshKey, headers]);
+  }, [screenhouses, token, refreshKey, headers, selectedScreenhouseId]);
 
   const trendChartData = useMemo(
     () => aggregateHourlyTrend(chartDashboards, chartHistories),
     [chartDashboards, chartHistories]
   );
 
-  const npkCompareData = useMemo(
-    () => buildNpkFromLatest(latestSensorData, chartThreshold),
-    [latestSensorData, chartThreshold]
-  );
+  const npkCompareData = useMemo(() => {
+    if (selectedScreenhouseId === "all") {
+      return buildNpkFromLatest(latestSensorData, chartThreshold);
+    }
+    const row = latestSensorData[selectedScreenhouseId];
+    if (!row) return [];
+    return buildNpkFromLatest({ [selectedScreenhouseId]: row }, chartThreshold);
+  }, [latestSensorData, chartThreshold, selectedScreenhouseId]);
 
   const aggregateLatest = useMemo(() => {
-    const rows = Object.values(latestSensorData).filter(Boolean);
+    const rows =
+      selectedScreenhouseId === "all"
+        ? Object.values(latestSensorData).filter(Boolean)
+        : latestSensorData[selectedScreenhouseId]
+        ? [latestSensorData[selectedScreenhouseId]]
+        : [];
     if (!rows.length) return null;
     const keys = [
       "nitrogen", "phosphorus", "potassium", "soil_moisture",
@@ -127,16 +149,22 @@ function PetaniTrenPage() {
       out[k] = vals.length ? vals.reduce((a, c) => a + c, 0) / vals.length : null;
     });
     return out;
-  }, [latestSensorData]);
+  }, [latestSensorData, selectedScreenhouseId]);
 
   const latestSnapshotAt = useMemo(() => {
-    const times = Object.values(latestSensorData)
+    const rows =
+      selectedScreenhouseId === "all"
+        ? Object.values(latestSensorData).filter(Boolean)
+        : latestSensorData[selectedScreenhouseId]
+        ? [latestSensorData[selectedScreenhouseId]]
+        : [];
+    const times = rows
       .map((r) => r?.created_at)
       .filter(Boolean)
       .map((d) => new Date(d).getTime())
       .filter((t) => !Number.isNaN(t));
     return times.length ? new Date(Math.max(...times)).toISOString() : null;
-  }, [latestSensorData]);
+  }, [latestSensorData, selectedScreenhouseId]);
 
   const npkColored = useMemo(() => {
     const maxCol = { N: "max_nitrogen", P: "max_phosphorus", K: "max_potassium" };
@@ -155,6 +183,21 @@ function PetaniTrenPage() {
     });
   }, [npkCompareData, chartThreshold]);
 
+  const trendScopeLabel =
+    selectedScreenhouseId === "all"
+      ? `rata-rata ${screenhouses.length} screenhouse`
+      : screenhouses.find((sh) => String(sh.id) === String(selectedScreenhouseId))?.name ?? "screenhouse";
+
+  const pkYDomain = useMemo(
+    () => getPkChartYDomain(trendChartData, chartThreshold),
+    [trendChartData, chartThreshold]
+  );
+
+  const nMoistureDomains = useMemo(
+    () => getNMoistureChartYDomains(trendChartData, chartThreshold),
+    [trendChartData, chartThreshold]
+  );
+
   return (
     <div className="app-shell fixed inset-0 flex bg-bl-surface overflow-hidden text-left">
       <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} screenhouses={screenhouses} role={user?.role} user={user} />
@@ -167,12 +210,46 @@ function PetaniTrenPage() {
         />
 
         <PullToRefresh onRefresh={refreshPage} className="p-5 space-y-4 text-left">
-          <div className="bg-white rounded-2xl border border-gray-200 p-4 text-left">
-            <div className="text-sm font-semibold text-gray-800">Ringkasan tren</div>
-            <div className="text-xs text-gray-400 mt-0.5">
-              Data digabung dari seluruh screenhouse milik Anda (rata-rata per jam).
-              Untuk status & tindakan harian, buka Dashboard.
+          {pageLoading ? (
+            <>
+              <BannerSkeleton />
+              <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
+                <Skeleton className="h-4 w-40" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-2">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <Skeleton key={i} className="h-28 sm:h-24 rounded-xl" />
+                  ))}
+                </div>
+              </div>
+              <ChartGridSkeleton />
+              <div className="bg-white rounded-2xl border border-gray-200 h-56 animate-pulse" />
+            </>
+          ) : (
+            <>
+          <div className="bg-white rounded-2xl border border-gray-200 p-4 text-left space-y-3">
+            <div>
+              <div className="text-sm font-semibold text-gray-800">Ringkasan tren</div>
+              <div className="text-xs text-gray-600 mt-0.5">
+                Grafik 24 jam, {trendScopeLabel}. Untuk status harian dan tindakan, buka Dashboard.
+              </div>
             </div>
+            {screenhouses.length > 1 && (
+              <label className="block">
+                <span className="text-xs text-gray-600 font-medium mb-1 block">Tampilkan data</span>
+                <select
+                  value={selectedScreenhouseId}
+                  onChange={(e) => setSelectedScreenhouseId(e.target.value)}
+                  className="w-full sm:max-w-xs px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-green-100"
+                >
+                  <option value="all">Semua screenhouse (rata-rata)</option>
+                  {screenhouses.map((sh) => (
+                    <option key={sh.id} value={sh.id}>
+                      {sh.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
 
           {!loading && aggregateLatest && (
@@ -182,21 +259,14 @@ function PetaniTrenPage() {
               title="Kondisi rata-rata saat ini"
               subtitle={
                 latestSnapshotAt
-                  ? `Rata-rata ${screenhouses.length} screenhouse · terakhir diperbarui ${formatSnapshotTime(latestSnapshotAt)}`
-                  : `Rata-rata ${screenhouses.length} screenhouse`
+                  ? `${trendScopeLabel}, terakhir ${formatSnapshotTime(latestSnapshotAt)}`
+                  : trendScopeLabel
               }
             />
           )}
 
           {loading ? (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              {[1, 2].map((i) => (
-                <div
-                  key={i}
-                  className="bg-white rounded-2xl border border-gray-200 h-72 animate-pulse"
-                />
-              ))}
-            </div>
+            <ChartGridSkeleton />
           ) : (
             <>
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -204,46 +274,48 @@ function PetaniTrenPage() {
                   <div className="text-sm font-semibold text-gray-800 mb-1">
                     Tren nitrogen & kelembapan tanah (24 jam)
                   </div>
-                  <div className="text-xs text-gray-400 mb-2">
-                    Rata-rata semua screenhouse · kiri: nitrogen · kanan: kelembapan tanah
+                  <div className="text-xs text-gray-600 mb-2">
+                    Rata-rata {trendScopeLabel}. Hijau muda = aman, merah muda = kurang, kuning = berlebih.
                   </div>
                   {trendChartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height={260}>
-                      <LineChart data={trendChartData}>
+                      <LineChart data={trendChartData} margin={{ left: 8, right: 16, top: 8, bottom: 4 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                         <XAxis dataKey="label" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
                         <YAxis
                           yAxisId="n"
                           tick={{ fontSize: 10 }}
-                          label={{ value: "N", angle: -90, position: "insideLeft", fontSize: 10 }}
+                          width={48}
+                          domain={nMoistureDomains.n}
+                          label={{
+                            value: "Nitrogen (mg/kg)",
+                            angle: -90,
+                            position: "insideLeft",
+                            offset: 12,
+                            style: { fontSize: 10, fill: "#4b5563", fontWeight: 500 },
+                          }}
                         />
                         <YAxis
                           yAxisId="m"
                           orientation="right"
                           tick={{ fontSize: 10 }}
-                          domain={[40, 90]}
-                          label={{ value: "%", angle: 90, position: "insideRight", fontSize: 10 }}
+                          width={48}
+                          domain={nMoistureDomains.m}
+                          label={{
+                            value: "Kelembapan (%)",
+                            angle: 90,
+                            position: "insideRight",
+                            offset: 12,
+                            style: { fontSize: 10, fill: "#4b5563", fontWeight: 500 },
+                          }}
                         />
-                        {chartThreshold?.min_nitrogen != null && chartThreshold?.max_nitrogen != null && (
-                          <ReferenceArea
-                            yAxisId="n"
-                            y1={chartThreshold.min_nitrogen}
-                            y2={chartThreshold.max_nitrogen}
-                            fill="#16a34a"
-                            fillOpacity={0.07}
-                          />
-                        )}
-                        {chartThreshold?.min_soil_moisture != null && chartThreshold?.max_soil_moisture != null && (
-                          <ReferenceArea
-                            yAxisId="m"
-                            y1={chartThreshold.min_soil_moisture}
-                            y2={chartThreshold.max_soil_moisture}
-                            fill="#2563eb"
-                            fillOpacity={0.06}
-                          />
-                        )}
+                        <NMoistureThresholdBands
+                          threshold={chartThreshold}
+                          nDomain={nMoistureDomains.n}
+                          mDomain={nMoistureDomains.m}
+                        />
                         <Tooltip content={<ChartTooltip />} />
-                        <Legend {...CHART_LEGEND} />
+                        <Legend content={(props) => <NMoistureChartLegendContent payload={props.payload} />} />
                         <Line
                           yAxisId="n"
                           type="monotone"
@@ -265,10 +337,13 @@ function PetaniTrenPage() {
                       </LineChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div className="h-[260px] flex items-start p-4 text-sm text-gray-400">
+                    <div className="h-[260px] flex items-start p-4 text-sm text-gray-600">
                       Belum cukup data historis untuk grafik tren
                     </div>
                   )}
+                  <p className="mt-2 text-[11px] text-gray-600 font-medium leading-relaxed">
+                    Garis hijau = nitrogen (skala kiri), garis biru = kelembaban tanah (skala kanan)
+                  </p>
                   <ChartGuideToggle
                     body={PETANI_TREN_CHART_GUIDES.nMoisture.body}
                     extra="Arahkan kursor ke garis untuk melihat angka pada jam tertentu."
@@ -279,8 +354,8 @@ function PetaniTrenPage() {
                   <div className="text-sm font-semibold text-gray-800 mb-1">
                     Rata-rata NPK screenhouse Anda
                   </div>
-                  <div className="text-xs text-gray-400 mb-2">
-                    Nilai rata-rata terbaru · hijau = pas, oranye = kurang, merah = berlebih
+                  <div className="text-xs text-gray-600 mb-2">
+                    Nilai rata-rata terbaru. Hijau = pas, oranye = kurang, merah = berlebih.
                   </div>
                   {npkColored.length > 0 && npkColored.some((d) => d.value > 0) ? (
                     <ResponsiveContainer width="100%" height={260}>
@@ -307,7 +382,7 @@ function PetaniTrenPage() {
                       </BarChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div className="h-[260px] flex items-start p-4 text-sm text-gray-400">
+                    <div className="h-[260px] flex items-start p-4 text-sm text-gray-600">
                       Belum ada pembacaan NPK
                     </div>
                   )}
@@ -322,22 +397,22 @@ function PetaniTrenPage() {
                 <div className="text-sm font-semibold text-gray-800 mb-1">
                   Tren fosfor & kalium (24 jam)
                 </div>
-                <div className="text-xs text-gray-400 mb-2">
-                  Rata-rata semua tray sensor · pantau kebutuhan pupuk P dan K
+                <div className="text-xs text-gray-600 mb-2">
+                  Rata-rata semua rak bibit. Pantau kebutuhan pupuk P dan K.
                 </div>
                 {trendChartData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={220}>
-                    <LineChart data={trendChartData}>
+                    <LineChart data={trendChartData} margin={{ left: 4, right: 8, bottom: 4 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                       <XAxis dataKey="label" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
                       <YAxis
                         tick={{ fontSize: 10 }}
-                        domain={getPkChartYDomain(trendChartData, chartThreshold)}
+                        domain={pkYDomain}
                         label={{ value: "mg/kg", angle: -90, position: "insideLeft", fontSize: 10 }}
                       />
-                      <PkThresholdBands threshold={chartThreshold} />
+                      <PkThresholdBands threshold={chartThreshold} yDomain={pkYDomain} />
                       <Tooltip content={<ChartTooltip />} />
-                      <Legend {...CHART_LEGEND} />
+                      <Legend content={(props) => <PkChartLegendContent payload={props.payload} />} />
                       <Line
                         type="monotone"
                         dataKey="phosphorus"
@@ -357,7 +432,7 @@ function PetaniTrenPage() {
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-[220px] flex items-start p-4 text-sm text-gray-400">
+                  <div className="h-[220px] flex items-start p-4 text-sm text-gray-600">
                     Belum ada data historis
                   </div>
                 )}
@@ -366,6 +441,8 @@ function PetaniTrenPage() {
                   extra="Arahkan kursor ke garis untuk melihat angka pada jam tertentu."
                 />
               </div>
+            </>
+          )}
             </>
           )}
         </PullToRefresh>

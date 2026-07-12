@@ -7,6 +7,19 @@ export const CHART_LEGEND = {
   wrapperStyle: { paddingLeft: 0, textAlign: "left" },
 };
 
+/** Warna zona batas threshold pada grafik tren mg/kg. */
+export const THRESHOLD_ZONE_COLORS = {
+  low: "#fecaca",
+  optimal: "#bbf7d0",
+  high: "#fef08a",
+};
+
+export const THRESHOLD_ZONE_LEGEND = [
+  { color: THRESHOLD_ZONE_COLORS.high, label: "Zona berlebih (di atas maksimum)" },
+  { color: THRESHOLD_ZONE_COLORS.optimal, label: "Zona optimal/aman" },
+  { color: THRESHOLD_ZONE_COLORS.low, label: "Zona kurang (di bawah minimum)" },
+];
+
 export const SCREENHOUSE_CHART_GUIDE = [
   {
     title: "Kartu kondisi tanah",
@@ -14,7 +27,7 @@ export const SCREENHOUSE_CHART_GUIDE = [
   },
   {
     title: "Grafik nitrogen & air tanah",
-    body: "Menampilkan perubahan selama 24 jam terakhir. Garis hijau = kadar nitrogen (N). Garis biru = kelembapan tanah (%). Blok warna tipis = batas aman. Selama garis masih di dalam blok, kondisi tanah masih oke.",
+    body: "Menampilkan perubahan selama 24 jam terakhir. Garis hijau = kadar nitrogen (N). Garis biru = kelembapan tanah (%). Area hijau muda = zona optimal/aman, merah muda = di bawah minimum (kurang), kuning = di atas maksimum (berlebih). Setiap garis dinilai terhadap batas aman masing-masing.",
   },
   {
     title: "Diagram batang N, P, K",
@@ -22,7 +35,7 @@ export const SCREENHOUSE_CHART_GUIDE = [
   },
   {
     title: "Grafik fosfor & kalium",
-    body: "Perubahan fosfor (P) dan kalium (K) per jam. Blok biru = batas aman fosfor, blok kuning = batas aman kalium. Garis di dalam blok berarti masih dalam batas.",
+    body: "Perubahan fosfor (P) dan kalium (K) per jam. Area hijau muda = zona optimal/aman, merah muda = di bawah minimum (kurang), kuning = di atas maksimum (berlebih). Setiap garis dinilai terhadap batas aman masing-masing.",
   },
 ];
 
@@ -63,14 +76,14 @@ export function ChartTooltip({ active, payload, label }) {
       {payload.map((p) => (
         <div key={p.dataKey} style={{ color: p.color }} className="text-left">
           <span className="font-semibold">{p.value}</span>
-          <span className="text-gray-500"> · {p.name}</span>
+          <span className="text-gray-600 font-medium"> · {p.name}</span>
         </div>
       ))}
     </div>
   );
 }
 
-/** Skala Y grafik P/K mencakup kedua batas threshold agar blok kuning kalium terlihat. */
+/** Skala Y grafik P/K mencakup kedua batas threshold agar zona terlihat penuh. */
 export function getPkChartYDomain(trendData, threshold) {
   const dataVals = (trendData || [])
     .flatMap((d) => [d.phosphorus, d.potassium])
@@ -87,41 +100,186 @@ export function getPkChartYDomain(trendData, threshold) {
   return [lo, hi];
 }
 
-/** Zona aman fosfor (biru) & kalium (kuning) — kalium digambar dulu, fosfor di atas. */
-export function PkThresholdBands({ threshold }) {
-  if (!threshold) return null;
-  const hasP =
-    threshold.min_phosphorus != null && threshold.max_phosphorus != null;
-  const hasK =
-    threshold.min_potassium != null && threshold.max_potassium != null;
+function ThreeZoneBands({ min, max, yMin, yMax, prefix, yAxisId }) {
+  if (min == null || max == null) return null;
+  const axisProps = yAxisId ? { yAxisId } : {};
   return (
     <>
-      {hasK && (
-        <ReferenceArea
-          y1={threshold.min_potassium}
-          y2={threshold.max_potassium}
-          fill="#eab308"
-          fillOpacity={0.14}
-          stroke="#ca8a04"
-          strokeOpacity={0.55}
-          strokeWidth={1}
-          ifOverflow="extendDomain"
-        />
-      )}
-      {hasP && (
-        <ReferenceArea
-          y1={threshold.min_phosphorus}
-          y2={threshold.max_phosphorus}
-          fill="#2563eb"
-          fillOpacity={0.1}
-          stroke="#2563eb"
-          strokeOpacity={0.45}
-          strokeWidth={1}
-          ifOverflow="extendDomain"
-        />
-      )}
+      <ReferenceArea
+        key={`${prefix}-low`}
+        {...axisProps}
+        y1={yMin}
+        y2={min}
+        fill={THRESHOLD_ZONE_COLORS.low}
+        fillOpacity={0.45}
+        ifOverflow="extendDomain"
+      />
+      <ReferenceArea
+        key={`${prefix}-ok`}
+        {...axisProps}
+        y1={min}
+        y2={max}
+        fill={THRESHOLD_ZONE_COLORS.optimal}
+        fillOpacity={0.4}
+        ifOverflow="extendDomain"
+      />
+      <ReferenceArea
+        key={`${prefix}-high`}
+        {...axisProps}
+        y1={max}
+        y2={yMax}
+        fill={THRESHOLD_ZONE_COLORS.high}
+        fillOpacity={0.45}
+        ifOverflow="extendDomain"
+      />
     </>
   );
+}
+
+/** Skala Y dual-axis: nitrogen (kiri) & kelembapan tanah (kanan). */
+export function getNMoistureChartYDomains(trendData, threshold) {
+  const nVals = (trendData || [])
+    .map((d) => d.nitrogen)
+    .filter((v) => v != null && !Number.isNaN(Number(v)))
+    .map(Number);
+  const mVals = (trendData || [])
+    .map((d) => d.soil_moisture)
+    .filter((v) => v != null && !Number.isNaN(Number(v)))
+    .map(Number);
+
+  const nLo = Math.floor(
+    Math.min(
+      threshold?.min_nitrogen ?? Infinity,
+      ...(nVals.length ? nVals : [0]),
+      0
+    ) - 2
+  );
+  const nHi = Math.ceil(
+    Math.max(threshold?.max_nitrogen ?? -Infinity, ...(nVals.length ? nVals : [0])) + 2
+  );
+
+  const mLo = Math.floor(
+    Math.min(
+      threshold?.min_soil_moisture ?? Infinity,
+      ...(mVals.length ? mVals : [40]),
+      0
+    ) - 2
+  );
+  const mHi = Math.ceil(
+    Math.max(threshold?.max_soil_moisture ?? -Infinity, ...(mVals.length ? mVals : [90])) + 2
+  );
+
+  return {
+    n: [nLo, nHi],
+    m: [Math.max(0, mLo), Math.min(100, mHi)],
+  };
+}
+
+/** Zona kurang / optimal / berlebih untuk nitrogen & kelembapan tanah (dual Y). */
+export function NMoistureThresholdBands({ threshold, nDomain, mDomain }) {
+  if (!threshold) return null;
+
+  return (
+    <>
+      <ThreeZoneBands
+        yAxisId="n"
+        min={threshold.min_nitrogen}
+        max={threshold.max_nitrogen}
+        yMin={nDomain?.[0] ?? 0}
+        yMax={nDomain?.[1] ?? 50}
+        prefix="n"
+      />
+      <ThreeZoneBands
+        yAxisId="m"
+        min={threshold.min_soil_moisture}
+        max={threshold.max_soil_moisture}
+        yMin={mDomain?.[0] ?? 0}
+        yMax={mDomain?.[1] ?? 100}
+        prefix="m"
+      />
+    </>
+  );
+}
+
+/** Zona kurang / optimal / berlebih untuk fosfor & kalium (mg/kg). */
+export function PkThresholdBands({ threshold, yDomain }) {
+  if (!threshold) return null;
+
+  const yMin =
+    yDomain?.[0] ??
+    Math.floor(
+      Math.min(
+        threshold.min_phosphorus ?? 0,
+        threshold.min_potassium ?? 0,
+        0
+      ) - 2
+    );
+  const yMax =
+    yDomain?.[1] ??
+    Math.ceil(
+      Math.max(threshold.max_phosphorus ?? 0, threshold.max_potassium ?? 0) + 2
+    );
+
+  return (
+    <>
+      <ThreeZoneBands
+        min={threshold.min_potassium}
+        max={threshold.max_potassium}
+        yMin={yMin}
+        yMax={yMax}
+        prefix="k"
+      />
+      <ThreeZoneBands
+        min={threshold.min_phosphorus}
+        max={threshold.max_phosphorus}
+        yMin={yMin}
+        yMax={yMax}
+        prefix="p"
+      />
+    </>
+  );
+}
+
+export function PkChartLegendContent({ payload }) {
+  return (
+    <div className="text-left pt-2 space-y-2">
+      <div className="flex flex-wrap gap-x-3 gap-y-1.5">
+        {THRESHOLD_ZONE_LEGEND.map((z) => (
+          <span
+            key={z.label}
+            className="inline-flex items-center gap-1.5 text-[11px] text-gray-600 font-medium"
+          >
+            <span
+              className="w-3 h-3 rounded-sm shrink-0 border border-black/5"
+              style={{ backgroundColor: z.color }}
+            />
+            {z.label}
+          </span>
+        ))}
+      </div>
+      {payload?.length > 0 && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {payload.map((entry) => (
+            <span
+              key={entry.value}
+              className="inline-flex items-center gap-1.5 text-[11px] text-gray-700 font-medium"
+            >
+              <span
+                className="w-4 h-0.5 shrink-0 rounded-full"
+                style={{ backgroundColor: entry.color }}
+              />
+              {entry.value}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Legend grafik N + kelembapan — zona + garis dual-axis. */
+export function NMoistureChartLegendContent({ payload }) {
+  return <PkChartLegendContent payload={payload} />;
 }
 
 export function aggregateHourlyTrend(dashboards, histories) {

@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import { Search, Leaf, ExternalLink } from "lucide-react";
 import AdminPageShell from "../components/AdminPageShell";
 import WilayahFilter, { buildWilayahQuery } from "../components/WilayahFilter";
+import { TableRowsSkeleton } from "../components/LoadingUI";
 
 import { API_URL } from "../config/api";
 
@@ -101,7 +102,7 @@ export default function KelolaScreenhousePage() {
         <WilayahFilter value={wilayah} onChange={setWilayah} />
         <div className="flex flex-wrap gap-3 items-center">
           <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-            <Search size={16} className="text-gray-400 shrink-0" />
+            <Search size={16} className="text-gray-600 shrink-0" />
             <input
               type="text"
               placeholder="Cari nama screenhouse, pemilik, atau HP..."
@@ -126,36 +127,36 @@ export default function KelolaScreenhousePage() {
         <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
           <Leaf size={18} className="text-bl-primary" />
           <span className="text-sm font-semibold text-gray-800">Daftar Screenhouse</span>
-          <span className="text-xs text-gray-400 ml-auto">{items.length} screenhouse</span>
+          <span className="text-xs text-gray-600 ml-auto">{items.length} screenhouse</span>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead>
-              <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+              <tr className="text-table-head">
                 <th className="px-4 py-3 font-medium">No</th>
                 <th className="px-4 py-3 font-medium">Nama</th>
                 <th className="px-4 py-3 font-medium">Pemilik</th>
                 <th className="px-4 py-3 font-medium">No HP</th>
                 <th className="px-4 py-3 font-medium">Wilayah</th>
-                <th className="px-4 py-3 font-medium text-center">Node</th>
+                <th className="px-4 py-3 font-medium text-center">Alat pengukur</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium text-center">Aksi</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Memuat...</td></tr>
+                <TableRowsSkeleton rows={6} />
               ) : items.length === 0 ? (
-                <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Tidak ada screenhouse</td></tr>
+                <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-600">Tidak ada screenhouse</td></tr>
               ) : (
                 items.map((row, i) => (
                   <tr key={row.id} className="border-t border-gray-100 hover:bg-gray-50/50">
-                    <td className="px-4 py-3 text-gray-400">{i + 1}</td>
+                    <td className="px-4 py-3 text-gray-600">{i + 1}</td>
                     <td className="px-4 py-3 font-medium text-gray-800">{row.name}</td>
                     <td className="px-4 py-3 text-gray-600">{row.owner_name}</td>
                     <td className="px-4 py-3 text-gray-600">{row.owner_phone}</td>
-                    <td className="px-4 py-3 text-gray-500 text-xs max-w-[200px]">{formatWilayah(row)}</td>
+                    <td className="px-4 py-3 text-gray-600 font-medium text-xs max-w-[200px]">{formatWilayah(row)}</td>
                     <td className="px-4 py-3 text-center text-gray-600">{row.node_count ?? 0}</td>
                     <td className="px-4 py-3">{statusBadge(row.status)}</td>
                     <td className="px-4 py-3">

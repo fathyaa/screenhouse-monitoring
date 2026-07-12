@@ -14,7 +14,7 @@ export default function PetaniTopbar({ onToggleSidebar, title, subtitle, onBack 
                     className="p-1.5 rounded-lg hover:bg-gray-100 transition shrink-0"
                     aria-label="Toggle sidebar"
                 >
-                    <Menu size={20} className="text-gray-500" />
+                    <Menu size={20} className="icon-muted" />
                 </button>
                 {onBack && (
                     <button
@@ -22,19 +22,20 @@ export default function PetaniTopbar({ onToggleSidebar, title, subtitle, onBack 
                         className="p-1.5 rounded-lg hover:bg-gray-100 transition shrink-0"
                         aria-label="Kembali"
                     >
-                        <ArrowLeft size={20} className="text-gray-500" />
+                        <ArrowLeft size={20} className="icon-muted" />
                     </button>
                 )}
                 <div className="min-w-0">
                     <div className="text-sm font-semibold text-gray-800 truncate">{title}</div>
-                    <div className="text-xs text-gray-400 truncate hidden sm:block">{subtitle}</div>
+                    <div className="text-xs text-gray-600 truncate hidden sm:block">{subtitle}</div>
                 </div>
             </div>
 
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 <button
                     onClick={() => navigate("/petani/peringatan")}
-                    title="Peringatan screenhouse"
+                    title="Buka peringatan"
+                    aria-label="Buka peringatan"
                     className="relative p-2 rounded-xl hover:bg-gray-100 transition"
                 >
                     <Bell size={18} className="text-gray-600" />
@@ -47,7 +48,7 @@ export default function PetaniTopbar({ onToggleSidebar, title, subtitle, onBack 
 
                 <div className="hidden sm:flex items-center gap-2 bg-green-50 text-green-800 text-xs font-medium px-3 py-1.5 rounded-full">
                     <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                    Online
+                    Siap pantau
                 </div>
             </div>
         </header>

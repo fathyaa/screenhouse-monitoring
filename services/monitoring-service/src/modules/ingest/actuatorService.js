@@ -34,6 +34,50 @@ async function getOwnerUserId(screenhouseId) {
   return result.rows[0]?.owner_user_id ?? null;
 }
 
+async function getActiveAutoActuatorLocks(screenhouseId) {
+  const result = await pool.query(
+    `
+    SELECT message
+    FROM alerts
+    WHERE screenhouse_id = $1 AND status = 'active'
+    `,
+    [screenhouseId]
+  );
+
+  const locks = {};
+  const { resolveActuatorActionsFromAlertMessage } = require("../../shared/actuatorRules");
+
+  for (const { message } of result.rows) {
+    const actions = resolveActuatorActionsFromAlertMessage(message);
+    if (actions.fan != null) locks.fan = actions.fan;
+    if (actions.irrigation != null) locks.irrigation = actions.irrigation;
+    if (actions.lamp != null) locks.lamp = actions.lamp;
+  }
+
+  return locks;
+}
+
+const ACTUATOR_LABELS = { fan: "Kipas", irrigation: "Irigasi", lamp: "Lampu" };
+
+async function assertManualActuatorAllowed(screenhouseId, { fan, irrigation, lamp }) {
+  const locks = await getActiveAutoActuatorLocks(screenhouseId);
+  const blocked = [];
+
+  if (fan !== undefined && locks.fan != null) blocked.push("fan");
+  if (irrigation !== undefined && locks.irrigation != null) blocked.push("irrigation");
+  if (lamp !== undefined && locks.lamp != null) blocked.push("lamp");
+
+  if (!blocked.length) return;
+
+  const label = ACTUATOR_LABELS[blocked[0]] ?? blocked[0];
+  throw Object.assign(
+    new Error(
+      `${label} sedang dikontrol otomatis oleh sistem. Tunggu kondisi normal sebelum mengubah manual.`
+    ),
+    { status: 409, code: "AUTO_ACTUATOR_LOCKED", locked: locks }
+  );
+}
+
 /**
  * Set actuator state for a screenhouse via its sink node.
  * Publishes MQTT command + logs to actuator_logs + updates sink_nodes.
@@ -50,6 +94,10 @@ async function setActuators({
   const shId = Number(screenhouseId);
   if (!Number.isInteger(shId)) {
     throw Object.assign(new Error("screenhouseId tidak valid"), { status: 400 });
+  }
+
+  if (source !== "auto") {
+    await assertManualActuatorAllowed(shId, { fan, irrigation, lamp });
   }
 
   const sink = await getSinkNode(shId);

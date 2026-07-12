@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from "react";
-import socket, { authenticateSocket } from "../lib/socket";
+import { getSocket, authenticateSocket } from "../lib/socket";
 import toast from "react-hot-toast";
 import { TriangleAlert } from "lucide-react";
 import { ALERT_PARAM_MAP } from "../constants/sensorMetrics";
@@ -8,6 +8,7 @@ import { getAutoHandledNotice, isAutoHandledAlert } from "../constants/actuatorR
 import { loadSeenAutoAlerts, markAutoAlertsSeen } from "../utils/seenAutoAlerts";
 import { installAlertSoundUnlock, playAlertSound } from "../utils/alertSound";
 import { API_URL } from "../config/api";
+import { dedupeOfflineAlerts, getAlertDisplayMessage } from "../utils/alertDisplay";
 
 const AlertContext = createContext(null);
 const TOAST_ID = "alert-notif";
@@ -44,41 +45,55 @@ export function isUnreadAlert(alert, seenAutoAlertIds) {
 
 export function AlertProvider({ children }) {
   const [alerts, setAlerts] = useState([]);
+  const [alertCounts, setAlertCounts] = useState(null);
   const [alertsLoading, setAlertsLoading] = useState(true);
+  const [resolvingAlertId, setResolvingAlertId] = useState(null);
   const [seenAutoAlertIds, setSeenAutoAlertIds] = useState(() => loadSeenAutoAlerts());
   const alertsRef = useRef(alerts);
+  const loadOptionsRef = useRef({ status: "active", limit: 500 });
   alertsRef.current = alerts;
 
-  const activeCount = alerts.filter((a) => a.status === "active").length;
-  const resolvedCount = alerts.filter((a) => a.status === "resolved").length;
-  const totalCount = alerts.length;
+  const normalizedAlerts = useMemo(() => dedupeOfflineAlerts(alerts), [alerts]);
+
+  const activeCount =
+    normalizedAlerts.filter((a) => a.status === "active").length;
+  const resolvedCount =
+    normalizedAlerts.filter((a) => a.status === "resolved").length;
+  const totalCount = normalizedAlerts.length;
 
   const unreadCount = useMemo(
-    () => alerts.filter((a) => isUnreadAlert(a, seenAutoAlertIds)).length,
-    [alerts, seenAutoAlertIds]
+    () => normalizedAlerts.filter((a) => isUnreadAlert(a, seenAutoAlertIds)).length,
+    [normalizedAlerts, seenAutoAlertIds]
   );
 
   const unreadAlerts = useMemo(
-    () => alerts.filter((a) => isUnreadAlert(a, seenAutoAlertIds)),
-    [alerts, seenAutoAlertIds]
+    () => normalizedAlerts.filter((a) => isUnreadAlert(a, seenAutoAlertIds)),
+    [normalizedAlerts, seenAutoAlertIds]
   );
 
-  const loadAlerts = useCallback(() => {
+  const loadAlerts = useCallback((options = {}) => {
     const role = localStorage.getItem("role");
     const authToken = localStorage.getItem("token");
 
     if (!authToken || role !== "petani") {
       setAlerts([]);
+      setAlertCounts(null);
       setAlertsLoading(false);
-      return;
+      return Promise.resolve();
     }
+
+    const status = options.status ?? loadOptionsRef.current.status ?? "active";
+    const limit = options.limit ?? loadOptionsRef.current.limit ?? 500;
+    loadOptionsRef.current = { status, limit };
 
     const userId = getCurrentUserId();
     if (userId) authenticateSocket(userId);
 
     setAlertsLoading(true);
 
-    fetch(`${API_URL}/alerts`, {
+    const params = new URLSearchParams({ status, limit: String(limit) });
+
+    return fetch(`${API_URL}/alerts?${params}`, {
       headers: { Authorization: `Bearer ${authToken}` },
     })
       .then(async (res) => {
@@ -87,11 +102,20 @@ export function AlertProvider({ children }) {
           console.error("[alerts] fetch gagal", res.status, data?.message ?? data);
           return;
         }
-        if (!Array.isArray(data)) {
-          console.error("[alerts] respons bukan array", data);
+
+        if (Array.isArray(data)) {
+          setAlerts(dedupeOfflineAlerts(data));
+          setAlertCounts(null);
           return;
         }
-        setAlerts(data);
+
+        if (!Array.isArray(data.items)) {
+          console.error("[alerts] respons tidak valid", data);
+          return;
+        }
+
+        setAlerts(dedupeOfflineAlerts(data.items));
+        setAlertCounts(data.counts ?? null);
       })
       .catch((err) => console.error("[alerts] fetch gagal", err))
       .finally(() => setAlertsLoading(false));
@@ -109,11 +133,16 @@ export function AlertProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    if (localStorage.getItem("role") !== "petani" || !localStorage.getItem("token")) {
+      return;
+    }
+
+    const socket = getSocket();
+    if (!socket) return;
+
     const onConnect = () => {
       const userId = getCurrentUserId();
-      if (userId && localStorage.getItem("role") === "petani") {
-        authenticateSocket(userId);
-      }
+      if (userId) authenticateSocket(userId);
     };
 
     socket.on("connect", onConnect);
@@ -123,8 +152,6 @@ export function AlertProvider({ children }) {
       if (!alertBelongsToCurrentUser(newAlert)) {
         return;
       }
-
-      playAlertSound();
 
       const isEnriched =
         newAlert.actual_nitrogen !== undefined ||
@@ -136,11 +163,13 @@ export function AlertProvider({ children }) {
         setAlerts((prev) => {
           const exists = prev.find((a) => a.id === newAlert.id);
           if (exists) return prev;
-          return [newAlert, ...prev];
+          return dedupeOfflineAlerts([newAlert, ...prev]);
         });
       } else {
         loadAlerts();
       }
+
+      playAlertSound();
 
       toast.dismiss(TOAST_ID);
       const autoNotice = getAutoHandledNotice(newAlert);
@@ -155,15 +184,17 @@ export function AlertProvider({ children }) {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-semibold text-gray-800">Peringatan baru</div>
-                <div className="text-xs text-gray-500 mt-1 truncate">{newAlert.message}</div>
+                <div className="text-xs text-gray-600 font-medium mt-1 truncate">
+                  {getAlertDisplayMessage(newAlert)}
+                </div>
                 {autoNotice && (
                   <div className="text-xs text-bl-primary mt-1 font-medium">{autoNotice}</div>
                 )}
-                <div className="text-xs text-gray-400 mt-0.5">{newAlert.screenhouse_name}</div>
+                <div className="text-xs text-gray-600 mt-0.5">{newAlert.screenhouse_name}</div>
               </div>
               <button
                 onClick={() => toast.dismiss(TOAST_ID)}
-                className="text-gray-300 hover:text-gray-500 text-lg leading-none shrink-0"
+                className="text-gray-500 hover:text-gray-700 text-lg leading-none shrink-0"
               >
                 ×
               </button>
@@ -193,21 +224,49 @@ export function AlertProvider({ children }) {
     };
   }, [loadAlerts]);
 
-  const resolveAlert = async (alertId) => {
+  const resolveAlert = async (alertId, resolveNote = null) => {
+    setResolvingAlertId(alertId);
     try {
-      await fetch(`${API_URL}/alerts/${alertId}/resolve`, {
+      const res = await fetch(`${API_URL}/alerts/${alertId}/resolve`, {
         method: "PATCH",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          resolve_note: resolveNote,
+        }),
       });
+      if (!res.ok) {
+        throw new Error("resolve failed");
+      }
+      const data = await res.json();
+      const resolved = data.alert ?? {};
       setAlerts((prev) =>
         prev.map((a) =>
           a.id === alertId
-            ? { ...a, status: "resolved", resolved_at: new Date().toISOString() }
+            ? {
+                ...a,
+                status: "resolved",
+                resolved_at: resolved.resolved_at ?? new Date().toISOString(),
+                resolve_note: resolved.resolve_note ?? resolveNote,
+              }
             : a
         )
       );
+      setAlertCounts((prev) =>
+        prev
+          ? {
+              active: Math.max(0, (prev.active ?? 0) - 1),
+              resolved: (prev.resolved ?? 0) + 1,
+              total: prev.total,
+            }
+          : prev
+      );
     } catch {
       toast.error("Gagal menandai peringatan sudah ditangani");
+    } finally {
+      setResolvingAlertId(null);
     }
   };
 
@@ -228,13 +287,14 @@ export function AlertProvider({ children }) {
   return (
     <AlertContext.Provider
       value={{
-        alerts,
+        alerts: normalizedAlerts,
         activeCount,
         unreadCount,
         unreadAlerts,
         resolvedCount,
         totalCount,
         alertsLoading,
+        resolvingAlertId,
         resolveAlert,
         markAutoHandledAlertsSeen,
         refetchAlerts: loadAlerts,
@@ -253,6 +313,7 @@ const defaultAlertsContext = {
   resolvedCount: 0,
   totalCount: 0,
   alertsLoading: false,
+  resolvingAlertId: null,
   resolveAlert: async () => {},
   markAutoHandledAlertsSeen: () => {},
   refetchAlerts: async () => {},

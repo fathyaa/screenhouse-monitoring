@@ -35,3 +35,5 @@ temp/
 
 # dokumentasi lokal (tidak di-push ke GitHub)
 docs/
+load-test
+load-tests/

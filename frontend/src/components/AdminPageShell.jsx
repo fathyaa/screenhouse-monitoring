@@ -17,11 +17,11 @@ export default function AdminPageShell({ title, subtitle, children }) {
               className="p-1.5 rounded-lg hover:bg-gray-100 transition shrink-0"
               aria-label="Toggle sidebar"
             >
-              <Menu size={20} className="text-gray-500" />
+              <Menu size={20} className="icon-muted" />
             </button>
             <div className="min-w-0">
               <div className="text-sm font-semibold text-gray-800 truncate">{title}</div>
-              {subtitle && <div className="text-xs text-gray-400 truncate">{subtitle}</div>}
+              {subtitle && <div className="text-xs text-gray-600 truncate">{subtitle}</div>}
             </div>
           </div>
         </header>

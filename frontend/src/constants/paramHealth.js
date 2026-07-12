@@ -32,7 +32,7 @@ export const STATUS_STYLE = {
   ideal: { label: "Pas", color: "#40916c", badge: "bg-bl-surface-muted text-bl-primary", track: "#74c69d" },
   low: { label: "Kurang", color: "#d97706", badge: "bg-amber-50 text-amber-700", track: "#fde68a" },
   high: { label: "Berlebih", color: "#dc2626", badge: "bg-red-50 text-red-700", track: "#fecaca" },
-  unknown: { label: "Belum ada", color: "#94a3b8", badge: "bg-slate-100 text-slate-500", track: "#e2e8f0" },
+  unknown: { label: "Belum ada", color: "#94a3b8", badge: "bg-slate-100 text-slate-600", track: "#e2e8f0" },
 };
 
 // Rekomendasi tindakan per (parameter, arah penyimpangan).
@@ -154,7 +154,7 @@ export function buildWorstCaseHealth(nodes, threshold, keys = HEALTH_PARAM_KEYS)
 export function getAdviceForAlert(alert) {
   const lower = alert?.message?.toLowerCase() ?? "";
   if (lower.includes("tidak mengirim data sensor")) {
-    return "Periksa daya ESP/node, jarak ke gateway, atau koneksi jaringan WSN.";
+    return "Periksa daya alat pengukur, jarak antar alat, atau koneksi internet di lokasi.";
   }
   const row = ALERT_PARAM_MAP.find((r) => lower.includes(r.match));
   if (!row) return null;

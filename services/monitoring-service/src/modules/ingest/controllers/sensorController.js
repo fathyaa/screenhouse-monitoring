@@ -1,5 +1,11 @@
 const pool = require("../../../config/db");
 const { HEALTH_STATUS_METRICS } = require("../../../shared/thresholdMetrics");
+const { computeScreenhouseStressScore } = require("../../../shared/stressScore");
+const { deriveScreenhouseStatus } = require("../../../shared/screenhouseStatus");
+const {
+  buildOfflineAlertMessage,
+  consolidateOfflineAlerts,
+} = require("../../../shared/offlineAlert");
 
 const SENSOR_DATA_JOIN = `
   FROM sensor_data sd
@@ -205,26 +211,20 @@ async function getMapSummary(req, res) {
         insight = lastSeen
           ? "Perangkat tidak mengirim data terbaru."
           : "Belum ada data sensor dari perangkat.";
-      } else if (activeAlerts >= 2) {
-        status = "critical";
-        insight = buildInsight(insightSource, threshold);
-      } else if (activeAlerts === 1) {
-        status = "warning";
-        insight =
-          abnormal.length > 0
-            ? buildInsight(insightSource, threshold)
-            : "Sensor sudah normal; masih ada 1 alert aktif.";
-      } else if (abnormal.length >= 2) {
-        status = "critical";
-        insight = buildInsight(insightSource, threshold);
-      } else if (abnormal.length > 0) {
-        status = "warning";
-        insight = buildInsight(insightSource, threshold);
       } else {
-        status = "healthy";
-        insight = threshold
-          ? "Kondisi screenhouse dalam batas normal."
-          : "Online, threshold belum diatur.";
+        status = deriveScreenhouseStatus({
+          abnormalCount: abnormal.length,
+          activeAlertCount: activeAlerts,
+        });
+        if (activeAlerts === 1 && abnormal.length === 0) {
+          insight = "Sensor sudah normal; masih ada 1 alert aktif.";
+        } else if (abnormal.length > 0) {
+          insight = buildInsight(insightSource, threshold);
+        } else {
+          insight = threshold
+            ? "Kondisi screenhouse dalam batas normal."
+            : "Online, threshold belum diatur.";
+        }
       }
 
       const nodeNames = [...new Set(nodeRows.map((n) => n.node_name).filter(Boolean))];
@@ -299,23 +299,90 @@ async function getLatestSensorData(req, res) {
 
 async function getLatestAllSensorData(req, res) {
   try {
+    const ownerUserId = req.user?.id;
+    if (!ownerUserId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
     const result = await pool.query(
       `
-        SELECT DISTINCT ON (sn.screenhouse_id)
-          sd.*,
-          sn.screenhouse_id,
-          sn.id AS sensor_node_id,
-          sn.node_code,
-          sn.node_name,
+        SELECT
+          pick.data_id AS id,
+          pick.nitrogen,
+          pick.phosphorus,
+          pick.potassium,
+          pick.soil_temperature,
+          pick.soil_moisture,
+          pick.soil_ph,
+          pick.conductivity,
+          pick.air_temperature,
+          pick.air_humidity,
+          pick.light_intensity,
+          pick.created_at,
+          sr.screenhouse_id,
+          pick.sensor_node_id,
+          pick.node_code,
+          pick.node_name,
           sk.id AS sink_node_id,
           sk.node_code AS sink_node_code,
           sk.fan_status,
           sk.irrigation_status,
-          sk.lamp_status
-        ${SENSOR_DATA_JOIN}
-        LEFT JOIN sink_nodes sk ON sk.screenhouse_id = sn.screenhouse_id AND sk.is_active = true
-        ORDER BY sn.screenhouse_id, sd.created_at DESC
-        `
+          sk.lamp_status,
+          ts.min_nitrogen,
+          ts.max_nitrogen,
+          ts.min_phosphorus,
+          ts.max_phosphorus,
+          ts.min_potassium,
+          ts.max_potassium,
+          ts.min_soil_moisture,
+          ts.max_soil_moisture,
+          ts.min_soil_temperature,
+          ts.max_soil_temperature,
+          ts.min_soil_ph,
+          ts.max_soil_ph,
+          ts.min_air_temperature,
+          ts.max_air_temperature,
+          ts.min_air_humidity,
+          ts.max_air_humidity
+        FROM screenhouse_registry sr
+        JOIN LATERAL (
+          SELECT
+            sd.id AS data_id,
+            sd.nitrogen,
+            sd.phosphorus,
+            sd.potassium,
+            sd.soil_temperature,
+            sd.soil_moisture,
+            sd.soil_ph,
+            sd.conductivity,
+            sd.air_temperature,
+            sd.air_humidity,
+            sd.light_intensity,
+            sd.created_at,
+            sn.id AS sensor_node_id,
+            sn.node_code,
+            sn.node_name
+          FROM sensor_nodes sn
+          LEFT JOIN LATERAL (
+            SELECT *
+            FROM sensor_data sd2
+            WHERE sd2.sensor_node_id = sn.id
+            ORDER BY sd2.created_at DESC
+            LIMIT 1
+          ) sd ON true
+          WHERE sn.screenhouse_id = sr.screenhouse_id
+            AND sn.is_active = true
+            AND sd.id IS NOT NULL
+          ORDER BY sd.created_at DESC NULLS LAST
+          LIMIT 1
+        ) pick ON true
+        LEFT JOIN sink_nodes sk
+          ON sk.screenhouse_id = sr.screenhouse_id AND sk.is_active = true
+        LEFT JOIN threshold_snapshots ts ON ts.screenhouse_id = sr.screenhouse_id
+        WHERE sr.owner_user_id = $1
+        ORDER BY sr.screenhouse_id
+        `,
+      [ownerUserId]
     );
 
     res.json(result.rows);
@@ -422,6 +489,58 @@ async function getSensorNodesByScreenhouse(req, res) {
   }
 }
 
+async function patchSensorNodeName(req, res) {
+  try {
+    const nodeId = Number(req.params.nodeId);
+    const nodeName =
+      typeof req.body?.node_name === "string" ? req.body.node_name.trim() : "";
+
+    if (!Number.isInteger(nodeId)) {
+      return res.status(400).json({ message: "ID tidak valid" });
+    }
+    if (nodeName.length < 1 || nodeName.length > 50) {
+      return res.status(400).json({ message: "Nama rak bibit harus 1–50 karakter" });
+    }
+
+    const userId = req.user?.id;
+    const role = req.user?.role;
+    if (!userId) {
+      return res.status(401).json({ message: "Token tidak valid" });
+    }
+
+    const isStaff = role === "operator" || role === "super_admin";
+
+    const result = await pool.query(
+      `
+      UPDATE sensor_nodes sn
+      SET node_name = $1
+      FROM screenhouse_registry sr
+      WHERE sn.id = $2
+        AND sn.screenhouse_id = sr.screenhouse_id
+        AND ($3::boolean OR sr.owner_user_id = $4)
+      RETURNING sn.id, sn.screenhouse_id, sn.node_code, sn.node_name, sn.location
+      `,
+      [nodeName, nodeId, isStaff, userId]
+    );
+
+    if (!result.rows[0]) {
+      return res.status(404).json({ message: "Rak bibit tidak ditemukan atau akses ditolak" });
+    }
+
+    const row = result.rows[0];
+    await consolidateOfflineAlerts(pool, {
+      screenhouseId: row.screenhouse_id,
+      sensorNodeId: row.id,
+      message: buildOfflineAlertMessage(nodeName),
+    });
+
+    res.json(row);
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
 async function getScreenhouseSensorHistory(req, res) {
   try {
     const { screenhouseId } = req.params;
@@ -455,6 +574,85 @@ async function getScreenhouseSensorHistory(req, res) {
     );
 
     res.json(result.rows);
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+function nodeIsOffline(node, now = Date.now()) {
+  if (node.is_active === false) return true;
+  const lastSeen = node.last_reading_at ?? node.created_at;
+  if (!lastSeen) return true;
+  const intervalSec = Math.max(Number(node.send_interval_seconds) || 60, 60);
+  const staleMs = Math.max(intervalSec * 3, 900) * 1000;
+  const ageMs = now - new Date(lastSeen).getTime();
+  return Number.isNaN(ageMs) || ageMs > staleMs;
+}
+
+async function getScreenhouseStressScore(req, res) {
+  try {
+    const { screenhouseId } = req.params;
+
+    const [nodeRes, thresholdRes] = await Promise.all([
+      pool.query(
+        `
+          SELECT
+            sn.id AS node_id,
+            sn.node_code,
+            sn.node_name,
+            sn.is_active,
+            sn.send_interval_seconds,
+            latest.nitrogen,
+            latest.phosphorus,
+            latest.potassium,
+            latest.soil_moisture,
+            latest.soil_temperature,
+            latest.soil_ph,
+            latest.created_at AS last_reading_at
+          FROM sensor_nodes sn
+          LEFT JOIN LATERAL (
+            SELECT ${LATEST_READING_COLUMNS}
+            FROM sensor_data sd
+            WHERE sd.sensor_node_id = sn.id
+            ORDER BY sd.created_at DESC
+            LIMIT 1
+          ) latest ON true
+          WHERE sn.screenhouse_id = $1
+          ORDER BY sn.id
+        `,
+        [screenhouseId]
+      ),
+      pool.query(`SELECT * FROM threshold_snapshots WHERE screenhouse_id = $1`, [
+        screenhouseId,
+      ]),
+    ]);
+
+    const threshold = thresholdRes.rows[0] ?? null;
+    const now = Date.now();
+    const nodeReadings = nodeRes.rows.map((row) => ({
+      node_id: row.node_id,
+      node_code: row.node_code,
+      node_name: row.node_name,
+      nitrogen: row.nitrogen,
+      phosphorus: row.phosphorus,
+      potassium: row.potassium,
+      soil_moisture: row.soil_moisture,
+      soil_temperature: row.soil_temperature,
+      soil_ph: row.soil_ph,
+      offline: nodeIsOffline(row, now),
+    }));
+
+    const offline = isScreenhouseOfflineFromNodes(
+      nodeRes.rows.map((r) => ({
+        ...r,
+        created_at: r.last_reading_at,
+      })),
+      now
+    );
+
+    const result = computeScreenhouseStressScore(nodeReadings, threshold, { offline });
+    res.json(result);
   } catch (err) {
     console.log(err);
     res.status(500).json({ message: "Internal server error" });
@@ -583,5 +781,7 @@ module.exports = {
   getSensorNodesByScreenhouse,
   getScreenhouseSensorHistory,
   getScreenhouseDashboardSummary,
+  getScreenhouseStressScore,
   getSinkNodeByScreenhouse,
+  patchSensorNodeName,
 };

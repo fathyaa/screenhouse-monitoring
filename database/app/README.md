@@ -41,3 +41,11 @@ npm run seed:map      # 30+ screenhouse demo di peta (App DB + Monitoring DB)
 ```
 
 Lihat [`database/scripts/README.md`](../scripts/README.md) dan [`database/README.md`](../README.md).
+
+## Migrasi (DB lama)
+
+Fresh install cukup `schema.sql` + `seed.sql`. Untuk DB yang sudah jalan:
+
+```bash
+psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/migrations.sql
+```

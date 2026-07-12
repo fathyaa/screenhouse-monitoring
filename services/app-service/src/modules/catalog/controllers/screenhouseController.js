@@ -5,7 +5,15 @@ const {
   parseTrayCount,
   activateScreenhouseRecord,
   postActivationProvisioning,
+  syncScreenhouseRegistryName,
 } = require("../../../shared/provisionScreenhouse");
+const {
+  resolveVarietasId,
+  upsertThresholdFromVarietas,
+  fetchVarietasById,
+} = require("../../../shared/varietasThreshold");
+const { publishEvent } = require("../../../shared/events/publisher");
+const { buildEstimasiTanam } = require("../../../shared/estimasiTanamService");
 
 async function activateScreenhouse(client, screenhouseId, trayCountOverride = null) {
   return activateScreenhouseRecord(client, screenhouseId, trayCountOverride);
@@ -118,6 +126,7 @@ async function getScreenhouses(req, res) {
         s.name,
         s.address_detail,
         u.name AS owner_name,
+        u.phone_number AS owner_phone,
 
         s.latitude,
         s.longitude,
@@ -176,6 +185,12 @@ async function getMyScreenhouses(
         s.status,
 
         s.address_detail,
+        s.seed_variety,
+        s.tanggal_semai,
+        s.seedling_start_date,
+        s.varietas_id,
+        vb.nama AS varietas_nama,
+        vb.durasi_pembibitan_hari,
 
         s.latitude,
         s.longitude,
@@ -198,6 +213,8 @@ async function getMyScreenhouses(
 
       JOIN villages v
       ON s.village_id = v.id
+
+      LEFT JOIN varietas_bibit vb ON vb.id = s.varietas_id
 
       WHERE s.owner_user_id = $1
 
@@ -269,6 +286,19 @@ async function getScreenhouseById(req, res) {
         s.latitude,
         s.longitude,
         s.status,
+        s.seed_variety,
+        s.seedling_start_date,
+        s.tanggal_semai,
+        s.estimasi_siap_tanam,
+        s.status_estimasi,
+        s.varietas_id,
+        vb.nama AS varietas_nama,
+        vb.sumber_referensi AS varietas_sumber,
+        vb.durasi_pembibitan_hari,
+        t.varietas_id AS threshold_varietas_id,
+        t.manual_override AS threshold_manual_override,
+        tb.nama AS threshold_varietas_nama,
+        tb.sumber_referensi AS threshold_varietas_sumber,
         u.name AS owner_name,
         u.phone_number AS owner_phone,
         p.name AS province,
@@ -280,6 +310,9 @@ async function getScreenhouseById(req, res) {
       JOIN regencies r ON s.regency_id = r.id
       JOIN districts d ON s.district_id = d.id
       JOIN villages v ON s.village_id = v.id
+      LEFT JOIN varietas_bibit vb ON s.varietas_id = vb.id
+      LEFT JOIN thresholds t ON t.screenhouse_id = s.id
+      LEFT JOIN varietas_bibit tb ON t.varietas_id = tb.id
       LEFT JOIN users u ON s.owner_user_id = u.id
       WHERE s.id = $1
       `,
@@ -388,7 +421,14 @@ async function submitMyScreenhouse(req, res) {
       latitude,
       longitude,
       tray_count,
+      varietas_id,
     } = req.body;
+
+    if (!varietas_id) {
+      return res.status(400).json({ message: "Varietas bibit wajib dipilih" });
+    }
+
+    const varietas = await resolveVarietasId(pool, varietas_id);
 
     const parsedTrayCount = parseTrayCount(tray_count, 1);
     if (parsedTrayCount == null) {
@@ -422,10 +462,12 @@ async function submitMyScreenhouse(req, res) {
         latitude,
         longitude,
         tray_count,
+        varietas_id,
+        seed_variety,
         status
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending')
-      RETURNING id, name, status, tray_count, created_at
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pending')
+      RETURNING id, name, status, tray_count, varietas_id, created_at
       `,
       [
         name.trim(),
@@ -438,6 +480,8 @@ async function submitMyScreenhouse(req, res) {
         Number(latitude),
         Number(longitude),
         parsedTrayCount,
+        varietas.id,
+        varietas.nama,
       ]
     );
 
@@ -446,6 +490,9 @@ async function submitMyScreenhouse(req, res) {
       screenhouse: result.rows[0],
     });
   } catch (err) {
+    if (err.status === 400) {
+      return res.status(400).json({ message: err.message });
+    }
     console.error("[submit-my-screenhouse]", err);
     res.status(500).json({ message: "Internal server error" });
   }
@@ -463,6 +510,10 @@ async function getPendingScreenhouses(req, res) {
         s.longitude,
         s.status,
         s.tray_count,
+        s.varietas_id,
+        vb.nama AS varietas_nama,
+        vb.durasi_pembibitan_hari,
+        vb.sumber_referensi,
         s.created_at,
         u.id AS owner_id,
         u.name AS owner_name,
@@ -477,6 +528,7 @@ async function getPendingScreenhouses(req, res) {
       JOIN regencies r ON s.regency_id = r.id
       JOIN districts d ON s.district_id = d.id
       JOIN villages v ON s.village_id = v.id
+      LEFT JOIN varietas_bibit vb ON s.varietas_id = vb.id
       WHERE s.status = 'pending' AND u.status = 'approved'
       ORDER BY s.created_at DESC
       `
@@ -513,11 +565,16 @@ async function approveScreenhouse(req, res) {
   try {
     const { id } = req.params;
     const trayOverride = req.body?.tray_count != null ? parseTrayCount(req.body.tray_count) : null;
+    const varietasOverride = req.body?.varietas_id != null ? Number(req.body.varietas_id) : null;
     if (req.body?.tray_count != null && trayOverride == null) {
       return res.status(400).json({ message: "Jumlah tray harus bilangan bulat antara 1 dan 20" });
     }
 
     await client.query("BEGIN");
+
+    if (varietasOverride != null) {
+      await resolveVarietasId(client, varietasOverride);
+    }
 
     const check = await client.query(
       `
@@ -541,6 +598,18 @@ async function approveScreenhouse(req, res) {
       });
     }
 
+    if (varietasOverride != null) {
+      await client.query(
+        `
+        UPDATE screenhouses
+        SET varietas_id = $1,
+            seed_variety = (SELECT nama FROM varietas_bibit WHERE id = $1)
+        WHERE id = $2
+        `,
+        [varietasOverride, id]
+      );
+    }
+
     const effectiveTray = trayOverride ?? check.rows[0].tray_count ?? 1;
     const activated = await activateScreenhouse(client, id, effectiveTray);
 
@@ -560,6 +629,9 @@ async function approveScreenhouse(req, res) {
     });
   } catch (err) {
     await client.query("ROLLBACK");
+    if (err.status === 400) {
+      return res.status(400).json({ message: err.message });
+    }
     console.error("[approve-screenhouse]", err);
     res.status(500).json({ message: "Internal server error" });
   } finally {
@@ -611,6 +683,136 @@ async function rejectScreenhouse(req, res) {
   }
 }
 
+async function patchScreenhouseProfile(req, res) {
+  const { seed_variety, seedling_start_date, varietas_id, name } = req.body ?? {};
+
+  if (
+    varietas_id !== undefined ||
+    seed_variety !== undefined ||
+    seedling_start_date !== undefined
+  ) {
+    return res.status(400).json({
+      message:
+        "Varietas dan tanggal semai tidak bisa diedit langsung. Gunakan Mulai Siklus Baru atau Akhiri Siklus di halaman screenhouse.",
+    });
+  }
+
+  if (name === undefined) {
+    return res.status(400).json({ message: "Tidak ada data untuk diperbarui" });
+  }
+
+  const trimmedName = String(name).trim();
+  if (trimmedName.length < 2 || trimmedName.length > 100) {
+    return res.status(400).json({ message: "Nama screenhouse harus 2–100 karakter" });
+  }
+
+  try {
+    const screenhouseId = Number(req.params.id);
+    if (!Number.isInteger(screenhouseId)) {
+      return res.status(400).json({ message: "ID tidak valid" });
+    }
+
+    const existing = await pool.query(`SELECT * FROM screenhouses WHERE id = $1`, [screenhouseId]);
+    const screenhouse = existing.rows[0];
+    if (!screenhouse) {
+      return res.status(404).json({ message: "Screenhouse tidak ditemukan" });
+    }
+
+    if (req.user.role === "petani") {
+      if (screenhouse.owner_user_id !== req.user.id) {
+        return res.status(403).json({ message: "Akses ditolak" });
+      }
+    } else if (!["operator", "super_admin"].includes(req.user.role)) {
+      return res.status(403).json({ message: "Akses ditolak" });
+    }
+
+    const result = await pool.query(
+      `UPDATE screenhouses SET name = $1 WHERE id = $2 RETURNING *`,
+      [trimmedName, screenhouseId]
+    );
+
+    const updated = result.rows[0];
+    if (updated.status === "active") {
+      await syncScreenhouseRegistryName(updated);
+    }
+
+    res.json(updated);
+  } catch (err) {
+    console.error("[patch-screenhouse-profile]", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+async function getScreenhouseEstimasiTanam(req, res) {
+  try {
+    const { id } = req.params;
+
+    const ownerCheck = await pool.query(
+      `SELECT id, status FROM screenhouses WHERE id = $1`,
+      [id]
+    );
+    const row = ownerCheck.rows[0];
+    if (!row) {
+      return res.status(404).json({ message: "Screenhouse tidak ditemukan" });
+    }
+
+    if (req.user.role === "petani") {
+      const allowed = await pool.query(
+        `SELECT 1 FROM screenhouses WHERE id = $1 AND owner_user_id = $2`,
+        [id, req.user.id]
+      );
+      if (!allowed.rows[0]) {
+        return res.status(403).json({ message: "Akses ditolak" });
+      }
+    }
+
+    const data = await buildEstimasiTanam(id, { persist: true });
+    if (!data) {
+      return res.status(404).json({ message: "Screenhouse tidak ditemukan" });
+    }
+
+    res.json(data);
+  } catch (err) {
+    console.error("[estimasi-tanam]", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+async function getScreenhouseStressScore(req, res) {
+  try {
+    const { id } = req.params;
+
+    const ownerCheck = await pool.query(
+      `SELECT id, status FROM screenhouses WHERE id = $1`,
+      [id]
+    );
+    const row = ownerCheck.rows[0];
+    if (!row) {
+      return res.status(404).json({ message: "Screenhouse tidak ditemukan" });
+    }
+
+    if (req.user.role === "petani") {
+      const allowed = await pool.query(
+        `SELECT 1 FROM screenhouses WHERE id = $1 AND owner_user_id = $2`,
+        [id, req.user.id]
+      );
+      if (!allowed.rows[0]) {
+        return res.status(403).json({ message: "Akses ditolak" });
+      }
+    }
+
+    const data = await monitoringGet(`/sensor-data/screenhouse/${id}/stress-score`);
+    if (!data) {
+      return res.status(503).json({ message: "Layanan monitoring tidak tersedia" });
+    }
+
+    res.json(data);
+  } catch (err) {
+    console.error("[stress-score]", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
 module.exports = {
   createScreenhouse,
   getScreenhouses,
@@ -618,6 +820,9 @@ module.exports = {
   getOperatorStats,
   getMyDashboardStats,
   getScreenhouseById,
+  getScreenhouseEstimasiTanam,
+  getScreenhouseStressScore,
+  patchScreenhouseProfile,
   submitMyScreenhouse,
   getPendingScreenhouses,
   getPendingScreenhouseStats,

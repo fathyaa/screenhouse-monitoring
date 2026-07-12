@@ -1,25 +1,27 @@
-let audio = null;
-let unlocked = false;
+const SOUND_URL = "/sounds/notification.mp3";
 
-function getAudio() {
-  if (!audio) {
-    audio = new Audio("/sounds/notification.mp3");
-    audio.volume = 0.7;
-  }
-  return audio;
-}
+let unlocked = false;
 
 /** Unlock audio playback — browser requires a prior user gesture. */
 export async function unlockAlertSound() {
   if (unlocked) return true;
-  const a = getAudio();
+
   try {
-    const prevVolume = a.volume;
-    a.volume = 0;
-    await a.play();
-    a.pause();
-    a.currentTime = 0;
-    a.volume = prevVolume;
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (Ctx) {
+      const ctx = new Ctx();
+      await ctx.resume();
+      await ctx.close();
+    }
+
+    // Beberapa browser tetap butuh HTMLAudioElement — muted, tidak disimpan.
+    const probe = new Audio(SOUND_URL);
+    probe.muted = true;
+    probe.volume = 0;
+    await probe.play();
+    probe.pause();
+    probe.src = "";
+
     unlocked = true;
     return true;
   } catch {
@@ -29,29 +31,28 @@ export async function unlockAlertSound() {
 
 export function playAlertSound() {
   if (!unlocked) return;
-  const a = getAudio();
-  a.currentTime = 0;
+
+  // Instance baru tiap alert — hindari tombol media laptop (F8/play) memutar ulang.
+  const a = new Audio(SOUND_URL);
+  a.volume = 0.7;
   a.play().catch(() => {});
 }
 
-/** Listen for first click/tap/key — then remove listeners. */
+/** Listen for first click/tap — then remove listeners. */
 export function installAlertSoundUnlock() {
   const tryUnlock = () => {
     unlockAlertSound().then((ok) => {
       if (!ok) return;
       document.removeEventListener("click", tryUnlock);
-      document.removeEventListener("keydown", tryUnlock);
       document.removeEventListener("touchstart", tryUnlock);
     });
   };
 
   document.addEventListener("click", tryUnlock, { passive: true });
-  document.addEventListener("keydown", tryUnlock, { passive: true });
   document.addEventListener("touchstart", tryUnlock, { passive: true });
 
   return () => {
     document.removeEventListener("click", tryUnlock);
-    document.removeEventListener("keydown", tryUnlock);
     document.removeEventListener("touchstart", tryUnlock);
   };
 }

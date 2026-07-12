@@ -24,10 +24,10 @@ export const SCREENHOUSE_STATUS = {
   },
   offline: {
     key: "offline",
-    label: "Offline",
+    label: "Tidak terhubung",
     color: "#94a3b8",
     dotClass: "bg-slate-400",
-    badgeClass: "bg-slate-100 text-slate-500",
+    badgeClass: "bg-slate-100 text-slate-600",
   },
 };
 
@@ -35,6 +35,16 @@ export const STATUS_ORDER = ["healthy", "warning", "critical", "offline"];
 
 export function getStatusMeta(status) {
   return SCREENHOUSE_STATUS[status] ?? SCREENHOUSE_STATUS.offline;
+}
+
+/** Selaras map-summary: 1 masalah → peringatan, 2+ → kritis. */
+export function deriveScreenhouseStatus({
+  abnormalCount = 0,
+  activeAlertCount = 0,
+} = {}) {
+  if (activeAlertCount >= 2 || abnormalCount >= 2) return "critical";
+  if (activeAlertCount >= 1 || abnormalCount >= 1) return "warning";
+  return "healthy";
 }
 
 // "Update 2 menit lalu" / "Offline 3 jam" style relative time, in Bahasa Indonesia.
@@ -54,6 +64,29 @@ export function timeAgo(dateStr) {
 
   const day = Math.floor(hour / 24);
   return `${day} hari lalu`;
+}
+
+/** Versi relatif untuk label "Terakhir diperbarui 2 menit yang lalu". */
+export function timeAgoLong(dateStr) {
+  const base = timeAgo(dateStr);
+  if (base === "baru saja" || base === "belum ada data") return base;
+  return base.replace(/(\d+) (menit|jam|hari) lalu/, "$1 $2 yang lalu");
+}
+
+/** Label mikro last-updated sensor — jam WIB + relatif untuk bukti monitoring realtime. */
+export function formatLastSensorUpdate(dateStr) {
+  if (!dateStr) return "Belum ada data sensor";
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "Belum ada data sensor";
+
+  const clock = d.toLocaleTimeString("id-ID", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Jakarta",
+  });
+  const relative = timeAgoLong(dateStr);
+
+  return `Terakhir diperbarui ${relative}, pukul ${clock} WIB`;
 }
 
 /** Waktu snapshot untuk label "terakhir diperbarui 16 Jun, 22.15" */

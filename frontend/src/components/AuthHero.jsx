@@ -11,9 +11,9 @@ export default function AuthHero({
   return (
     <div className="hidden lg:flex flex-1 relative overflow-hidden">
       <img
-        src="https://images.unsplash.com/photo-1625246333195-78d9c38ad449?q=80&w=1974&auto=format&fit=crop"
-        alt="Sawah"
-        className="absolute inset-0 w-full h-full object-cover"
+        src="/auth-pembibitan.jpg"
+        alt="Bibit padi hijau di Kon Tum, Vietnam — Photo by Thái Trường Giang / Pexels"
+        className="absolute inset-0 w-full h-full object-cover object-center"
       />
       <div className="absolute inset-0 bg-gradient-to-r from-bl-forest/85 via-bl-forest/50 to-bl-dark/15" />
       <div className="absolute inset-0 bg-gradient-to-t from-bl-dark/80 via-transparent to-transparent" />
@@ -26,7 +26,7 @@ export default function AuthHero({
         />
         <div>
           <div className="text-xl font-bold text-white">BibitLive</div>
-          <div className="text-sm text-bl-mint">Pantau bibit, langsung live</div>
+          <div className="text-sm text-bl-mint">Pantau bibit langsung</div>
         </div>
       </div>
 

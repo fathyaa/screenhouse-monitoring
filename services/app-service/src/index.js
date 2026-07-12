@@ -15,6 +15,7 @@ const adminScreenhouseRoutes = require("./modules/catalog/routes/adminRoutes");
 const authMiddleware = require("./shared/middlewares/authMiddleware");
 const roleMiddleware = require("./shared/middlewares/roleMiddleware");
 const { setScreenhouseActuators } = require("./modules/catalog/controllers/actuatorController");
+const { patchSensorNodeName } = require("./modules/catalog/controllers/sensorNodeController");
 const pushRoutes = require("./modules/push/routes/pushRoutes");
 const { connectRedis, subscriber } = require("./config/redis");
 const { startPushWorker } = require("./modules/push/pushWorker");
@@ -54,7 +55,9 @@ app.use("/auth", authRoutes);
 app.use("/admin", adminUserRoutes);
 app.use("/admin", adminScreenhouseRoutes);
 app.use("/screenhouses", screenhouseRoutes);
+app.use("/varietas-bibit", require("./modules/catalog/routes/varietasRoutes"));
 app.use("/wilayah", wilayahRoutes);
+app.use("/laporan", require("./modules/catalog/routes/laporanRoutes"));
 app.use("/thresholds", thresholdRoutes);
 app.use("/push", pushRoutes);
 
@@ -63,6 +66,13 @@ app.post(
   authMiddleware,
   roleMiddleware(["petani"]),
   setScreenhouseActuators
+);
+
+app.patch(
+  "/sensor-data/sensor-nodes/:nodeId",
+  authMiddleware,
+  roleMiddleware(["petani", "operator", "super_admin"]),
+  patchSensorNodeName
 );
 
 /* Proxy monitoring domain */

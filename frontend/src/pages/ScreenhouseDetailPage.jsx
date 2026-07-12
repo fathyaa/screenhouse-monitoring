@@ -19,7 +19,6 @@ import {
   Legend,
   Line,
   LineChart,
-  ReferenceArea,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -28,29 +27,54 @@ import {
 import Sidebar from "../layouts/Sidebar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import ParamHealthCards from "../components/ParamHealthCards";
+import EstimasiTanamPanel from "../components/EstimasiTanamPanel";
+import { StressScoreNodeGauge } from "../components/StressScoreDisplay";
+import { ScreenhouseDetailSkeleton } from "../components/LoadingUI";
 import ActuatorControls from "../components/ActuatorControls";
+import {
+  SemaiCycleEndButton,
+  SemaiCycleStartButton,
+  SemaiCycleEndConfirmModal,
+  SemaiCycleStartModal,
+} from "../components/siklus/SemaiCycleModals";
+import { useSemaiCycle } from "../components/siklus/useSemaiCycle";
+import { useAlerts } from "../context/AlertContext";
 import {
   evaluateParam,
   buildHealthList,
   buildWorstCaseHealth,
   STATUS_STYLE,
 } from "../constants/paramHealth";
+import { getThresholdHint } from "../constants/varietasThresholdHints";
 import { EMPTY_VALUE } from "../constants/sensorMetrics";
 
 import { API_URL } from "../config/api";
-import socket from "../lib/socket";
+import { getSocket } from "../lib/socket";
 import {
   isNodeOnline,
   isScreenhouseMonitorOffline,
 } from "../utils/nodeOnline";
-import { getStatusMeta, timeAgo, formatSnapshotTime } from "../constants/screenhouseStatus";
+import {
+  deriveScreenhouseStatus,
+  getStatusMeta,
+  timeAgo,
+  formatSnapshotTime,
+  formatLastSensorUpdate,
+} from "../constants/screenhouseStatus";
+import RackNameEditor from "../components/RackNameEditor";
+import ScreenhouseNameEditor from "../components/ScreenhouseNameEditor";
+import { FARMER_LABELS } from "../constants/farmerLabels";
+import { formatRackName } from "../utils/rackNames";
 import {
   SCREENHOUSE_CHART_GUIDE,
-  CHART_LEGEND,
   ChartTooltip,
   ChartGuideToggle,
   getPkChartYDomain,
+  getNMoistureChartYDomains,
   PkThresholdBands,
+  NMoistureThresholdBands,
+  PkChartLegendContent,
+  NMoistureChartLegendContent,
 } from "../constants/chartGuide";
 
 const PARAM_GROUPS = [
@@ -75,8 +99,14 @@ const PARAM_GROUPS = [
     params: [
       { key: "air_temperature", label: "Suhu udara", unit: "°C" },
       { key: "air_humidity", label: "Kelembaban udara", unit: "%" },
-      { key: "conductivity", label: "Konduktivitas", unit: "µS/cm" },
     ],
+  },
+];
+
+const PARAM_GROUPS_TECH = [
+  {
+    label: "Kondisi lingkungan (teknis)",
+    params: [{ key: "conductivity", label: "Konduktivitas", unit: "µS/cm" }],
   },
 ];
 
@@ -86,7 +116,7 @@ function formatParamValue(value) {
   return Number.isFinite(n) ? n.toFixed(1) : String(value);
 }
 
-function NodeCard({ node, threshold }) {
+function NodeCard({ node, threshold, isPetani = false, canRename = false, onRenamed, nodeStressScore = null }) {
   const d = node.latest_data;
   const online = isNodeOnline(node);
   const lastSeen = node.last_seen ?? d?.created_at;
@@ -98,44 +128,50 @@ function NodeCard({ node, threshold }) {
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden text-left">
-      <div className="px-4 py-3 border-b border-gray-100 flex items-start justify-between gap-2">
-        <div className="text-left min-w-0">
-          <div className="text-sm font-semibold text-gray-800">
-            {node.node_name}
-          </div>
-          <div className="text-xs text-gray-400 mt-0.5">
-            {node.node_code} · {node.location || "Tidak ada lokasi"}
-          </div>
-        </div>
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          {online ? (
-            <span className="px-2 py-0.5 rounded-full bg-bl-surface-muted text-bl-primary text-xs font-medium">
-              Online
-            </span>
-          ) : (
-            <span className="px-2 py-0.5 rounded-full bg-red-50 text-red-700 text-xs font-medium">
-              Offline
-            </span>
+      <div className="px-4 py-3 border-b border-gray-100 flex items-start justify-between gap-3">
+        <div className="text-left min-w-0 flex-1">
+          <RackNameEditor node={node} canEdit={canRename} onRenamed={onRenamed} />
+          {node.location && (
+            <div className="text-xs text-gray-600 mt-0.5">{node.location}</div>
           )}
-          {online &&
-            (flaggedCount > 0 ? (
-              <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-medium">
-                {flaggedCount} perlu perhatian
+          <div className="flex flex-wrap items-center gap-1.5 mt-2">
+            {online ? (
+              <span className="px-2 py-0.5 rounded-full bg-bl-surface-muted text-bl-primary text-xs font-medium">
+                {FARMER_LABELS.connected}
               </span>
             ) : (
-              <span className="px-2 py-0.5 rounded-full bg-bl-surface-muted text-bl-primary text-[10px] font-medium">
-                Semua pas
+              <span className="px-2 py-0.5 rounded-full bg-red-50 text-red-700 text-xs font-medium">
+                {FARMER_LABELS.notConnected}
               </span>
-            ))}
+            )}
+            {online &&
+              (flaggedCount > 0 ? (
+                <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-medium">
+                  {flaggedCount} perlu perhatian
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full bg-bl-surface-muted text-bl-primary text-[10px] font-medium">
+                  Semua pas
+                </span>
+              ))}
+          </div>
         </div>
+        {nodeStressScore && online && (
+          <div className="shrink-0">
+            <StressScoreNodeGauge
+              scoreData={nodeStressScore}
+              nodeName={formatRackName(node.node_name)}
+            />
+          </div>
+        )}
       </div>
 
       {!online ? (
-        <div className="flex flex-col items-start px-4 py-10 text-gray-400 text-left">
-          <WifiOff size={28} className="mb-2 text-gray-300" />
-          <div className="text-sm">Node tidak merespons</div>
+        <div className="flex flex-col items-start px-4 py-10 text-gray-600 text-left">
+          <WifiOff size={28} className="mb-2 text-gray-500" />
+          <div className="text-sm">Alat pengukur tidak merespons</div>
           {lastSeen && (
-            <div className="text-xs mt-1 text-gray-300">
+            <div className="text-xs mt-1 text-gray-600 font-medium">
               Terakhir terlihat {timeAgo(lastSeen)}
             </div>
           )}
@@ -145,7 +181,7 @@ function NodeCard({ node, threshold }) {
           <details className="group rounded-xl border border-gray-100 overflow-hidden">
             <summary className="flex items-center justify-between gap-2 px-3 py-2 cursor-pointer list-none text-xs font-medium text-gray-600 hover:bg-gray-50">
               <span className="flex items-center gap-2">
-                Data sensor mentah
+                {FARMER_LABELS.rawSensorData}
                 {flaggedCount > 0 && (
                   <span className="px-1.5 py-0 rounded-full bg-amber-50 text-amber-700 text-[10px] font-semibold">
                     {flaggedCount}
@@ -154,14 +190,14 @@ function NodeCard({ node, threshold }) {
               </span>
               <ChevronDown
                 size={14}
-                className="text-gray-400 transition-transform group-open:rotate-180"
+                className="text-gray-600 transition-transform group-open:rotate-180"
               />
             </summary>
 
             <div className="px-3 pb-3 pt-1 space-y-3">
               {PARAM_GROUPS.map((group) => (
                 <div key={group.label} className="text-left">
-                  <div className="text-[10px] uppercase tracking-wide text-gray-400 mb-1.5">
+                  <div className="text-[10px] uppercase tracking-wide text-gray-600 mb-1.5">
                     {group.label}
                   </div>
                   <div className="grid grid-cols-3 gap-1.5">
@@ -172,7 +208,7 @@ function NodeCard({ node, threshold }) {
                       return (
                         <div key={key} className="bg-gray-50 rounded-xl p-2.5 text-left">
                           <div className="flex items-center justify-between gap-1">
-                            <span className="text-[10px] uppercase tracking-wide text-gray-400 truncate">
+                            <span className="text-[10px] uppercase tracking-wide text-gray-600 truncate">
                               {label}
                             </span>
                             {flagged && (
@@ -188,7 +224,7 @@ function NodeCard({ node, threshold }) {
                           >
                             {formatParamValue(d[key])}
                           </div>
-                          <div className="text-[10px] text-gray-400">
+                          <div className="text-[11px] text-gray-600 font-medium">
                             {flagged ? style.label : unit}
                           </div>
                         </div>
@@ -198,18 +234,58 @@ function NodeCard({ node, threshold }) {
                 </div>
               ))}
 
+              {!isPetani &&
+                PARAM_GROUPS_TECH.map((group) => (
+                  <div key={group.label} className="text-left">
+                    <div className="text-[10px] uppercase tracking-wide text-gray-600 mb-1.5">
+                      {group.label}
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {group.params.map(({ key, label, unit }) => {
+                        const ev = evaluateParam(key, d[key], threshold);
+                        const flagged = ev.status === "low" || ev.status === "high";
+                        const style = STATUS_STYLE[ev.status];
+                        return (
+                          <div key={key} className="bg-gray-50 rounded-xl p-2.5 text-left">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="text-[10px] uppercase tracking-wide text-gray-600 truncate">
+                                {label}
+                              </span>
+                              {flagged && (
+                                <span
+                                  className="w-1.5 h-1.5 rounded-full shrink-0"
+                                  style={{ backgroundColor: style.color }}
+                                />
+                              )}
+                            </div>
+                            <div
+                              className="text-sm font-semibold mt-1 leading-tight"
+                              style={{ color: flagged ? style.color : "#1f2937" }}
+                            >
+                              {formatParamValue(d[key])}
+                            </div>
+                            <div className="text-[11px] text-gray-600 font-medium">
+                              {flagged ? style.label : unit}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+
               <div>
-                <div className="text-[10px] uppercase tracking-wide text-gray-400 mb-1.5">
+                <div className="text-[10px] uppercase tracking-wide text-gray-600 mb-1.5">
                   Cahaya
                 </div>
                 <div className="bg-gray-50 rounded-xl p-2.5 text-left">
-                  <div className="text-[10px] uppercase tracking-wide text-gray-400">
+                  <div className="text-[10px] uppercase tracking-wide text-gray-600">
                     Intensitas cahaya
                   </div>
                   <div className="text-sm font-semibold text-gray-800 mt-1">
                     {d.light_intensity != null ? Number(d.light_intensity).toFixed(0) : EMPTY_VALUE}
                   </div>
-                  <div className="text-[10px] text-gray-400">lux</div>
+                  <div className="text-[11px] text-gray-600 font-medium">lux</div>
                 </div>
               </div>
             </div>
@@ -218,11 +294,18 @@ function NodeCard({ node, threshold }) {
       )}
 
       <div className="px-4 py-2 border-t border-gray-100 flex justify-start text-left">
-        <div className="flex items-center gap-1 text-xs text-gray-400 text-left">
-          <Clock size={11} />
-          {d?.created_at
-            ? `Update ${new Date(d.created_at).toLocaleTimeString("id-ID")}`
-            : "Tidak ada data"}
+        <div
+          className="flex items-center gap-1 text-[11px] text-gray-600 text-left"
+          title={
+            d?.created_at
+              ? new Date(d.created_at).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })
+              : undefined
+          }
+        >
+          <Clock size={11} className="shrink-0" />
+          <span>
+            {d?.created_at ? formatLastSensorUpdate(d.created_at) : "Belum ada data sensor"}
+          </span>
         </div>
       </div>
     </div>
@@ -238,6 +321,8 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
   const [screenhouse, setScreenhouse] = useState(null);
   const [nodes, setNodes] = useState([]);
   const [dashboard, setDashboard] = useState(null);
+  const [stressScore, setStressScore] = useState(null);
+  const [estimasiTanam, setEstimasiTanam] = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [screenhouses, setScreenhouses] = useState([]);
@@ -246,6 +331,15 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const token = localStorage.getItem("token");
   const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
+  const { alerts } = useAlerts();
+
+  const screenhouseAutoAlerts = useMemo(
+    () =>
+      alerts.filter(
+        (a) => a.status === "active" && Number(a.screenhouse_id) === Number(id)
+      ),
+    [alerts, id]
+  );
 
   useEffect(() => {
     const listUrl =
@@ -273,8 +367,14 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
       fetch(`${API_URL}/sensor-data/screenhouse/${id}/history?hours=24`, {
         headers,
       }).then((r) => r.json()),
+      fetch(`${API_URL}/screenhouses/${id}/stress-score`, { headers }).then((r) =>
+        r.ok ? r.json() : null
+      ),
+      fetch(`${API_URL}/screenhouses/${id}/estimasi-tanam`, { headers }).then((r) =>
+        r.ok ? r.json() : null
+      ),
     ])
-      .then(([sh, nodesData, dash, hist]) => {
+      .then(([sh, nodesData, dash, hist, stress, estimasi]) => {
         if (sh.message && !sh.id) {
           setScreenhouse(null);
         } else {
@@ -283,6 +383,8 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
         setNodes(Array.isArray(nodesData) ? nodesData : []);
         setDashboard(dash);
         setHistory(Array.isArray(hist) ? hist : []);
+        setStressScore(stress);
+        setEstimasiTanam(estimasi);
       })
       .catch(console.error);
   }, [id, token, headers]);
@@ -378,6 +480,9 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
         };
       });
     };
+    const socket = getSocket();
+    if (!socket) return;
+
     socket.on("actuator-update", handler);
     socket.on("sensor-update", handler);
     return () => {
@@ -461,6 +566,17 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
   }, [dashboard]);
 
   const threshold = dashboard?.threshold;
+  const nMoistureDomains = useMemo(
+    () => getNMoistureChartYDomains(trendChartData, threshold),
+    [trendChartData, threshold]
+  );
+  const varietasName =
+    screenhouse?.varietas_nama || screenhouse?.threshold_varietas_nama || null;
+
+  const thresholdHintFn = useCallback(
+    (key, min, max) => getThresholdHint(key, varietasName, min, max),
+    [varietasName]
+  );
 
   const onlineNodes = useMemo(
     () => nodes.filter((n) => isNodeOnline(n, onlineTick)),
@@ -495,16 +611,24 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
     [healthSourceNodes, threshold]
   );
 
+  const nodeScoreById = useMemo(() => {
+    const map = {};
+    (stressScore?.nodes ?? []).forEach((n) => {
+      if (n.node_id != null) map[n.node_id] = n;
+    });
+    return map;
+  }, [stressScore]);
+
   const flaggedRollup = rollupHealth.filter(
     (h) => h.status === "low" || h.status === "high"
   );
-  const rollupStatus = rollupHealth.length === 0
-    ? "none"
-    : flaggedRollup.some((h) => h.status === "high")
-    ? "critical"
-    : flaggedRollup.length > 0
-    ? "warning"
-    : "healthy";
+  const rollupStatus =
+    rollupHealth.length === 0 && screenhouseAutoAlerts.length === 0
+      ? "none"
+      : deriveScreenhouseStatus({
+          abnormalCount: flaggedRollup.length,
+          activeAlertCount: screenhouseAutoAlerts.length,
+        });
 
   const monitorStatus = screenhouseOffline ? "offline" : rollupStatus;
   const monitorMeta = getStatusMeta(
@@ -514,14 +638,77 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
 
   const displayInsight = screenhouseOffline
     ? latestLastSeen
-      ? `Perangkat tidak mengirim data terbaru · terakhir ${timeAgo(latestLastSeen)}`
-      : "Belum ada data sensor dari perangkat."
+      ? `Alat pengukur tidak mengirim data terbaru, terakhir ${timeAgo(latestLastSeen)}`
+      : "Belum ada data dari alat pengukur."
     : dashboard?.insight;
+
+  const displayInsightTone =
+    rollupStatus === "critical"
+      ? "text-red-800"
+      : rollupStatus === "warning"
+      ? "text-amber-800"
+      : rollupStatus === "healthy"
+      ? "text-gray-600"
+      : displayInsight?.includes("perlu tindakan segera") ||
+        displayInsight?.includes("periksa kondisi")
+      ? "text-amber-800"
+      : "text-gray-600";
+
+  const handleCycleChanged = () => {
+    loadScreenhouseData();
+  };
+
+  const canRenameRack =
+    user?.role === "petani" || user?.role === "operator" || user?.role === "super_admin";
+
+  const handleNodeRenamed = useCallback((updated) => {
+    setNodes((prev) =>
+      prev.map((node) =>
+        node.id === updated.id ? { ...node, node_name: updated.node_name } : node
+      )
+    );
+  }, []);
+
+  const canEditScreenhouseName =
+    Boolean(screenhouse) &&
+    (user?.role === "operator" || user?.role === "super_admin" || isPetani);
+
+  const handleScreenhouseRenamed = useCallback((updated) => {
+    setScreenhouse((prev) => (prev ? { ...prev, name: updated.name } : prev));
+    setScreenhouses((prev) =>
+      prev.map((sh) => (Number(sh.id) === Number(updated.id) ? { ...sh, name: updated.name } : sh))
+    );
+  }, []);
+
+  const semaiCycle = useSemaiCycle(isPetani ? Number(id) : null, token, handleCycleChanged);
 
   if (loading) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-bl-surface text-left">
-        <div className="text-sm text-gray-500 px-5">Memuat dashboard screenhouse...</div>
+      <div className="app-shell fixed inset-0 flex bg-bl-surface overflow-hidden">
+        <Sidebar
+          isOpen={sidebarOpen}
+          onClose={closeSidebar}
+          screenhouses={screenhouses}
+          role={user.role}
+          user={user}
+        />
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0 text-left">
+          <header className="app-topbar h-14 shrink-0 bg-white border-b border-gray-200 flex items-center gap-3 px-3 z-10">
+            <button
+              onClick={toggleSidebar}
+              className="p-1.5 rounded-lg hover:bg-gray-100 transition shrink-0"
+              aria-label="Toggle sidebar"
+            >
+              <Menu size={20} className="icon-muted" />
+            </button>
+            <div className="min-w-0 text-left">
+              <div className="text-sm font-semibold text-gray-600">Memuat screenhouse...</div>
+            </div>
+          </header>
+          <div className="flex-1 overflow-y-auto">
+            <ScreenhouseDetailSkeleton />
+          </div>
+        </div>
       </div>
     );
   }
@@ -558,20 +745,24 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
               className="p-1.5 rounded-lg hover:bg-gray-100 transition shrink-0"
               aria-label="Toggle sidebar"
             >
-              <Menu size={20} className="text-gray-500" />
+              <Menu size={20} className="icon-muted" />
             </button>
             <button
               onClick={() => navigate(basePath)}
               className="p-1.5 rounded-lg hover:bg-gray-100 transition shrink-0"
               aria-label="Kembali"
             >
-              <ArrowLeft size={20} className="text-gray-500" />
+              <ArrowLeft size={20} className="icon-muted" />
             </button>
             <div className="min-w-0 text-left">
-              <div className="text-sm font-semibold text-gray-800 truncate">
-                {screenhouse.name}
-              </div>
-              <div className="text-xs text-gray-400 truncate">
+              <ScreenhouseNameEditor
+                screenhouseId={screenhouse.id}
+                name={screenhouse.name}
+                canEdit={canEditScreenhouseName}
+                onRenamed={handleScreenhouseRenamed}
+                className="text-sm font-semibold text-gray-800 truncate"
+              />
+              <div className="text-xs text-gray-600 truncate">
                 Detail sensor realtime
               </div>
             </div>
@@ -583,13 +774,17 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
           </span>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-4 text-left">
+        <div className="flex-1 overflow-y-auto p-5 space-y-6 text-left">
           {/* Info bar */}
           <div className="bg-white rounded-2xl border border-gray-200 p-5 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 text-left">
             <div className="text-left min-w-0">
-              <div className="text-base sm:text-lg font-semibold text-gray-800">
-                {screenhouse.name}
-              </div>
+              <ScreenhouseNameEditor
+                screenhouseId={screenhouse.id}
+                name={screenhouse.name}
+                canEdit={canEditScreenhouseName}
+                onRenamed={handleScreenhouseRenamed}
+                className="text-base sm:text-lg font-semibold text-gray-800"
+              />
               <div className="flex items-center gap-4 mt-2 flex-wrap">
                 {screenhouse.owner_name && (
                   <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -605,23 +800,25 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
                 </div>
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <Cpu size={16} />
-                  {nodes.length} tray sensor
+                  {nodes.length} {FARMER_LABELS.traySensors}
                 </div>
               </div>
-              {displayInsight && (
+              {!screenhouseOffline && displayInsight && (
                 <p
-                  className={`text-sm mt-2 font-semibold text-left leading-relaxed ${
-                    screenhouseOffline ? "text-red-700" : "text-bl-primary"
-                  }`}
+                  className={`text-sm mt-2 font-semibold text-left leading-relaxed ${displayInsightTone}`}
                 >
                   {displayInsight}
                 </p>
               )}
             </div>
             <div className="flex gap-2 flex-wrap justify-start">
-              <span className="px-3 py-1.5 rounded-full bg-bl-surface-muted text-bl-primary text-sm font-semibold">
-                {screenhouse.status === "active" ? "Aktif" : screenhouse.status}
-              </span>
+              {screenhouse.status !== "active" && (
+                <span className="px-3 py-1.5 rounded-full bg-amber-50 text-amber-800 text-sm font-semibold">
+                  {screenhouse.status === "pending"
+                    ? "Menunggu persetujuan"
+                    : screenhouse.status}
+                </span>
+              )}
               <span
                 className={`px-3 py-1.5 rounded-full text-sm font-semibold ${
                   monitorStatus === "offline"
@@ -631,29 +828,27 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
                     : "bg-blue-50 text-blue-800"
                 }`}
               >
-                {onlineCount}/{nodes.length} tray online
-              </span>
-              <span
-                className={`px-3 py-1.5 rounded-full text-sm font-semibold ${monitorMeta.badgeClass}`}
-              >
-                {monitorMeta.label}
+                {onlineCount}/{nodes.length} alat terhubung
               </span>
             </div>
           </div>
 
-          {/* Banner offline — seluruh screenhouse tidak ada node online */}
           {screenhouseOffline && (
-            <div className="rounded-2xl px-5 py-5 flex items-center gap-4 border border-red-300 bg-red-50">
-              <div className="w-12 h-12 rounded-full flex items-center justify-center shrink-0 bg-red-100">
-                <WifiOff size={24} className="text-red-600" />
+            <div className="rounded-2xl px-5 py-4 flex items-start gap-4 border border-rose-200 bg-rose-50">
+              <div className="w-11 h-11 rounded-full flex items-center justify-center shrink-0 bg-rose-100">
+                <WifiOff size={22} className="text-rose-600" />
               </div>
-              <div className="min-w-0">
-                <div className="text-lg font-bold text-red-950">Offline</div>
-                <div className="text-base text-red-800 mt-1 leading-relaxed">
-                  {latestLastSeen
-                    ? `Perangkat tidak mengirim data terbaru · terakhir ${timeAgo(latestLastSeen)}`
-                    : "Belum ada data sensor dari perangkat."}
-                </div>
+              <div className="min-w-0 pt-0.5">
+                <p className="text-sm sm:text-base text-rose-950 leading-relaxed">
+                  <span className="font-bold">{FARMER_LABELS.notConnected}</span>
+                  <span className="text-rose-800/95">
+                    {" "}
+                    Alat pengukur tidak mengirim data terbaru
+                    {latestLastSeen
+                      ? ` (Terakhir aktif ${timeAgo(latestLastSeen)})`
+                      : ""}
+                  </span>
+                </p>
               </div>
             </div>
           )}
@@ -713,33 +908,69 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
             </div>
           )}
 
-          {/* Petani: tren & data detail disembunyikan, fokus ke status + tindakan */}
+          <EstimasiTanamPanel
+            estimasi={estimasiTanam}
+            stressScore={stressScore}
+            varietasNama={screenhouse.varietas_nama || screenhouse.seed_variety}
+            tanggalSemai={screenhouse.tanggal_semai ?? screenhouse.seedling_start_date}
+            durasiPembibitanHari={screenhouse.durasi_pembibitan_hari}
+            deviceOffline={screenhouseOffline}
+            estimasiFooter={
+              isPetani && !semaiCycle.loading && semaiCycle.activeCycle ? (
+                <SemaiCycleEndButton onClick={() => semaiCycle.setShowEndConfirm(true)} />
+              ) : null
+            }
+            varietasFooter={
+              isPetani && !semaiCycle.loading && !semaiCycle.activeCycle ? (
+                <SemaiCycleStartButton onClick={() => semaiCycle.setShowStartModal(true)} />
+              ) : null
+            }
+          />
+
           {isPetani && (
-            <button
-              type="button"
-              onClick={() => setShowDetail((v) => !v)}
-              className="w-full flex items-center justify-between gap-2 bg-white rounded-2xl border border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              <span>
-                {showDetail
-                  ? "Sembunyikan tren & data detail"
-                  : "Lihat tren & data detail (opsional)"}
-              </span>
-              <ChevronDown
-                size={16}
-                className={`text-gray-400 transition-transform ${showDetail ? "rotate-180" : ""}`}
+            <>
+              <SemaiCycleEndConfirmModal
+                open={semaiCycle.showEndConfirm}
+                onClose={() => semaiCycle.setShowEndConfirm(false)}
+                onConfirm={semaiCycle.handleEndCycle}
+                ending={semaiCycle.ending}
               />
-            </button>
+              <SemaiCycleStartModal
+                open={semaiCycle.showStartModal}
+                onClose={() => semaiCycle.setShowStartModal(false)}
+                screenhouseId={Number(id)}
+                token={token}
+                onStarted={semaiCycle.handleCycleStarted}
+              />
+            </>
           )}
 
-          {(!isPetani || showDetail) && (
+          <button
+            type="button"
+            onClick={() => setShowDetail((v) => !v)}
+            className="w-full flex items-center justify-between gap-2 bg-white rounded-2xl border border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            <span>
+              {showDetail
+                ? "Sembunyikan grafik detail"
+                : isPetani
+                ? "Lihat tren & data detail (opsional)"
+                : "Lihat grafik & data teknis"}
+            </span>
+            <ChevronDown
+              size={16}
+              className={`text-gray-600 transition-transform ${showDetail ? "rotate-180" : ""}`}
+            />
+          </button>
+
+          {showDetail && (
             <>
           {screenhouseOffline && (
             <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
               Grafik di bawah menampilkan riwayat 24 jam.
               {latestLastSeen
-                ? ` Pembacaan live terakhir ${formatSnapshotTime(latestLastSeen)} (${timeAgo(latestLastSeen)}).`
-                : " Belum ada pembacaan live tersimpan."}
+                ? ` ${FARMER_LABELS.lastReading} ${formatSnapshotTime(latestLastSeen)} (${timeAgo(latestLastSeen)}).`
+                : ` Belum ada ${FARMER_LABELS.lastReading.toLowerCase()} tersimpan.`}
             </p>
           )}
           {/* Grafik */}
@@ -748,8 +979,8 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
               <div className="text-sm font-semibold text-gray-800 mb-1 text-left">
                 Tren nitrogen & kelembapan tanah (24 jam)
               </div>
-              <div className="text-xs text-gray-400 mb-4 text-left">
-                Rata-rata per jam · kiri: nitrogen · kanan: kelembapan tanah
+              <div className="text-xs text-gray-600 mb-4 text-left">
+                Rata-rata per jam. Hijau muda = aman, merah muda = kurang, kuning = berlebih.
               </div>
               {trendChartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={280}>
@@ -759,37 +990,23 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
                     <YAxis
                       yAxisId="n"
                       tick={{ fontSize: 10 }}
-                      domain={["auto", "auto"]}
+                      domain={nMoistureDomains.n}
                       label={{ value: "N", angle: -90, position: "insideLeft", fontSize: 10 }}
                     />
                     <YAxis
                       yAxisId="m"
                       orientation="right"
                       tick={{ fontSize: 10 }}
-                      domain={[40, 90]}
+                      domain={nMoistureDomains.m}
                       label={{ value: "%", angle: 90, position: "insideRight", fontSize: 10 }}
                     />
-                    {threshold?.min_nitrogen != null && threshold?.max_nitrogen != null && (
-                      <ReferenceArea
-                        yAxisId="n"
-                        y1={threshold.min_nitrogen}
-                        y2={threshold.max_nitrogen}
-                        fill="#16a34a"
-                        fillOpacity={0.07}
-                        label={{ value: "Batas aman N", fontSize: 9, fill: "#15803d", position: "insideTopLeft" }}
-                      />
-                    )}
-                    {threshold?.min_soil_moisture != null && threshold?.max_soil_moisture != null && (
-                      <ReferenceArea
-                        yAxisId="m"
-                        y1={threshold.min_soil_moisture}
-                        y2={threshold.max_soil_moisture}
-                        fill="#2563eb"
-                        fillOpacity={0.06}
-                      />
-                    )}
+                    <NMoistureThresholdBands
+                      threshold={threshold}
+                      nDomain={nMoistureDomains.n}
+                      mDomain={nMoistureDomains.m}
+                    />
                     <Tooltip content={<ChartTooltip />} />
-                    <Legend {...CHART_LEGEND} />
+                    <Legend content={(props) => <NMoistureChartLegendContent payload={props.payload} />} />
                     <Line
                       yAxisId="n"
                       type="monotone"
@@ -813,8 +1030,8 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-[280px] flex items-start justify-start p-4 text-sm text-gray-400 text-left">
-                  Belum ada data historis. Jalankan database/monitoring/seed.sql
+                <div className="h-[280px] flex items-start justify-start p-4 text-sm text-gray-600 text-left">
+                  {FARMER_LABELS.noDataHint}
                 </div>
               )}
               <ChartGuideToggle
@@ -827,8 +1044,8 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
               <div className="text-sm font-semibold text-gray-800 mb-1 text-left">
                 Komposisi NPK terbaru
               </div>
-              <div className="text-xs text-gray-400 mb-4 text-left">
-                Nilai terbaru · hijau = pas, oranye = kurang, merah = berlebih
+              <div className="text-xs text-gray-600 mb-4 text-left">
+                Nilai terbaru. Hijau = pas, oranye = kurang, merah = berlebih.
               </div>
               {npkCompareData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={280}>
@@ -852,7 +1069,7 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-[280px] flex items-start justify-start p-4 text-sm text-gray-400 text-left">
+                <div className="h-[280px] flex items-start justify-start p-4 text-sm text-gray-600 text-left">
                   Belum ada pembacaan NPK
                 </div>
               )}
@@ -867,8 +1084,8 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
             <div className="text-sm font-semibold text-gray-800 mb-1 text-left">
               Tren fosfor & kalium (24 jam)
             </div>
-            <div className="text-xs text-gray-400 mb-4 text-left">
-              Perubahan fosfor (P) dan kalium (K) per jam · Cek kebutuhan pupuk.
+            <div className="text-xs text-gray-600 mb-4 text-left">
+              Perubahan fosfor (P) dan kalium (K) per jam. Cek kebutuhan pupuk.
             </div>
             {trendChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height={240}>
@@ -880,9 +1097,12 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
                     domain={getPkChartYDomain(trendChartData, threshold)}
                     label={{ value: "mg/kg", angle: -90, position: "insideLeft", fontSize: 10 }}
                   />
-                  <PkThresholdBands threshold={threshold} />
+                  <PkThresholdBands
+                    threshold={threshold}
+                    yDomain={getPkChartYDomain(trendChartData, threshold)}
+                  />
                   <Tooltip content={<ChartTooltip />} />
-                  <Legend {...CHART_LEGEND} />
+                  <Legend content={(props) => <PkChartLegendContent payload={props.payload} />} />
                   <Line
                     type="monotone"
                     dataKey="phosphorus"
@@ -902,7 +1122,7 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-[240px] flex items-start justify-start p-4 text-sm text-gray-400 text-left">
+              <div className="h-[240px] flex items-start justify-start p-4 text-sm text-gray-600 text-left">
                 Belum ada data historis
               </div>
             )}
@@ -910,7 +1130,7 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
               body={SCREENHOUSE_CHART_GUIDE[3].body}
               extra="Arahkan kursor ke garis untuk melihat angka pada jam tertentu."
             />
-          </div>
+            </div>
             </>
           )}
 
@@ -919,15 +1139,20 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
             <ParamHealthCards
               list={rollupHealth}
               threshold={threshold}
+              getThresholdHint={thresholdHintFn}
               title="Ringkasan kondisi screenhouse"
+              stale={screenhouseOffline}
+              snapshotLabel={
+                screenhouseOffline && latestLastSeen
+                  ? formatSnapshotTime(latestLastSeen)
+                  : null
+              }
               subtitle={
                 screenhouseOffline
-                  ? latestLastSeen
-                    ? `Snapshot terakhir ${formatSnapshotTime(latestLastSeen)} · perangkat offline`
-                    : "Perangkat offline · belum ada data tersimpan"
+                  ? undefined
                   : onlineCount > 1
-                  ? "Ambil kondisi paling buruk dari semua tray · detail per tray ada di bawah"
-                  : "Hijau = pas · oranye = kurang · merah = berlebih"
+                  ? "Ambil kondisi paling buruk dari semua rak bibit. Detail per rak ada di bawah."
+                  : "Hijau = pas, oranye = kurang, merah = berlebih"
               }
               showActions={!screenhouseOffline}
             />
@@ -937,16 +1162,15 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
           {dashboard?.sinkNode && (
             <div className="bg-white rounded-2xl border border-gray-200 p-4 text-left">
               <div className="text-sm font-semibold text-gray-800 mb-1">
-                Kontrol aktuator
+                {FARMER_LABELS.autoEquipmentControl}
               </div>
-              <div className="text-xs text-gray-400 mb-3">
-                Sink node · {dashboard.sinkNode.node_code} · {dashboard.sinkNode.relay_channels} channel relay
-              </div>
+              <div className="text-xs text-gray-600 mb-3">{FARMER_LABELS.sinkControl}</div>
               <ActuatorControls
                 screenhouseId={Number(id)}
                 fan_status={dashboard.sinkNode.fan_status}
                 irrigation_status={dashboard.sinkNode.irrigation_status}
                 lamp_status={dashboard.sinkNode.lamp_status}
+                autoAlerts={screenhouseAutoAlerts}
                 disabled={!dashboard.sinkNode.is_active}
                 readOnly={!isPetani}
                 onUpdated={patchSinkActuators}
@@ -954,11 +1178,13 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
             </div>
           )}
 
-          <div className="text-sm font-semibold text-gray-700 text-left">Tray sensor</div>
+          <div className="text-sm font-semibold text-gray-700 text-left">
+            {isPetani ? FARMER_LABELS.traySensors : "Rak bibit dengan alat pengukur"}
+          </div>
 
           {nodes.length === 0 ? (
-            <div className="text-sm text-gray-400 text-left py-8 px-4 bg-white rounded-2xl border border-gray-200">
-              Belum ada tray sensor terdaftar
+            <div className="text-sm text-gray-600 text-left py-8 px-4 bg-white rounded-2xl border border-gray-200">
+              Belum ada {FARMER_LABELS.traySensors.toLowerCase()} terdaftar
             </div>
           ) : (
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -967,6 +1193,10 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
                   key={node.id}
                   node={node}
                   threshold={threshold}
+                  isPetani={isPetani}
+                  canRename={canRenameRack}
+                  onRenamed={handleNodeRenamed}
+                  nodeStressScore={nodeScoreById[node.id]}
                 />
               ))}
             </div>

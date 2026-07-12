@@ -4,6 +4,24 @@ import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
+  server: {
+    host: true,
+    port: 5174,
+    proxy: {
+      // REST → app-service (hindari hardcode IP WiFi di .env)
+      "/api": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ""),
+      },
+      // Socket.IO → monitoring-service (WebSocket lewat origin Vite yang sama)
+      "/socket.io": {
+        target: "http://127.0.0.1:3001",
+        ws: true,
+        changeOrigin: true,
+      },
+    },
+  },
   plugins: [
     react(),
     tailwindcss(),
@@ -12,7 +30,7 @@ export default defineConfig({
       srcDir: "src/pwa",
       filename: "sw.js",
       registerType: "autoUpdate",
-      includeAssets: ["icon.svg", "logo-bibitlive.png", "apple-touch-icon.png", "pwa-192x192.png", "pwa-512x512.png"],
+      includeAssets: ["icon-512.png", "logo-bibitlive.png", "apple-touch-icon.png", "pwa-192x192.png", "pwa-512x512.png", "pwa-512-maskable.png"],
       manifest: {
         name: "BibitLive",
         short_name: "BibitLive",
@@ -39,7 +57,7 @@ export default defineConfig({
             purpose: "any",
           },
           {
-            src: "pwa-512x512.png",
+            src: "pwa-512-maskable.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable",

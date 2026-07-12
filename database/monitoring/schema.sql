@@ -118,7 +118,9 @@ CREATE TABLE alerts (
     sensor_data_id INTEGER REFERENCES sensor_data(id),
     message        TEXT NOT NULL,
     status         VARCHAR(50) DEFAULT 'active',
-    created_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    resolve_note   VARCHAR(255),
+    created_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    resolved_at    TIMESTAMP WITH TIME ZONE
 );
 
 -- Satu alert active per parameter + node (cegah notifikasi menumpuk antar siklus sensor)

@@ -43,6 +43,31 @@ services:
     volumes:
       - ./mosquitto/config:/mosquitto/config
 
+  # RabbitMQ ingest buffer (opsional — aktifkan dengan USE_RABBITMQ=true)
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: screenhouse-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: screenhouse
+      RABBITMQ_DEFAULT_PASS: screenhouse
+
+  # Final project: LB HTTP untuk 2× monitoring-service (uji S2/S4)
+  # MQTT load test tetap ke :1883 — tidak lewat Nginx
+  nginx-lb:
+    image: nginx:alpine
+    container_name: screenhouse-nginx-lb
+    restart: unless-stopped
+    ports:
+      - "3080:80"
+    volumes:
+      - ./nginx/stress-lb.conf:/etc/nginx/nginx.conf:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
 volumes:
   postgres_app_data:
   postgres_monitoring_data:
