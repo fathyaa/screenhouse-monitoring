@@ -27,6 +27,7 @@ import {
   YAxis,
 } from "recharts";
 import Sidebar from "../layouts/Sidebar";
+import PetaniBottomNav from "../layouts/PetaniBottomNav";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import ParamHealthCards from "../components/ParamHealthCards";
 import EstimasiTanamPanel from "../components/EstimasiTanamPanel";
@@ -80,6 +81,16 @@ import {
   PkChartLegendContent,
   NMoistureChartLegendContent,
 } from "../constants/chartGuide";
+import ParamHistoryCharts from "../components/ParamHistoryCharts";
+import { THRESHOLD_METRICS } from "../constants/thresholdMetrics";
+import { PARAM_COLORS, CHART_STATUS, CHART_GRID } from "../constants/chartColors";
+
+/** Parameter yang belum punya grafik historis khusus (di luar N/P/K & kelembapan tanah). */
+const ENV_HISTORY_METRICS = THRESHOLD_METRICS.filter((m) =>
+  ["soil_temperature", "soil_ph", "conductivity", "air_temperature", "air_humidity", "light_intensity"].includes(
+    m.key
+  )
+);
 
 const PARAM_GROUPS = [
   {
@@ -276,8 +287,12 @@ function NodeCard({ node, threshold, canRename = false, onRenamed, nodeStressSco
   );
 }
 
-function ScreenhouseDetailPage({ basePath = "/operator" }) {
-  const { id } = useParams();
+function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single = false }) {
+  const params = useParams();
+  // `single` mode: dashboard petani merender halaman ini langsung untuk satu-satunya
+  // screenhouse aktif, jadi id datang dari prop, bukan URL, dan tidak ada halaman
+  // sebelumnya untuk tombol "kembali".
+  const id = screenhouseId ?? params.id;
   const navigate = useNavigate();
   const isPetani = basePath === "/petani";
   const { isOpen: sidebarOpen, toggle: toggleSidebar, close: closeSidebar } = useSidebarOpen();
@@ -471,9 +486,23 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
         soil_moisture: row.avg_soil_moisture,
         phosphorus: row.avg_phosphorus,
         potassium: row.avg_potassium,
+        soil_temperature: row.avg_soil_temperature,
+        soil_ph: row.avg_soil_ph,
+        conductivity: row.avg_conductivity,
+        air_temperature: row.avg_air_temperature,
+        air_humidity: row.avg_air_humidity,
+        light_intensity: row.avg_light_intensity,
       }));
     }
 
+    const TREND_KEYS = [
+      "nitrogen", "soil_moisture", "phosphorus", "potassium",
+      "soil_temperature", "soil_ph", "conductivity",
+      "air_temperature", "air_humidity", "light_intensity",
+    ];
+    const DECIMAL_KEYS = new Set([
+      "soil_moisture", "soil_temperature", "soil_ph", "air_temperature", "air_humidity",
+    ]);
     const buckets = {};
     history.forEach((row) => {
       const key = new Date(row.created_at).toLocaleTimeString("id-ID", {
@@ -481,38 +510,27 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
         minute: "2-digit",
       });
       if (!buckets[key]) {
-        buckets[key] = {
-          label: key,
-          nitrogen: [],
-          soil_moisture: [],
-          phosphorus: [],
-          potassium: [],
-        };
+        buckets[key] = { label: key };
+        TREND_KEYS.forEach((k) => (buckets[key][k] = []));
       }
-      buckets[key].nitrogen.push(row.nitrogen);
-      buckets[key].soil_moisture.push(row.soil_moisture);
-      buckets[key].phosphorus.push(row.phosphorus);
-      buckets[key].potassium.push(row.potassium);
+      TREND_KEYS.forEach((k) => {
+        if (row[k] != null) buckets[key][k].push(Number(row[k]));
+      });
     });
 
-    return Object.values(buckets).map((b) => ({
-      label: b.label,
-      nitrogen: Math.round(
-        b.nitrogen.reduce((a, c) => a + c, 0) / b.nitrogen.length
-      ),
-      soil_moisture:
-        Math.round(
-          (b.soil_moisture.reduce((a, c) => a + Number(c), 0) /
-            b.soil_moisture.length) *
-            10
-        ) / 10,
-      phosphorus: Math.round(
-        b.phosphorus.reduce((a, c) => a + c, 0) / b.phosphorus.length
-      ),
-      potassium: Math.round(
-        b.potassium.reduce((a, c) => a + c, 0) / b.potassium.length
-      ),
-    }));
+    const avg = (arr, decimal) => {
+      if (!arr.length) return null;
+      const mean = arr.reduce((a, c) => a + c, 0) / arr.length;
+      return decimal ? Math.round(mean * 10) / 10 : Math.round(mean);
+    };
+
+    return Object.values(buckets).map((b) => {
+      const out = { label: b.label };
+      TREND_KEYS.forEach((k) => {
+        out[k] = avg(b[k], DECIMAL_KEYS.has(k));
+      });
+      return out;
+    });
   }, [dashboard, history]);
 
   const npkCompareData = useMemo(() => {
@@ -521,10 +539,10 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
     if (!latest) return [];
 
     const barColor = (value, min, max) => {
-      if (value == null || min == null || max == null) return "#94a3b8";
-      if (Number(value) < Number(min)) return "#d97706";
-      if (Number(value) > Number(max)) return "#dc2626";
-      return "#16a34a";
+      if (value == null || min == null || max == null) return CHART_STATUS.neutral;
+      if (Number(value) < Number(min)) return CHART_STATUS.below;
+      if (Number(value) > Number(max)) return CHART_STATUS.above;
+      return CHART_STATUS.normal;
     };
 
     return [
@@ -716,23 +734,26 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
             >
               <Menu size={20} className="icon-muted" />
             </button>
-            <button
-              onClick={() => navigate(basePath)}
-              className="p-1.5 rounded-lg hover:bg-gray-100 transition shrink-0"
-              aria-label="Kembali"
-            >
-              <ArrowLeft size={20} className="icon-muted" />
-            </button>
+            {!single && (
+              <button
+                onClick={() => navigate(basePath)}
+                className="p-1.5 rounded-lg hover:bg-gray-100 transition shrink-0"
+                aria-label="Kembali"
+              >
+                <ArrowLeft size={20} className="icon-muted" />
+              </button>
+            )}
             <div className="min-w-0 text-left">
+              {/* Nama di topbar hanya tampilan — editornya ada di info bar di bawah
+                  supaya tidak ada dua tempat mengedit nama yang sama. */}
               <ScreenhouseNameEditor
                 screenhouseId={screenhouse.id}
                 name={screenhouse.name}
-                canEdit={canEditScreenhouseName}
-                onRenamed={handleScreenhouseRenamed}
+                canEdit={false}
                 className="text-sm font-semibold text-gray-800 truncate"
               />
               <div className="text-xs text-gray-600 truncate">
-                Detail sensor realtime
+                {single ? `Halo, ${user?.name?.split(" ")[0] ?? "Petani"}. Pantau screenhouse kamu.` : "Detail sensor realtime"}
               </div>
             </div>
           </div>
@@ -1003,7 +1024,7 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
               {trendChartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={280}>
                   <LineChart data={trendChartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
                     <XAxis dataKey="label" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
                     <YAxis
                       yAxisId="n"
@@ -1030,7 +1051,7 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
                       type="monotone"
                       dataKey="nitrogen"
                       name="Nitrogen (mg/kg)"
-                      stroke="#16a34a"
+                      stroke={PARAM_COLORS.nitrogen}
                       strokeWidth={2}
                       dot={{ r: 2 }}
                       activeDot={{ r: 4 }}
@@ -1040,7 +1061,7 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
                       type="monotone"
                       dataKey="soil_moisture"
                       name="Kelembapan tanah (%)"
-                      stroke="#2563eb"
+                      stroke={PARAM_COLORS.soil_moisture}
                       strokeWidth={2}
                       dot={{ r: 2 }}
                       activeDot={{ r: 4 }}
@@ -1068,7 +1089,7 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
               {npkCompareData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={280}>
                   <BarChart data={npkCompareData} margin={{ top: 16, right: 8, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
                     <XAxis dataKey="name" />
                     <YAxis tick={{ fontSize: 10 }} label={{ value: "mg/kg", angle: -90, position: "insideLeft", fontSize: 10 }} />
                     <Tooltip
@@ -1108,7 +1129,7 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
             {trendChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height={240}>
                 <LineChart data={trendChartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
                   <XAxis dataKey="label" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
                   <YAxis
                     tick={{ fontSize: 10 }}
@@ -1125,7 +1146,7 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
                     type="monotone"
                     dataKey="phosphorus"
                     name="Fosfor (P)"
-                    stroke="#2563eb"
+                    stroke={PARAM_COLORS.phosphorus}
                     strokeWidth={2}
                     dot={{ r: 2 }}
                   />
@@ -1133,7 +1154,7 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
                     type="monotone"
                     dataKey="potassium"
                     name="Kalium (K)"
-                    stroke="#ca8a04"
+                    stroke={PARAM_COLORS.potassium}
                     strokeWidth={2}
                     dot={{ r: 2 }}
                   />
@@ -1149,6 +1170,14 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
               extra="Arahkan kursor ke garis untuk melihat angka pada jam tertentu."
             />
             </div>
+
+            <ParamHistoryCharts
+              data={trendChartData}
+              threshold={threshold}
+              metrics={ENV_HISTORY_METRICS}
+              title="Tren suhu, pH, EC & cahaya (24 jam)"
+              subtitle="Parameter lingkungan lain. Garis putus-putus = batas aman minimum & maksimum."
+            />
             </>
           )}
 
@@ -1176,6 +1205,7 @@ function ScreenhouseDetailPage({ basePath = "/operator" }) {
             </div>
           )}
         </div>
+        {isPetani && <PetaniBottomNav />}
       </div>
     </div>
   );

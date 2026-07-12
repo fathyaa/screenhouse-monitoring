@@ -1,7 +1,7 @@
 export const THRESHOLD_METRICS = [
   { key: "nitrogen", label: "Nitrogen (N)", unit: "mg/kg", minCol: "min_nitrogen", maxCol: "max_nitrogen" },
   { key: "phosphorus", label: "Phosphorus (P)", unit: "mg/kg", minCol: "min_phosphorus", maxCol: "max_phosphorus" },
-  { key: "potassium", label: "Potassium (K)", unit: "mg/kg", minCol: "min_potassium", maxCol: "max_potassium" },
+  { key: "potassium", label: "Kalium (K)", unit: "mg/kg", minCol: "min_potassium", maxCol: "max_potassium" },
   { key: "soil_moisture", label: "Kelembapan tanah", unit: "%", minCol: "min_soil_moisture", maxCol: "max_soil_moisture" },
   { key: "soil_temperature", label: "Suhu tanah", unit: "°C", minCol: "min_soil_temperature", maxCol: "max_soil_temperature" },
   { key: "soil_ph", label: "pH tanah", unit: "pH", minCol: "min_soil_ph", maxCol: "max_soil_ph" },

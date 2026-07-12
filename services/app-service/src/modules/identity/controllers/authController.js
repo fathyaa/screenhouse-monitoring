@@ -551,6 +551,20 @@ async function getPendingUsers(req, res) {
 
 async function getFarmers(req, res) {
   try {
+    // Daftar Petani (halaman operator) menampilkan semua status + kartu hitung
+    // pending/approved/rejected, jadi default kembalikan seluruh petani.
+    // `status` opsional untuk memfilter di sisi server bila diperlukan
+    // (mis. endpoint /approved yang memaksa status = "approved").
+    const { status } = req.query;
+    const allowedStatus = ["approved", "pending", "rejected"];
+
+    const conditions = ["u.role = 'petani'"];
+    const params = [];
+    if (status && allowedStatus.includes(status)) {
+      params.push(status);
+      conditions.push(`u.status = $${params.length}`);
+    }
+
     const result = await pool.query(
       `
         SELECT
@@ -562,10 +576,11 @@ async function getFarmers(req, res) {
           COUNT(sh.id) FILTER (WHERE sh.status = 'active')::int AS screenhouse_count
         FROM users u
         LEFT JOIN screenhouses sh ON sh.owner_user_id = u.id
-        WHERE u.role = 'petani' AND u.status = 'approved'
+        WHERE ${conditions.join(" AND ")}
         GROUP BY u.id
         ORDER BY u.created_at DESC
-      `
+      `,
+      params
     );
     res.json(result.rows);
   } catch (err) {
@@ -627,6 +642,8 @@ async function getFarmerScreenhouses(req, res) {
 }
 
 async function getApprovedUsers(req, res) {
+  // Endpoint /approved: paksa hanya petani berstatus approved, apa pun query-nya.
+  req.query = { ...req.query, status: "approved" };
   return getFarmers(req, res);
 }
 

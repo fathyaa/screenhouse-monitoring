@@ -124,7 +124,7 @@ export function StressScoreCardBadge({ scoreData, compact = false, offline = fal
           <div className={`text-sm font-semibold ${style.text}`}>{scoreData.category}</div>
         </div>
       </div>
-      <p className="text-[10px] text-gray-600 leading-relaxed">{SCORE_EXPLANATION}</p>
+      <p className="text-[11px] text-gray-600 leading-relaxed">{SCORE_EXPLANATION}</p>
     </div>
   );
 }
@@ -176,7 +176,7 @@ export function StressScoreDetailCard({ scoreData, offline = false, compact = fa
         {scoreData.category}
       </p>
       {!compact && (
-        <p className="text-[10px] text-gray-600 leading-relaxed mt-1 max-w-[180px]">
+        <p className="text-[11px] text-gray-600 leading-relaxed mt-1 max-w-[200px]">
           {SCORE_EXPLANATION}
         </p>
       )}

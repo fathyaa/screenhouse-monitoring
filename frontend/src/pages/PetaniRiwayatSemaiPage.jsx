@@ -3,8 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { ChevronRight, FileBarChart, Menu, Sprout } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
 import PetaniTopbar from "../layouts/PetaniTopbar";
+import PetaniBottomNav from "../layouts/PetaniBottomNav";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import PullToRefresh from "../components/PullToRefresh";
+import Pagination from "../components/Pagination";
+import { usePagination } from "../hooks/usePagination";
 import { API_URL } from "../config/api";
 import { ScreenhouseCardsSkeleton } from "../components/LoadingUI";
 
@@ -33,7 +36,6 @@ function formatIdDate(dateStr) {
 }
 
 function cycleTitle(cycle) {
-  const start = formatIdDate(cycle.tanggal_mulai);
   const monthYear = new Date(`${String(cycle.tanggal_mulai).slice(0, 10)}T12:00:00+07:00`)
     .toLocaleDateString("id-ID", { month: "long", year: "numeric", timeZone: "Asia/Jakarta" });
   return `Siklus ${monthYear} — ${cycle.varietas_nama ?? "Varietas"}`;
@@ -82,6 +84,15 @@ export default function PetaniRiwayatSemaiPage() {
   );
 
   const displayCycles = filter === "active" ? activeCycles : completedCycles;
+
+  const {
+    page,
+    setPage,
+    pageItems: pagedCycles,
+    pageCount,
+    total,
+    pageSize,
+  } = usePagination(displayCycles, 8, filter);
 
   return (
     <div className="app-shell fixed inset-0 flex bg-bl-surface overflow-hidden">
@@ -143,7 +154,7 @@ export default function PetaniRiwayatSemaiPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {displayCycles.map((cycle) => (
+                {pagedCycles.map((cycle) => (
                   <button
                     key={cycle.id}
                     type="button"
@@ -188,10 +199,20 @@ export default function PetaniRiwayatSemaiPage() {
                     )}
                   </button>
                 ))}
+                <Pagination
+                  page={page}
+                  pageCount={pageCount}
+                  total={total}
+                  pageSize={pageSize}
+                  onPageChange={setPage}
+                  itemLabel="siklus"
+                  className="bg-white rounded-2xl border border-gray-200"
+                />
               </div>
             )}
           </div>
         </PullToRefresh>
+        <PetaniBottomNav />
       </div>
     </div>
   );

@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { ClipboardCheck, Phone, UserCheck, UserX, Menu, Leaf, MapPin, Map, Layers, ArrowRight } from "lucide-react";
+import toast from "react-hot-toast";
+import { Phone, UserX, Menu, Leaf, MapPin, Map, Layers, ArrowRight, Sprout, Pencil } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import MapPointPreview from "../components/MapPointPreview";
 import VarietasSelect from "../components/VarietasSelect";
-import {
-  ApprovalListSkeleton,
-  KpiGridSkeleton,
-} from "../components/LoadingUI";
+import useVarietasList from "../hooks/useVarietasList";
+import { ApprovalListSkeleton } from "../components/LoadingUI";
+import Pagination from "../components/Pagination";
+import { usePagination } from "../hooks/usePagination";
 
 import { API_URL } from "../config/api";
 
@@ -38,6 +39,102 @@ function TrayCountField({ value, onChange, disabled }) {
                 className="w-16 h-8 px-2 border border-gray-200 rounded-lg text-sm text-gray-800 bg-white disabled:opacity-50"
             />
             <span className="text-xs text-gray-600">(1 rak bibit = 1 alat pengukur)</span>
+        </div>
+    );
+}
+
+function resolveVarietasNama(options, id, fallback = null) {
+    const found = options.find((v) => String(v.id) === String(id));
+    return found?.nama ?? fallback;
+}
+
+/**
+ * Ringkasan "konfirmasi ajuan petani": default hanya menampilkan varietas +
+ * jumlah rak yang diajukan petani sebagai teks, dengan tombol "Sesuaikan".
+ * Field editable baru muncul saat operator memang perlu meng-override
+ * (mis. varietas/tray berubah saat pemasangan). Otomatis terbuka bila petani
+ * belum sempat mengisi varietas.
+ */
+function SetupConfirm({
+    varietasId,
+    varietasNamaProposed,
+    onVarietasChange,
+    trayCount,
+    onTrayCountChange,
+    options,
+    token,
+    busy,
+}) {
+    const hasVarietas = varietasId !== "" && varietasId != null;
+    const [editing, setEditing] = useState(!hasVarietas);
+    const namaTerpilih = resolveVarietasNama(options, varietasId, varietasNamaProposed);
+
+    if (editing) {
+        return (
+            <div className="space-y-2.5 rounded-xl border border-bl-accent/30 bg-white/70 p-3">
+                <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-gray-700">Sesuaikan data pemasangan</span>
+                    {hasVarietas && (
+                        <button
+                            type="button"
+                            onClick={() => setEditing(false)}
+                            className="text-xs font-semibold text-bl-primary hover:underline"
+                        >
+                            Selesai
+                        </button>
+                    )}
+                </div>
+                <TrayCountField value={trayCount} onChange={onTrayCountChange} disabled={busy} />
+                <div className="space-y-1.5">
+                    <div className="text-xs font-semibold text-gray-700">
+                        Varietas bibit
+                        {varietasNamaProposed && (
+                            <span className="font-normal text-gray-600 ml-1">
+                                (diajukan: {varietasNamaProposed})
+                            </span>
+                        )}
+                    </div>
+                    <VarietasSelect
+                        compact
+                        token={token}
+                        options={options}
+                        value={varietasId}
+                        onChange={onVarietasChange}
+                        disabled={busy}
+                        required
+                    />
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex items-start justify-between gap-3 rounded-xl border border-bl-accent/20 bg-white/70 p-3">
+            <div className="min-w-0 space-y-1.5 text-sm">
+                <div className="flex items-center gap-2 text-gray-700">
+                    <Sprout size={15} className="shrink-0 text-bl-primary" />
+                    <span className="font-semibold">Varietas:</span>
+                    <span className="truncate text-gray-800">{namaTerpilih || "belum dipilih"}</span>
+                </div>
+                <div className="flex items-center gap-2 text-gray-700">
+                    <Layers size={15} className="shrink-0 text-gray-600" />
+                    <span className="font-semibold">Jumlah rak:</span>
+                    <span className="text-gray-800">{trayCount}</span>
+                    <span className="text-xs text-gray-500">(1 rak = 1 alat)</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-gray-500">
+                    Sesuai ajuan petani. Ubah bila kondisi pemasangan di lapangan berbeda.
+                </p>
+            </div>
+            <button
+                type="button"
+                onClick={() => setEditing(true)}
+                disabled={busy}
+                className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-bl-primary hover:underline disabled:opacity-50"
+            >
+                <Pencil size={13} />
+                Sesuaikan
+            </button>
         </div>
     );
 }
@@ -122,7 +219,7 @@ function ApprovalConfirmDialog({ dialog, busy, onCancel, onConfirm }) {
     );
 }
 
-function ScreenhouseInfo({ farmer, trayCount, onTrayCountChange, varietasId, onVarietasChange, onViewMap, busy, token }) {
+function ScreenhouseInfo({ farmer, trayCount, onTrayCountChange, varietasId, onVarietasChange, onViewMap, busy, token, varietasOptions }) {
     const wilayah = formatWilayah(farmer);
     const hasScreenhouse = Boolean(farmer.screenhouse_id || farmer.screenhouse_name);
 
@@ -145,29 +242,16 @@ function ScreenhouseInfo({ farmer, trayCount, onTrayCountChange, varietasId, onV
                         <span className="font-semibold text-gray-700">Wilayah:</span>{" "}
                         {wilayah || "-"}
                     </div>
-                    <TrayCountField
-                        value={trayCount}
-                        onChange={onTrayCountChange}
-                        disabled={busy}
+                    <SetupConfirm
+                        varietasId={varietasId}
+                        varietasNamaProposed={farmer.varietas_nama}
+                        onVarietasChange={onVarietasChange}
+                        trayCount={trayCount}
+                        onTrayCountChange={onTrayCountChange}
+                        options={varietasOptions}
+                        token={token}
+                        busy={busy}
                     />
-                    <div className="space-y-1.5">
-                        <div className="text-xs font-semibold text-gray-700">
-                            Varietas bibit
-                            {farmer.varietas_nama && (
-                                <span className="font-normal text-gray-600 ml-1">
-                                    (diajukan: {farmer.varietas_nama})
-                                </span>
-                            )}
-                        </div>
-                        <VarietasSelect
-                            compact
-                            token={token}
-                            value={varietasId}
-                            onChange={onVarietasChange}
-                            disabled={busy}
-                            required
-                        />
-                    </div>
                     <div className="flex items-center flex-wrap gap-2 text-sm text-gray-600">
                         <div className="flex items-center gap-1.5">
                             <MapPin size={16} className="shrink-0 text-gray-600" />
@@ -200,7 +284,6 @@ function ApprovalPage() {
     const { isOpen: sidebarOpen, toggle: toggleSidebar, close: closeSidebar } = useSidebarOpen();
     const [pendingUsers, setPendingUsers] = useState([]);
     const [pendingScreenhouses, setPendingScreenhouses] = useState([]);
-    const [stats, setStats] = useState({ pending: 0, approved: 0, rejected: 0 });
     const [actionId, setActionId] = useState(null);
     const [shActionId, setShActionId] = useState(null);
     const [mapPreview, setMapPreview] = useState(null);
@@ -213,17 +296,37 @@ function ApprovalPage() {
 
     const authHeaders = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
 
+    // Fetch daftar varietas sekali di parent, lalu oper ke setiap kartu —
+    // menghindari N request identik ke /varietas-bibit saat banyak kartu pending.
+    const { list: varietasOptions } = useVarietasList(token);
+
+    const {
+        page: shPage,
+        setPage: setShPage,
+        pageItems: pagedPendingScreenhouses,
+        pageCount: shPageCount,
+        total: shTotal,
+        pageSize: shPageSize,
+    } = usePagination(pendingScreenhouses, 5);
+
+    const {
+        page: userPage,
+        setPage: setUserPage,
+        pageItems: pagedPendingUsers,
+        pageCount: userPageCount,
+        total: userTotal,
+        pageSize: userPageSize,
+    } = usePagination(pendingUsers, 5);
+
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
-            const [pendingRes, statsRes, pendingShRes] = await Promise.all([
+            const [pendingRes, pendingShRes] = await Promise.all([
                 fetch(`${API_URL}/auth/pending`, { headers: authHeaders }),
-                fetch(`${API_URL}/auth/stats`, { headers: authHeaders }),
                 fetch(`${API_URL}/screenhouses/pending`, { headers: authHeaders }),
             ]);
 
             const pendingData = pendingRes.ok ? await pendingRes.json() : [];
-            const statsData = statsRes.ok ? await statsRes.json() : {};
             const pendingShData = pendingShRes.ok ? await pendingShRes.json() : [];
 
             setPendingUsers(Array.isArray(pendingData) ? pendingData : []);
@@ -242,11 +345,6 @@ function ApprovalPage() {
             setTrayCounts(nextTrayCounts);
             setVarietasSelections(nextVarietas);
 
-            setStats({
-                pending: statsData.pending ?? 0,
-                approved: statsData.approved ?? 0,
-                rejected: statsData.rejected ?? 0,
-            });
             window.dispatchEvent(new Event("approval-changed"));
         } catch (err) {
             console.error(err);
@@ -272,7 +370,7 @@ function ApprovalPage() {
 
     const approveUser = async (farmer) => {
         if (!farmer.screenhouse_id && !farmer.screenhouse_name) {
-            alert("Tidak bisa disetujui: data screenhouse belum ada.");
+            toast.error("Tidak bisa disetujui: data screenhouse belum ada.");
             return;
         }
 
@@ -280,7 +378,7 @@ function ApprovalPage() {
         const varietasId = getVarietasId(`u-${farmer.id}`, farmer.varietas_id);
 
         if (!varietasId) {
-            alert("Pilih varietas bibit sebelum menyetujui.");
+            toast.error("Pilih varietas bibit sebelum menyetujui.");
             return;
         }
 
@@ -294,14 +392,14 @@ function ApprovalPage() {
             const data = await response.json();
 
             if (!response.ok) {
-                alert(data.message || "Gagal menyetujui pendaftaran");
+                toast.error(data.message || "Gagal menyetujui pendaftaran");
                 return;
             }
 
             await loadData();
         } catch (err) {
             console.error(err);
-            alert("Gagal menyetujui pendaftaran");
+            toast.error("Gagal menyetujui pendaftaran");
         } finally {
             setActionId(null);
         }
@@ -317,14 +415,14 @@ function ApprovalPage() {
             const data = await response.json();
 
             if (!response.ok) {
-                alert(data.message || "Gagal menolak pendaftaran");
+                toast.error(data.message || "Gagal menolak pendaftaran");
                 return;
             }
 
             await loadData();
         } catch (err) {
             console.error(err);
-            alert("Gagal menolak pendaftaran");
+            toast.error("Gagal menolak pendaftaran");
         } finally {
             setActionId(null);
         }
@@ -335,7 +433,7 @@ function ApprovalPage() {
         const varietasId = getVarietasId(`s-${sh.id}`, sh.varietas_id);
 
         if (!varietasId) {
-            alert("Pilih varietas bibit sebelum menyetujui.");
+            toast.error("Pilih varietas bibit sebelum menyetujui.");
             return;
         }
 
@@ -349,14 +447,14 @@ function ApprovalPage() {
             const data = await response.json();
 
             if (!response.ok) {
-                alert(data.message || "Gagal menyetujui screenhouse");
+                toast.error(data.message || "Gagal menyetujui screenhouse");
                 return;
             }
 
             await loadData();
         } catch (err) {
             console.error(err);
-            alert("Gagal menyetujui screenhouse");
+            toast.error("Gagal menyetujui screenhouse");
         } finally {
             setShActionId(null);
         }
@@ -372,14 +470,14 @@ function ApprovalPage() {
             const data = await response.json();
 
             if (!response.ok) {
-                alert(data.message || "Gagal menolak screenhouse");
+                toast.error(data.message || "Gagal menolak screenhouse");
                 return;
             }
 
             await loadData();
         } catch (err) {
             console.error(err);
-            alert("Gagal menolak screenhouse");
+            toast.error("Gagal menolak screenhouse");
         } finally {
             setShActionId(null);
         }
@@ -470,7 +568,7 @@ function ApprovalPage() {
                             <Menu size={20} className="icon-muted" />
                         </button>
                         <div className="text-left min-w-0">
-                            <div className="text-sm font-semibold text-gray-800 truncate">Approval registrasi petani</div>
+                            <div className="text-sm font-semibold text-gray-800 truncate">Persetujuan pendaftaran</div>
                             <div className="text-xs text-gray-600 truncate hidden sm:block">Verifikasi pendaftaran petani baru dan pengajuan screenhouse tambahan</div>
                         </div>
                     </div>
@@ -483,41 +581,16 @@ function ApprovalPage() {
                 <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 text-left">
 
                     {loading ? (
-                        <>
-                            <KpiGridSkeleton count={3} className="grid-cols-3" />
-                            <ApprovalListSkeleton count={2} />
-                        </>
+                        <ApprovalListSkeleton count={2} />
                     ) : (
                     <>
-                    <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                        {[
-                            { label: "Menunggu", fullLabel: "Menunggu approval", value: stats.pending, icon: ClipboardCheck, bg: "bg-amber-50", color: "text-amber-700", valColor: "text-amber-700" },
-                            { label: "Disetujui", fullLabel: "Disetujui", value: stats.approved, icon: UserCheck, bg: "bg-bl-surface-muted", color: "text-bl-primary", valColor: "text-bl-primary" },
-                            { label: "Ditolak", fullLabel: "Ditolak", value: stats.rejected, icon: UserX, bg: "bg-red-50", color: "text-red-600", valColor: "text-red-600" },
-                        ].map((s) => (
-                            <div key={s.fullLabel} className="bg-white rounded-xl sm:rounded-2xl border border-bl-accent/20 p-2.5 sm:p-4 flex flex-col items-center text-center sm:flex-row sm:items-center sm:gap-3 sm:text-left min-w-0">
-                                <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 ${s.bg}`}>
-                                    <s.icon size={15} className={`sm:hidden ${s.color}`} />
-                                    <s.icon size={17} className={`hidden sm:block ${s.color}`} />
-                                </div>
-                                <div className="min-w-0 mt-1.5 sm:mt-0">
-                                    <div className={`text-lg sm:text-xl font-bold leading-none ${s.valColor}`}>{s.value}</div>
-                                    <div className="text-[10px] sm:text-xs text-gray-600 mt-1 leading-tight truncate w-full" title={s.fullLabel}>
-                                        <span className="sm:hidden">{s.label}</span>
-                                        <span className="hidden sm:inline">{s.fullLabel}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-
                     {pendingScreenhouses.length > 0 && (
                         <>
                             <div className="text-sm font-semibold text-gray-800 text-left">
                                 Pengajuan screenhouse baru
                             </div>
                             <div className="space-y-2">
-                                {pendingScreenhouses.map((sh) => {
+                                {pagedPendingScreenhouses.map((sh) => {
                                     const busy = shActionId === sh.id;
                                     const wilayah = [sh.village, sh.district, sh.regency, sh.province]
                                         .filter(Boolean)
@@ -552,36 +625,23 @@ function ApprovalPage() {
                                                         <span className="font-semibold text-gray-700">Wilayah:</span>{" "}
                                                         {wilayah || "-"}
                                                     </div>
-                                                    <TrayCountField
-                                                        value={getTrayCount(`s-${sh.id}`, sh.tray_count ?? 1)}
-                                                        onChange={(n) =>
+                                                    <SetupConfirm
+                                                        varietasId={varietasSelections[`s-${sh.id}`] ?? sh.varietas_id ?? ""}
+                                                        varietasNamaProposed={sh.varietas_nama}
+                                                        onVarietasChange={(id) =>
+                                                            setVarietasSelections((prev) => ({
+                                                                ...prev,
+                                                                [`s-${sh.id}`]: id,
+                                                            }))
+                                                        }
+                                                        trayCount={getTrayCount(`s-${sh.id}`, sh.tray_count ?? 1)}
+                                                        onTrayCountChange={(n) =>
                                                             setTrayCounts((prev) => ({ ...prev, [`s-${sh.id}`]: n }))
                                                         }
-                                                        disabled={busy}
+                                                        options={varietasOptions}
+                                                        token={token}
+                                                        busy={busy}
                                                     />
-                                                    <div className="space-y-1.5">
-                                                        <div className="text-xs font-semibold text-gray-700">
-                                                            Varietas bibit
-                                                            {sh.varietas_nama && (
-                                                                <span className="font-normal text-gray-600 ml-1">
-                                                                    (diajukan: {sh.varietas_nama})
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                        <VarietasSelect
-                                                            compact
-                                                            token={token}
-                                                            value={varietasSelections[`s-${sh.id}`] ?? sh.varietas_id ?? ""}
-                                                            onChange={(id) =>
-                                                                setVarietasSelections((prev) => ({
-                                                                    ...prev,
-                                                                    [`s-${sh.id}`]: id,
-                                                                }))
-                                                            }
-                                                            disabled={busy}
-                                                            required
-                                                        />
-                                                    </div>
                                                     <div className="flex items-center flex-wrap gap-2 text-sm text-gray-600">
                                                         <div className="flex items-center gap-1.5">
                                                             <MapPin size={16} className="shrink-0 text-gray-600" />
@@ -620,6 +680,15 @@ function ApprovalPage() {
                                     );
                                 })}
                             </div>
+                            <Pagination
+                                page={shPage}
+                                pageCount={shPageCount}
+                                total={shTotal}
+                                pageSize={shPageSize}
+                                onPageChange={setShPage}
+                                itemLabel="pengajuan"
+                                className="bg-white rounded-2xl border border-bl-accent/20"
+                            />
                         </>
                     )}
 
@@ -627,7 +696,7 @@ function ApprovalPage() {
                         <>
                             <div className="text-sm font-semibold text-gray-800 text-left">Pendaftaran petani baru</div>
                             <div className="space-y-2">
-                                {pendingUsers.map((farmer) => {
+                                {pagedPendingUsers.map((farmer) => {
                                     const busy = actionId === farmer.id;
                                     const canApprove = Boolean(farmer.screenhouse_id || farmer.screenhouse_name);
 
@@ -653,6 +722,7 @@ function ApprovalPage() {
                                                         }))
                                                     }
                                                     token={token}
+                                                    varietasOptions={varietasOptions}
                                                     busy={busy}
                                                     onViewMap={(f) =>
                                                         setMapPreview({
@@ -675,6 +745,15 @@ function ApprovalPage() {
                                     );
                                 })}
                             </div>
+                            <Pagination
+                                page={userPage}
+                                pageCount={userPageCount}
+                                total={userTotal}
+                                pageSize={userPageSize}
+                                onPageChange={setUserPage}
+                                itemLabel="pendaftaran"
+                                className="bg-white rounded-2xl border border-bl-accent/20"
+                            />
                         </>
                     )}
 

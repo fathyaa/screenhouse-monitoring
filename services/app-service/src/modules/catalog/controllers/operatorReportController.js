@@ -7,7 +7,7 @@ const { buildEstimasiTanamBatch } = require("../../../shared/estimasiTanamServic
 const PARAM_LABELS = [
   { key: "nitrogen", label: "Nitrogen" },
   { key: "phosphorus", label: "Phosphorus" },
-  { key: "potassium", label: "Potassium" },
+  { key: "potassium", label: "Kalium" },
   { key: "soil_moisture", label: "Kelembapan tanah" },
   { key: "soil_temperature", label: "Suhu tanah" },
   { key: "soil_ph", label: "pH tanah" },
@@ -23,6 +23,40 @@ const GROUP_BY_COLUMNS = {
   village: { id: "village_id", name: "village" },
 };
 
+/** Target kebijakan Program IP400: minimal % pembibitan siap tepat waktu. */
+const TARGET_READINESS_PCT = 90;
+/** Minimal siklus selesai agar statistik durasi dianggap cukup (bukan menyesatkan). */
+const MIN_COMPLETED_FOR_DURATION = 5;
+
+/**
+ * Parameter yang dikoreksi otomatis oleh aktuator (kipas/irigasi/lampu) — mirror
+ * `frontend/src/constants/actuatorRules.js`. Alert pada parameter ini "ditangani
+ * otomatis" dan TIDAK dihitung sebagai alert kritis yang butuh tindakan manusia.
+ */
+const AUTO_HANDLED_PHRASES = [
+  "kelembapan tanah",
+  "suhu udara",
+  "kelembapan udara",
+  "suhu tanah",
+  "intensitas cahaya",
+];
+
+/**
+ * True jika pesan alert = pelanggaran threshold yang ditangani aktuator otomatis.
+ * Alert "tidak mengirim data" (offline) tidak punya arah maksimum/minimum → bukan
+ * auto-handled → tetap dihitung kritis.
+ */
+function isAutoHandledMessage(message) {
+  const lower = (message || "").toLowerCase();
+  const hasDirection =
+    lower.includes("maksimum") ||
+    lower.includes("melebihi") ||
+    lower.includes("minimum") ||
+    lower.includes("bawah");
+  if (!hasDirection) return false;
+  return AUTO_HANDLED_PHRASES.some((p) => lower.includes(p));
+}
+
 function paramFromMessage(message) {
   if (!message) return { key: "other", label: "Lainnya" };
   const match = PARAM_LABELS.find((p) => message.includes(p.label));
@@ -31,7 +65,9 @@ function paramFromMessage(message) {
 
 function parseDays(raw) {
   const days = Number(raw);
-  if ([1, 7, 30].includes(days)) return days;
+  // Terima rentang bebas 1–90 hari (semua query memakai $::int * INTERVAL '1 day',
+  // jadi angka apa pun aman). Preset 24 jam / 7 / 30 hari tetap cocok.
+  if (Number.isInteger(days) && days >= 1 && days <= 90) return days;
   return 7;
 }
 
@@ -99,21 +135,26 @@ function buildVarietasStressRanking(screenhouses, stressMap) {
     );
 }
 
-function buildVarietasDurationStats(screenhouses) {
+/**
+ * Statistik durasi dari siklus yang BENAR-BENAR SELESAI (`semai_cycles.completed`),
+ * bukan hari-berjalan siklus aktif. Durasi aktual = tanggal_selesai − tanggal_mulai,
+ * dibanding target (durasi_target_hari). Menghindari bias in-progress vs full-duration.
+ */
+function buildVarietasDurationStats(completedCycles) {
   const groups = new Map();
-  for (const sh of screenhouses) {
-    const name = screenhouseVarietasName(sh);
-    const elapsed = elapsedSemaiDays(sh);
-    if (!name || elapsed == null) continue;
+  for (const cyc of completedCycles) {
+    const name = cyc.varietas_nama;
+    const actual = diffCalendarDays(cyc.tanggal_mulai, cyc.tanggal_selesai);
+    if (!name || actual == null) continue;
 
     const entry = groups.get(name) ?? {
       nama: name,
       actual_days: [],
       standard_days: [],
     };
-    entry.actual_days.push(elapsed);
-    if (sh.durasi_pembibitan_hari != null) {
-      entry.standard_days.push(Number(sh.durasi_pembibitan_hari));
+    entry.actual_days.push(actual);
+    if (cyc.durasi_target_hari != null) {
+      entry.standard_days.push(Number(cyc.durasi_target_hari));
     }
     groups.set(name, entry);
   }
@@ -124,7 +165,7 @@ function buildVarietasDurationStats(screenhouses) {
       const avgStandard = avgNumeric(g.standard_days);
       return {
         nama: g.nama,
-        screenhouse_count: g.actual_days.length,
+        cycle_count: g.actual_days.length,
         avg_actual_days: avgActual,
         avg_standard_days: avgStandard,
         delay_index_days:
@@ -133,7 +174,69 @@ function buildVarietasDurationStats(screenhouses) {
             : null,
       };
     })
-    .sort((a, b) => b.screenhouse_count - a.screenhouse_count);
+    .sort((a, b) => b.cycle_count - a.cycle_count);
+}
+
+/**
+ * Throughput = output riil program (inti IP400): berapa siklus selesai dalam periode,
+ * beserta distribusi grade A/B/C. Flag `low_adoption` bila fitur "selesaikan siklus"
+ * hampir tak dipakai (turnover tak terukur).
+ */
+function buildCycleThroughput(completedCycles) {
+  const grade = { A: 0, B: 0, C: 0, ungraded: 0 };
+  for (const cyc of completedCycles) {
+    if (cyc.grade === "A" || cyc.grade === "B" || cyc.grade === "C") {
+      grade[cyc.grade] += 1;
+    } else {
+      grade.ungraded += 1;
+    }
+  }
+  const total = completedCycles.length;
+  return {
+    completed_count: total,
+    grade,
+    low_adoption: total < MIN_COMPLETED_FOR_DURATION,
+  };
+}
+
+/**
+ * Ringkasan kesiapan tanam (outcome IP400): rasio tepat waktu vs target + kalender
+ * kesiapan (bucket sisa hari) untuk penjadwalan olah lahan / transplantasi.
+ */
+function buildReadinessSummary(screenhouses, estimasiMap) {
+  const buckets = { overdue: 0, d0_7: 0, d8_14: 0, d15_30: 0, d30_plus: 0, no_estimate: 0 };
+  let onTrack = 0;
+  let terlambat = 0;
+  let perluEvaluasi = 0;
+
+  for (const sh of screenhouses) {
+    const est = estimasiMap[sh.id];
+    const status = est?.status ?? sh.status_estimasi;
+    if (status === "on_track") onTrack += 1;
+    else if (status === "terlambat") terlambat += 1;
+    else if (status === "perlu_evaluasi") perluEvaluasi += 1;
+
+    const sisa = est?.sisa_hari;
+    if (sisa == null) buckets.no_estimate += 1;
+    else if (sisa < 0) buckets.overdue += 1;
+    else if (sisa <= 7) buckets.d0_7 += 1;
+    else if (sisa <= 14) buckets.d8_14 += 1;
+    else if (sisa <= 30) buckets.d15_30 += 1;
+    else buckets.d30_plus += 1;
+  }
+
+  const withStatus = onTrack + terlambat + perluEvaluasi;
+  return {
+    on_time_readiness_pct: withStatus > 0 ? Math.round((onTrack / withStatus) * 1000) / 10 : null,
+    target_readiness_pct: TARGET_READINESS_PCT,
+    behind_count: terlambat + perluEvaluasi,
+    ready_within_14d: buckets.d0_7 + buckets.d8_14,
+    readiness_buckets: buckets,
+    on_track: onTrack,
+    terlambat,
+    perlu_evaluasi: perluEvaluasi,
+    with_estimate: withStatus,
+  };
 }
 
 function formatEstimasiLabel(estimasi) {
@@ -353,6 +456,7 @@ async function fetchMonitoringStats(screenhouseIds, days) {
       uptimeIds: new Set(),
       actuator: {},
       thresholds: {},
+      activeAlerts: { critical: 0, auto_handled: 0 },
     };
   }
 
@@ -365,6 +469,7 @@ async function fetchMonitoringStats(screenhouseIds, days) {
       uptimeIds: new Set(),
       actuator: {},
       thresholds: {},
+      activeAlerts: { critical: 0, auto_handled: 0 },
     };
   }
 
@@ -376,6 +481,7 @@ async function fetchMonitoringStats(screenhouseIds, days) {
     uptimeRes,
     actuatorRes,
     thresholdRes,
+    activeAlertsRes,
   ] = await Promise.all([
     monitoringPool.query(
       `
@@ -459,6 +565,16 @@ async function fetchMonitoringStats(screenhouseIds, days) {
       `SELECT * FROM threshold_snapshots WHERE screenhouse_id = ANY($1::int[])`,
       [screenhouseIds]
     ),
+    monitoringPool.query(
+      `
+      SELECT message, COUNT(*)::int AS count
+      FROM alerts
+      WHERE screenhouse_id = ANY($1::int[])
+        AND status = 'active'
+      GROUP BY message
+      `,
+      [screenhouseIds]
+    ),
   ]);
 
   const sensorAvgs = Object.fromEntries(
@@ -473,6 +589,13 @@ async function fetchMonitoringStats(screenhouseIds, days) {
     thresholdRes.rows.map((row) => [row.screenhouse_id, row])
   );
 
+  let criticalAlerts = 0;
+  let autoHandledAlerts = 0;
+  for (const row of activeAlertsRes.rows) {
+    if (isAutoHandledMessage(row.message)) autoHandledAlerts += row.count;
+    else criticalAlerts += row.count;
+  }
+
   return {
     alertTrend: alertTrendRes.rows.map((r) => ({
       date: r.date,
@@ -484,7 +607,30 @@ async function fetchMonitoringStats(screenhouseIds, days) {
     uptimeIds: new Set(uptimeRes.rows.map((r) => r.screenhouse_id)),
     actuator,
     thresholds,
+    activeAlerts: { critical: criticalAlerts, auto_handled: autoHandledAlerts },
   };
+}
+
+/**
+ * Siklus semai yang SELESAI dalam periode (untuk throughput & durasi aktual).
+ * Difilter ke screenhouse yang lolos filter wilayah agar konsisten dengan laporan.
+ */
+async function fetchCompletedCycles(screenhouseIds, days) {
+  if (!screenhouseIds.length) return [];
+  const result = await pool.query(
+    `
+    SELECT screenhouse_id, varietas_nama,
+           tanggal_mulai::text  AS tanggal_mulai,
+           tanggal_selesai::text AS tanggal_selesai,
+           durasi_target_hari, grade
+    FROM semai_cycles
+    WHERE status = 'completed'
+      AND screenhouse_id = ANY($1::int[])
+      AND tanggal_selesai >= (NOW() AT TIME ZONE 'Asia/Jakarta')::date - ($2::int * INTERVAL '1 day')
+    `,
+    [screenhouseIds, days]
+  );
+  return result.rows;
 }
 
 async function fetchGrowthStats(days) {
@@ -553,7 +699,7 @@ function avgNumeric(values) {
   return Math.round((nums.reduce((a, c) => a + c, 0) / nums.length) * 100) / 100;
 }
 
-function buildRegionRows(screenhouses, mapSummary, groupBy, monitoringStats, includeStressScore) {
+function buildRegionRows(screenhouses, mapSummary, groupBy, monitoringStats, includeStressScore, estimasiMap = {}) {
   const col = GROUP_BY_COLUMNS[groupBy];
   const groups = new Map();
 
@@ -574,6 +720,9 @@ function buildRegionRows(screenhouses, mapSummary, groupBy, monitoringStats, inc
         offline: 0,
         active_alerts: 0,
         online_count: 0,
+        on_track: 0,
+        terlambat: 0,
+        perlu_evaluasi: 0,
       });
     }
 
@@ -589,6 +738,12 @@ function buildRegionRows(screenhouses, mapSummary, groupBy, monitoringStats, inc
     if (monitoringStats.uptimeIds.has(sh.id)) {
       group.online_count += 1;
     }
+
+    // Progres IP400 per wilayah (menghormati group_by) — gabung dengan kesehatan.
+    const estStatus = estimasiMap[sh.id]?.status ?? sh.status_estimasi;
+    if (estStatus === "on_track") group.on_track += 1;
+    else if (estStatus === "terlambat") group.terlambat += 1;
+    else if (estStatus === "perlu_evaluasi") group.perlu_evaluasi += 1;
   }
 
   const sensorKeys = [
@@ -651,6 +806,9 @@ function buildRegionRows(screenhouses, mapSummary, groupBy, monitoringStats, inc
         critical: group.critical,
         offline: group.offline,
         active_alerts: group.active_alerts,
+        on_track: group.on_track,
+        terlambat: group.terlambat,
+        perlu_evaluasi: group.perlu_evaluasi,
         uptime_pct,
         avg_stress_score,
         sensor_avg,
@@ -745,7 +903,10 @@ async function getOperatorReports(req, res) {
     ]);
 
     const screenhouseIds = screenhouses.map((sh) => sh.id);
-    const monitoringStats = await fetchMonitoringStats(screenhouseIds, days);
+    const [monitoringStats, completedCycles] = await Promise.all([
+      fetchMonitoringStats(screenhouseIds, days),
+      fetchCompletedCycles(screenhouseIds, days),
+    ]);
 
     let stressMap = {};
     let estimasiMap = {};
@@ -763,11 +924,13 @@ async function getOperatorReports(req, res) {
       mapSummary,
       groupBy,
       monitoringStats,
-      includeStressScore
+      includeStressScore,
+      estimasiMap
     );
 
     const varietas_distribution = buildVarietasDistribution(screenhouses);
-    const varietas_duration_stats = buildVarietasDurationStats(screenhouses);
+    const varietas_duration_stats = buildVarietasDurationStats(completedCycles);
+    const cycle_throughput = buildCycleThroughput(completedCycles);
     const varietas_resilience = buildVarietasStressRanking(screenhouses, stressMap);
     const seedling_progress_by_district =
       includeEstimasi || includeStressScore
@@ -778,6 +941,8 @@ async function getOperatorReports(req, res) {
       includeEstimasi || includeStressScore
         ? buildBibitSummary(screenhouses, stressMap, estimasiMap)
         : null;
+
+    const readiness = buildReadinessSummary(screenhouses, estimasiMap);
 
     const statusTotals = { healthy: 0, warning: 0, critical: 0, offline: 0 };
     let activeAlerts = 0;
@@ -834,7 +999,24 @@ async function getOperatorReports(req, res) {
         offline_count: statusTotals.offline ?? 0,
         alert_count_period: alertCountCurrent,
         avg_stress_score: bibit_summary?.avg_stress_score ?? null,
+        // Outcome IP400 (headline)
+        on_time_readiness_pct: readiness.on_time_readiness_pct,
+        target_readiness_pct: readiness.target_readiness_pct,
+        ready_within_14d: readiness.ready_within_14d,
+        behind_count: readiness.behind_count,
       },
+      device_health: {
+        uptime_pct:
+          screenhouses.length > 0
+            ? Math.round((onlineCount / screenhouses.length) * 1000) / 10
+            : 0,
+        offline_count: statusTotals.offline ?? 0,
+        critical_alerts: monitoringStats.activeAlerts.critical,
+        auto_handled_alerts: monitoringStats.activeAlerts.auto_handled,
+        alerts_delta: alertCountCurrent - monitoringStats.alertTrendPrev,
+      },
+      readiness,
+      cycle_throughput,
       status_totals: statusTotals,
       varietas_distribution,
       varietas_duration_stats,

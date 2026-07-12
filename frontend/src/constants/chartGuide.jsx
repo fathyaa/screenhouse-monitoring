@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { ReferenceArea } from "recharts";
+import { PARAM_COLORS, CHART_ZONE } from "./chartColors";
 
 export const CHART_LEGEND = {
   align: "left",
@@ -9,9 +10,9 @@ export const CHART_LEGEND = {
 
 /** Warna zona batas threshold pada grafik tren mg/kg. */
 export const THRESHOLD_ZONE_COLORS = {
-  low: "#fecaca",
-  optimal: "#bbf7d0",
-  high: "#fef08a",
+  low: CHART_ZONE.below,
+  optimal: CHART_ZONE.optimal,
+  high: CHART_ZONE.above,
 };
 
 export const THRESHOLD_ZONE_LEGEND = [
@@ -47,7 +48,7 @@ export const PETANI_CHART_GUIDE = [
   ...SCREENHOUSE_CHART_GUIDE,
 ];
 
-/** Panduan per grafik di halaman Tren Tanah (petani). */
+/** Panduan per grafik di halaman Tren Wilayah (operator). */
 export const PETANI_TREN_CHART_GUIDES = {
   nMoisture: SCREENHOUSE_CHART_GUIDE[1],
   npk: SCREENHOUSE_CHART_GUIDE[2],
@@ -359,8 +360,8 @@ export function buildNpkFromLatest(latestByScreenhouse, threshold) {
   };
 
   return [
-    { name: "N", value: avg("nitrogen"), fill: "#16a34a", min: threshold?.min_nitrogen },
-    { name: "P", value: avg("phosphorus"), fill: "#2563eb", min: threshold?.min_phosphorus },
-    { name: "K", value: avg("potassium"), fill: "#ca8a04", min: threshold?.min_potassium },
+    { name: "N", value: avg("nitrogen"), fill: PARAM_COLORS.nitrogen, min: threshold?.min_nitrogen },
+    { name: "P", value: avg("phosphorus"), fill: PARAM_COLORS.phosphorus, min: threshold?.min_phosphorus },
+    { name: "K", value: avg("potassium"), fill: PARAM_COLORS.potassium, min: threshold?.min_potassium },
   ];
 }

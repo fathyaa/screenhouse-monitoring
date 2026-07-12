@@ -5,6 +5,8 @@ import { Search, Leaf, ExternalLink } from "lucide-react";
 import AdminPageShell from "../components/AdminPageShell";
 import WilayahFilter, { buildWilayahQuery } from "../components/WilayahFilter";
 import { TableRowsSkeleton, ListPanelSkeleton } from "../components/LoadingUI";
+import Pagination from "../components/Pagination";
+import { usePagination } from "../hooks/usePagination";
 
 import { API_URL } from "../config/api";
 
@@ -33,6 +35,55 @@ function formatWilayah(row) {
   return [row.village, row.district, row.regency].filter(Boolean).join(", ");
 }
 
+const STATUS_LABELS = { active: "Aktif", pending: "Pending", inactive: "Nonaktif" };
+
+function StatusConfirmDialog({ change, busy, onCancel, onConfirm }) {
+  if (!change) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[2000] flex items-end sm:items-center justify-center p-4 bg-black/40"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="status-confirm-title"
+    >
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-xl w-full max-w-sm p-5 text-left">
+        <div id="status-confirm-title" className="text-sm font-semibold text-gray-800">
+          Ubah status screenhouse?
+        </div>
+        <p className="text-sm text-gray-600 mt-2 leading-relaxed">
+          Status "{change.row.name}" akan diubah dari{" "}
+          <span className="font-semibold">{STATUS_LABELS[change.row.status] || change.row.status}</span> menjadi{" "}
+          <span className="font-semibold">{STATUS_LABELS[change.newStatus] || change.newStatus}</span>.
+          {change.newStatus === "inactive" && (
+            <span className="block mt-1.5 text-amber-700">
+              Monitoring untuk screenhouse ini akan berhenti dan petani tidak lagi menerima peringatan.
+            </span>
+          )}
+        </p>
+        <div className="flex gap-2 mt-4">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-bl-primary hover:bg-bl-primary-hover text-white disabled:opacity-50"
+          >
+            {busy ? "Menyimpan..." : "Ya, ubah status"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function KelolaScreenhousePage() {
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
@@ -47,6 +98,7 @@ export default function KelolaScreenhousePage() {
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
   const [updatingId, setUpdatingId] = useState(null);
+  const [pendingChange, setPendingChange] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -70,6 +122,17 @@ export default function KelolaScreenhousePage() {
     loadData();
   }, [loadData]);
 
+  const requestStatusChange = (row, newStatus) => {
+    if (newStatus === row.status) return;
+    setPendingChange({ row, newStatus });
+  };
+
+  const confirmStatusChange = async () => {
+    if (!pendingChange) return;
+    await handleStatusChange(pendingChange.row.id, pendingChange.newStatus);
+    setPendingChange(null);
+  };
+
   const handleStatusChange = async (id, newStatus) => {
     setUpdatingId(id);
     try {
@@ -92,6 +155,16 @@ export default function KelolaScreenhousePage() {
       setUpdatingId(null);
     }
   };
+
+  const {
+    page,
+    setPage,
+    pageItems: pagedItems,
+    pageCount,
+    total,
+    pageSize,
+    startIndex,
+  } = usePagination(items, 10, `${wilayah.regency_id}|${wilayah.district_id}|${wilayah.village_id}|${status}|${search}`);
 
   return (
     <AdminPageShell
@@ -175,9 +248,9 @@ export default function KelolaScreenhousePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((row, i) => (
+                  {pagedItems.map((row, i) => (
                     <tr key={row.id} className="border-t border-gray-100 hover:bg-gray-50/50">
-                      <td className="px-4 py-3 text-gray-600">{i + 1}</td>
+                      <td className="px-4 py-3 text-gray-600">{startIndex + i + 1}</td>
                       <td className="px-4 py-3 font-medium text-gray-800">{row.name}</td>
                       <td className="px-4 py-3 text-gray-600">{row.owner_name}</td>
                       <td className="px-4 py-3 text-gray-600">{row.owner_phone}</td>
@@ -189,7 +262,7 @@ export default function KelolaScreenhousePage() {
                           <select
                             value={row.status}
                             disabled={updatingId === row.id}
-                            onChange={(e) => handleStatusChange(row.id, e.target.value)}
+                            onChange={(e) => requestStatusChange(row, e.target.value)}
                             className="h-8 px-2 rounded-lg border border-gray-200 text-xs outline-none focus:ring-1 focus:ring-green-300 disabled:opacity-50"
                           >
                             <option value="active">Aktif</option>
@@ -215,7 +288,7 @@ export default function KelolaScreenhousePage() {
 
             {/* Kartu — layar sempit di bawah sm */}
             <div className="sm:hidden divide-y divide-gray-100">
-              {items.map((row) => (
+              {pagedItems.map((row) => (
                 <div key={row.id} className="p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -239,7 +312,7 @@ export default function KelolaScreenhousePage() {
                     <select
                       value={row.status}
                       disabled={updatingId === row.id}
-                      onChange={(e) => handleStatusChange(row.id, e.target.value)}
+                      onChange={(e) => requestStatusChange(row, e.target.value)}
                       className="h-8 px-2 rounded-lg border border-gray-200 text-xs outline-none focus:ring-1 focus:ring-green-300 disabled:opacity-50 ml-auto"
                     >
                       <option value="active">Aktif</option>
@@ -250,9 +323,26 @@ export default function KelolaScreenhousePage() {
                 </div>
               ))}
             </div>
+
+            <Pagination
+              page={page}
+              pageCount={pageCount}
+              total={total}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              itemLabel="screenhouse"
+              className="border-t border-gray-100"
+            />
           </>
         )}
       </div>
+
+      <StatusConfirmDialog
+        change={pendingChange}
+        busy={updatingId != null}
+        onCancel={() => setPendingChange(null)}
+        onConfirm={confirmStatusChange}
+      />
     </AdminPageShell>
   );
 }

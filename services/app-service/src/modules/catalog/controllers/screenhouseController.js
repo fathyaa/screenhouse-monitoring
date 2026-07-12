@@ -133,6 +133,11 @@ async function getScreenhouses(req, res) {
 
         s.status,
 
+        s.province_id,
+        s.regency_id,
+        s.district_id,
+        s.village_id,
+
         p.name AS province,
         r.name AS regency,
         d.name AS district,

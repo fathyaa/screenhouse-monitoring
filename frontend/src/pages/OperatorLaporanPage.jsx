@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Lightbulb, Timer, Sprout } from "lucide-react";
+import {
+  Lightbulb,
+  Timer,
+  Sprout,
+  Target,
+  CalendarClock,
+  ChevronDown,
+  Activity,
+  Phone,
+  TriangleAlert,
+  CheckCircle2,
+} from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -23,11 +34,17 @@ import { exportOperatorReportCsv, exportProblematicScreenhousesCsv } from "../ut
 import { getStressScoreStyle, categoryKeyFromScore } from "../constants/stressScore";
 import { ChartGridSkeleton, KpiGridSkeleton } from "../components/LoadingUI";
 import FilterSelect from "../components/FilterSelect";
+import Pagination from "../components/Pagination";
+import { usePagination } from "../hooks/usePagination";
+import {
+  CHART_STATUS,
+  CHART_GRID,
+  CATEGORICAL_PALETTE,
+} from "../constants/chartColors";
 import {
   HorizontalCountLabels,
   LinePointLabels,
   StackedSegmentLabels,
-  VerticalCountLabels,
 } from "../components/charts/BarValueLabel";
 
 const PERIOD_OPTIONS = [
@@ -51,7 +68,7 @@ const DEFAULT_FILTERS = {
   villageId: "",
 };
 
-const VARIETAS_CHART_COLORS = ["#16a34a", "#2563eb", "#ca8a04", "#9333ea", "#0891b2", "#64748b", "#dc2626", "#7c3aed"];
+const VARIETAS_CHART_COLORS = CATEGORICAL_PALETTE;
 
 const STATUS_BAR_COLORS = {
   healthy: SCREENHOUSE_STATUS.healthy.color,
@@ -60,11 +77,43 @@ const STATUS_BAR_COLORS = {
   offline: SCREENHOUSE_STATUS.offline.color,
 };
 
+/**
+ * Fallback kartu untuk tabel laporan di layar HP — tabel dense multi-kolom
+ * jadi baris kartu bertumpuk (mirip halaman admin), bukan overflow-x scroll.
+ */
+function ReportCardList({ children }) {
+  return <div className="sm:hidden divide-y divide-gray-100">{children}</div>;
+}
+
+function ReportCard({ title, subtitle, badge, items }) {
+  return (
+    <div className="px-4 py-3.5">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-gray-800">{title}</div>
+          {subtitle && <div className="text-xs text-gray-600 mt-0.5">{subtitle}</div>}
+        </div>
+        {badge != null && <div className="shrink-0">{badge}</div>}
+      </div>
+      {items?.length > 0 && (
+        <dl className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-2">
+          {items.map(({ label, value }) => (
+            <div key={label} className="min-w-0">
+              <dt className="text-xs text-gray-500 leading-tight">{label}</dt>
+              <dd className="text-sm text-gray-800 tabular-nums mt-0.5">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </div>
+  );
+}
+
 /** Satu kalimat ringkas dari data yang sudah ada di report — bukan data baru. */
 function buildInsightText(report) {
   if (!report) return null;
   const problematicCount = report.problematic_screenhouses?.length ?? 0;
-  const terlambat = report.bibit_summary?.terlambat ?? 0;
+  const terlambat = report.readiness?.behind_count ?? report.bibit_summary?.terlambat ?? 0;
   const topParam = report.top_alert_params?.[0]?.label;
   const delta = report.period_comparison?.alerts_delta;
 
@@ -73,7 +122,7 @@ function buildInsightText(report) {
     parts.push(`${problematicCount} screenhouse perlu tindak lanjut`);
   }
   if (terlambat > 0) {
-    parts.push(`${terlambat} pembibitan terlambat dari target`);
+    parts.push(`${terlambat} pembibitan terlambat / perlu evaluasi`);
   }
 
   if (!parts.length) {
@@ -90,7 +139,7 @@ function buildInsightText(report) {
   return text;
 }
 
-function KpiCard({ label, value, hint, tone = "slate" }) {
+function KpiCard({ label, value, hint, tone = "slate", icon: Icon }) {
   const tones = {
     slate: "border-gray-200 bg-white text-gray-900",
     green: "border-bl-primary/45 bg-[#e3f2ea] text-bl-dark",
@@ -105,12 +154,156 @@ function KpiCard({ label, value, hint, tone = "slate" }) {
   };
   return (
     <div className={`rounded-2xl border p-4 ${tones[tone] ?? tones.slate}`}>
-      <div className={`text-[11px] uppercase tracking-wide font-semibold ${labelTones[tone] ?? labelTones.slate}`}>
+      <div className={`flex items-center gap-1.5 text-[11px] uppercase tracking-wide font-semibold ${labelTones[tone] ?? labelTones.slate}`}>
+        {Icon && <Icon size={13} aria-hidden />}
         {label}
       </div>
       <div className="text-2xl font-bold mt-1 tabular-nums">{value}</div>
       {hint && <div className="text-xs text-gray-600 mt-1">{hint}</div>}
     </div>
+  );
+}
+
+/**
+ * Headline outcome IP400: % kesiapan tepat waktu vs target, dengan verdict
+ * on-track / tertinggal — jawaban pertama yang dicari pengambil keputusan.
+ */
+function VerdictHeader({ kpis, periodLabel, filterLabel }) {
+  const pct = kpis?.on_time_readiness_pct;
+  const target = kpis?.target_readiness_pct ?? 90;
+  const hasData = pct != null;
+  const onTrack = hasData && pct >= target;
+
+  const tone = !hasData
+    ? { wrap: "border-gray-200 bg-white", ic: "bg-gray-100 text-gray-500", head: "text-gray-800", bar: "#94a3b8" }
+    : onTrack
+    ? { wrap: "border-bl-primary/45 bg-[#e3f2ea]", ic: "bg-white/70 text-bl-primary", head: "text-bl-dark", bar: SCREENHOUSE_STATUS.healthy.color }
+    : { wrap: "border-red-300 bg-red-50", ic: "bg-red-100 text-red-700", head: "text-red-950", bar: SCREENHOUSE_STATUS.critical.color };
+
+  const Icon = !hasData ? Target : onTrack ? CheckCircle2 : TriangleAlert;
+
+  let verdict;
+  if (!hasData) {
+    verdict = "Belum cukup data kesiapan untuk menilai target — pastikan alat mengirim data & tanggal semai terisi.";
+  } else if (onTrack) {
+    verdict = `On-track: ${pct}% pembibitan siap tepat waktu, memenuhi target ${target}%.`;
+  } else {
+    verdict = `Tertinggal: ${pct}% siap tepat waktu, di bawah target ${target}%. ${kpis.behind_count ?? 0} unit terlambat / perlu evaluasi.`;
+  }
+
+  return (
+    <div className={`rounded-2xl border px-5 py-4 flex items-start gap-4 ${tone.wrap}`}>
+      <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${tone.ic}`}>
+        <Icon size={24} aria-hidden />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <span className={`text-2xl font-bold tabular-nums ${tone.head}`}>
+            {hasData ? `${pct}%` : "—"}
+          </span>
+          <span className="text-xs text-gray-600">kesiapan tepat waktu · target {target}%</span>
+        </div>
+        {hasData && (
+          <div className="mt-2 h-2 rounded-full bg-white/70 overflow-hidden relative max-w-md">
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${Math.min(100, pct)}%`, backgroundColor: tone.bar }}
+            />
+            <div
+              className="absolute top-0 bottom-0 w-0.5 bg-gray-700/70"
+              style={{ left: `${Math.min(100, target)}%` }}
+              title={`Target ${target}%`}
+            />
+          </div>
+        )}
+        <p className={`text-sm mt-2 leading-relaxed ${tone.head}`}>{verdict}</p>
+        <p className="text-[11px] text-gray-500 mt-1">
+          {periodLabel} · {filterLabel}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** KPI kesehatan perangkat gabungan (uptime + offline + alert kritis). */
+function DeviceHealthCard({ deviceHealth }) {
+  if (!deviceHealth) return null;
+  const { uptime_pct, offline_count, critical_alerts, auto_handled_alerts } = deviceHealth;
+  const tone = critical_alerts > 0 || uptime_pct < 80 ? "amber" : "slate";
+  const tones = {
+    slate: "border-gray-200 bg-white",
+    amber: "border-amber-300 bg-amber-50",
+  };
+  return (
+    <div className={`rounded-2xl border p-4 ${tones[tone]}`}>
+      <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide font-semibold text-gray-600">
+        <Activity size={13} aria-hidden />
+        Kesehatan perangkat
+      </div>
+      <div className="text-2xl font-bold mt-1 tabular-nums text-gray-900">{uptime_pct}%</div>
+      <div className="text-xs text-gray-600 mt-1">
+        {offline_count} tidak terhubung ·{" "}
+        <span className={critical_alerts > 0 ? "text-red-700 font-medium" : ""}>
+          {critical_alerts} alert kritis
+        </span>
+        {auto_handled_alerts > 0 && (
+          <span className="text-gray-500"> · {auto_handled_alerts} ditangani otomatis</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Kalender kesiapan — berapa batch siap tanam dalam jendela waktu ke depan. */
+function ReadinessCalendar({ readiness }) {
+  if (!readiness) return null;
+  const b = readiness.readiness_buckets ?? {};
+  const cells = [
+    { key: "overdue", label: "Lewat estimasi", value: b.overdue ?? 0, tone: "text-red-700 bg-red-50 border-red-100" },
+    { key: "d0_7", label: "≤ 7 hari", value: b.d0_7 ?? 0, tone: "text-emerald-800 bg-emerald-50 border-emerald-100" },
+    { key: "d8_14", label: "8–14 hari", value: b.d8_14 ?? 0, tone: "text-emerald-800 bg-emerald-50 border-emerald-100" },
+    { key: "d15_30", label: "15–30 hari", value: b.d15_30 ?? 0, tone: "text-gray-800 bg-gray-50 border-gray-100" },
+    { key: "d30_plus", label: "> 30 hari", value: b.d30_plus ?? 0, tone: "text-gray-800 bg-gray-50 border-gray-100" },
+  ];
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 p-4">
+      <div className="flex items-center gap-2 mb-1">
+        <CalendarClock size={16} className="text-bl-primary shrink-0" aria-hidden />
+        <div className="text-sm font-semibold text-gray-800">Kalender kesiapan tanam</div>
+      </div>
+      <div className="text-xs text-gray-600 mb-3">
+        Jumlah screenhouse per jendela estimasi siap tanam — untuk menjadwalkan olah lahan & transplantasi.
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        {cells.map((c) => (
+          <div key={c.key} className={`rounded-xl border p-3 ${c.tone}`}>
+            <div className="text-2xl font-bold tabular-nums">{c.value}</div>
+            <div className="text-[11px] font-medium mt-0.5">{c.label}</div>
+          </div>
+        ))}
+      </div>
+      {(b.no_estimate ?? 0) > 0 && (
+        <div className="text-[11px] text-gray-500 mt-2">
+          {b.no_estimate} screenhouse belum punya estimasi (tanggal semai / data sensor belum lengkap).
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Bagian sekunder yang bisa dilipat — menjaga layar utama fokus ke keputusan. */
+function CollapsibleSection({ title, subtitle, defaultOpen = false, children }) {
+  return (
+    <details className="bg-white rounded-2xl border border-gray-200 overflow-hidden group" open={defaultOpen}>
+      <summary className="px-4 py-3 cursor-pointer list-none flex items-center justify-between gap-2 hover:bg-gray-50">
+        <div>
+          <div className="text-sm font-semibold text-gray-800">{title}</div>
+          {subtitle && <div className="text-xs text-gray-600 mt-0.5">{subtitle}</div>}
+        </div>
+        <ChevronDown size={18} className="text-gray-500 transition-transform group-open:rotate-180 shrink-0" />
+      </summary>
+      <div className="px-4 pb-4 pt-1 space-y-4 border-t border-gray-100">{children}</div>
+    </details>
   );
 }
 
@@ -138,7 +331,7 @@ function OperatorLaporanPage() {
   const [regencies, setRegencies] = useState([]);
   const [districts, setDistricts] = useState([]);
   const [villages, setVillages] = useState([]);
-  const [regionTableTab, setRegionTableTab] = useState("status");
+  const [regionLimit, setRegionLimit] = useState(8);
 
   const { days, groupBy, provinceId, regencyId, districtId, villageId } = draftFilters;
   const applied = appliedFilters;
@@ -253,14 +446,14 @@ function OperatorLaporanPage() {
 
   const statusChartData = useMemo(
     () =>
-      (report?.regions ?? []).map((row) => ({
+      (report?.regions ?? []).slice(0, regionLimit).map((row) => ({
         name: row.region_name,
         Sehat: row.healthy,
         Peringatan: row.warning,
         Kritis: row.critical,
         "Tidak terhubung": row.offline,
       })),
-    [report]
+    [report, regionLimit]
   );
 
   const alertTrendData = useMemo(
@@ -275,19 +468,6 @@ function OperatorLaporanPage() {
     [report]
   );
 
-  const sensorTrendData = useMemo(
-    () =>
-      (report?.regions ?? [])
-        .filter((r) => r.sensor_avg?.soil_moisture != null || r.sensor_avg?.soil_temperature != null)
-        .slice(0, 8)
-        .map((row) => ({
-          name: row.region_name.length > 14 ? `${row.region_name.slice(0, 12)}…` : row.region_name,
-          kelembapan: row.sensor_avg?.soil_moisture,
-          suhu: row.sensor_avg?.soil_temperature,
-        })),
-    [report]
-  );
-
   const paramChartData = useMemo(
     () => (report?.top_alert_params ?? []).map((p) => ({ name: p.label, count: p.count })),
     [report]
@@ -299,7 +479,24 @@ function OperatorLaporanPage() {
   );
 
   const insightText = useMemo(() => buildInsightText(report), [report]);
-  const regionsTruncated = (report?.regions?.length ?? 0) > 8;
+
+  const {
+    page: regionPage,
+    setPage: setRegionPage,
+    pageItems: pagedRegions,
+    pageCount: regionPageCount,
+    total: regionTotal,
+    pageSize: regionPageSize,
+  } = usePagination(report?.regions ?? [], 10, report);
+
+  const {
+    page: worklistPage,
+    setPage: setWorklistPage,
+    pageItems: pagedProblematic,
+    pageCount: worklistPageCount,
+    total: worklistTotal,
+    pageSize: worklistPageSize,
+  } = usePagination(report?.problematic_screenhouses ?? [], 8, report);
 
   const filterLabel = useMemo(() => {
     const parts = [
@@ -394,17 +591,38 @@ function OperatorLaporanPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <FilterSelect
-                label="Periode"
-                value={days}
-                onChange={(e) => updateDraft({ days: Number(e.target.value) })}
-              >
-                {PERIOD_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </FilterSelect>
+              <div>
+                <FilterSelect
+                  label="Periode"
+                  value={[1, 7, 30].includes(days) ? String(days) : "custom"}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    updateDraft({ days: v === "custom" ? 14 : Number(v) });
+                  }}
+                >
+                  {PERIOD_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                  <option value="custom">Custom…</option>
+                </FilterSelect>
+                {![1, 7, 30].includes(days) && (
+                  <input
+                    type="number"
+                    min={1}
+                    max={90}
+                    value={days}
+                    onChange={(e) =>
+                      updateDraft({
+                        days: Math.max(1, Math.min(90, Number(e.target.value) || 1)),
+                      })
+                    }
+                    placeholder="Jumlah hari (1–90)"
+                    className="mt-2 w-full h-9 px-3 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-800 outline-none focus:ring-1 focus:ring-green-300"
+                  />
+                )}
+              </div>
 
               <FilterSelect
                 label="Kelompokkan per"
@@ -417,6 +635,29 @@ function OperatorLaporanPage() {
                   </option>
                 ))}
               </FilterSelect>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-semibold text-gray-700">Wilayah di grafik:</span>
+              {[
+                { value: 8, label: "8 teratas" },
+                { value: 15, label: "15 teratas" },
+                { value: Infinity, label: "Semua" },
+              ].map((opt) => (
+                <button
+                  key={opt.label}
+                  type="button"
+                  onClick={() => setRegionLimit(opt.value)}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium transition ${
+                    regionLimit === opt.value
+                      ? "bg-bl-primary text-white"
+                      : "text-gray-600 hover:bg-gray-100 border border-gray-200"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+              <span className="text-[11px] text-gray-500">· berlaku langsung</span>
             </div>
 
             <div className="pt-1">
@@ -516,36 +757,41 @@ function OperatorLaporanPage() {
             </>
           ) : report ? (
             <>
+              {/* 1. Verdict IP400 — jawaban pertama: on-track atau tertinggal */}
+              <VerdictHeader kpis={report.kpis} periodLabel={periodLabel} filterLabel={filterLabel} />
+
+              {/* 2. KPI outcome */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <KpiCard
-                  label="Total screenhouse"
-                  value={report.kpis.total_screenhouses}
-                  hint={`${groupLabel} terfilter`}
-                />
-                <KpiCard
-                  label="Uptime 24 jam"
-                  value={`${report.kpis.uptime_pct}%`}
-                  hint="Mengirim data dalam 24 jam"
-                  tone="green"
-                />
-                <KpiCard
-                  label="Alert aktif"
-                  value={report.kpis.active_alerts}
-                  hint={`${report.kpis.alert_count_period} alert di periode`}
-                  tone={report.kpis.active_alerts > 0 ? "red" : "slate"}
-                />
-                <KpiCard
-                  label="Tidak terhubung"
-                  value={report.kpis.offline_count}
-                  hint={
-                    report.period_comparison?.alerts_delta != null
-                      ? `Alert vs periode lalu: ${report.period_comparison.alerts_delta >= 0 ? "+" : ""}${report.period_comparison.alerts_delta}`
-                      : undefined
+                  label="Kesiapan tepat waktu"
+                  value={report.kpis.on_time_readiness_pct != null ? `${report.kpis.on_time_readiness_pct}%` : "—"}
+                  hint={`Target ${report.kpis.target_readiness_pct ?? 90}% · ${report.readiness?.with_estimate ?? 0} unit terjadwal`}
+                  tone={
+                    report.kpis.on_time_readiness_pct == null
+                      ? "slate"
+                      : report.kpis.on_time_readiness_pct >= (report.kpis.target_readiness_pct ?? 90)
+                      ? "green"
+                      : "red"
                   }
-                  tone={report.kpis.offline_count > 0 ? "amber" : "slate"}
+                  icon={Target}
                 />
+                <KpiCard
+                  label="Siap ≤ 14 hari"
+                  value={report.kpis.ready_within_14d ?? 0}
+                  hint="Segera jadwalkan olah lahan"
+                  icon={CalendarClock}
+                />
+                <KpiCard
+                  label="Terlambat / perlu evaluasi"
+                  value={report.kpis.behind_count ?? 0}
+                  hint={`${report.problematic_screenhouses?.length ?? 0} screenhouse perlu tindak lanjut`}
+                  tone={(report.kpis.behind_count ?? 0) > 0 ? "amber" : "slate"}
+                  icon={TriangleAlert}
+                />
+                <DeviceHealthCard deviceHealth={report.device_health} />
               </div>
 
+              {/* 3. Insight singkat */}
               {insightText && (
                 <div className="flex items-start gap-2.5 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3">
                   <Lightbulb size={16} className="text-emerald-700 mt-0.5 shrink-0" aria-hidden />
@@ -553,15 +799,16 @@ function OperatorLaporanPage() {
                 </div>
               )}
 
+              {/* 4. Aksi hari ini — worklist prioritas */}
               {report.problematic_screenhouses?.length > 0 && (
                 <div className="bg-white rounded-2xl border border-red-100 overflow-hidden">
                   <div className="px-4 py-3 border-b border-red-50 flex items-center justify-between gap-2">
                     <div>
                       <div className="text-sm font-semibold text-gray-800">
-                        Screenhouse perlu tindak lanjut
+                        Aksi hari ini — screenhouse perlu tindak lanjut
                       </div>
                       <div className="text-xs text-gray-600 mt-0.5">
-                        Prioritas kunjungan / hubungi petani
+                        Prioritas kunjungan / hubungi petani (urut dari paling bermasalah)
                       </div>
                     </div>
                     <button
@@ -572,12 +819,12 @@ function OperatorLaporanPage() {
                       Unduh CSV
                     </button>
                   </div>
-                  <div className="overflow-x-auto">
+                  <div className="hidden sm:block overflow-x-auto">
                     <table className="w-full text-sm text-left">
                       <thead>
                         <tr className="text-table-head">
                           <th className="px-4 py-3 font-medium">Screenhouse</th>
-                          <th className="px-4 py-3 font-medium">Varietas</th>
+                          <th className="px-4 py-3 font-medium">Alasan</th>
                           <th className="px-4 py-3 font-medium">Petani</th>
                           <th className="px-4 py-3 font-medium">Wilayah</th>
                           <th className="px-4 py-3 font-medium text-center">Skor kondisi</th>
@@ -587,7 +834,7 @@ function OperatorLaporanPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {report.problematic_screenhouses.map((row) => {
+                        {pagedProblematic.map((row) => {
                           const scoreStyle =
                             row.stress_score != null
                               ? getStressScoreStyle({
@@ -595,14 +842,25 @@ function OperatorLaporanPage() {
                                   category_key: categoryKeyFromScore(row.stress_score),
                                 })
                               : null;
+                          const reason =
+                            row.insight ||
+                            (row.abnormal?.length
+                              ? row.abnormal.map((a) => a.label).join(", ")
+                              : "—");
                           return (
-                          <tr key={row.id} className="border-t border-gray-100 hover:bg-slate-50/80">
-                            <td className="px-4 py-3 font-medium text-gray-800">{row.name}</td>
-                            <td className="px-4 py-3 text-gray-600 text-xs">{row.varietas_nama ?? "—"}</td>
+                          <tr key={row.id} className="border-t border-gray-100 hover:bg-slate-50/80 align-top">
+                            <td className="px-4 py-3 font-medium text-gray-800">
+                              {row.name}
+                              <span className="block text-xs text-gray-500 font-normal">{row.varietas_nama ?? "—"}</span>
+                            </td>
+                            <td className="px-4 py-3 text-gray-600 text-xs max-w-[16rem]">{reason}</td>
                             <td className="px-4 py-3 text-gray-600">
                               <div>{row.owner_name ?? "—"}</div>
                               {row.owner_phone && (
-                                <div className="text-xs text-gray-600">{row.owner_phone}</div>
+                                <div className="text-xs text-gray-600 flex items-center gap-1">
+                                  <Phone size={11} className="shrink-0" aria-hidden />
+                                  {row.owner_phone}
+                                </div>
                               )}
                             </td>
                             <td className="px-4 py-3 text-gray-600 text-xs">
@@ -635,519 +893,100 @@ function OperatorLaporanPage() {
                       </tbody>
                     </table>
                   </div>
-                </div>
-              )}
-
-              {(report.varietas_distribution?.length > 0 ||
-                report.seedling_progress_by_district?.length > 0) && (
-                <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-4">
-                  <div>
-                    <div className="text-sm font-semibold text-gray-800">Ringkasan kondisi bibit</div>
-                    <div className="text-xs text-gray-600 mt-0.5">
-                      Distribusi varietas dan progres pembibitan berdasarkan estimasi siap tanam
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                    {varietasChartData.length > 0 && (
-                      <div>
-                        <div className="text-xs font-semibold text-gray-700 mb-2">Distribusi varietas</div>
-                        {varietasChartData.length > 0 ? (
-                          <>
-                            <ResponsiveContainer width="100%" height={220}>
-                              <BarChart data={varietasChartData} layout="vertical" margin={{ left: 4, right: 28 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
-                                <YAxis
-                                  type="category"
-                                  dataKey="name"
-                                  width={92}
-                                  tick={{ fontSize: 10 }}
-                                />
-                                <Tooltip />
-                                <Bar dataKey="count" name="Screenhouse" radius={[0, 4, 4, 0]}>
-                                  {varietasChartData.map((_, i) => (
-                                    <Cell key={i} fill={VARIETAS_CHART_COLORS[i % VARIETAS_CHART_COLORS.length]} />
-                                  ))}
-                                  <HorizontalCountLabels dataKey="count" />
-                                </Bar>
-                              </BarChart>
-                            </ResponsiveContainer>
-                            <p className="text-xs text-gray-600 mt-2 leading-relaxed">
-                              {varietasChartData.map((v) => `${v.name}: ${v.count}`).join(" · ")}
-                            </p>
-                          </>
-                        ) : null}
-                      </div>
-                    )}
-
-                    {report.bibit_summary && (
-                      <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 space-y-2">
-                        <div className="text-xs font-semibold text-gray-700">Status pembibitan keseluruhan</div>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div>
-                            <span className="text-gray-600">Skor rata-rata</span>
-                            <div className="text-xl font-bold text-emerald-800 tabular-nums">
-                              {report.bibit_summary.avg_stress_score != null
-                                ? Math.round(report.bibit_summary.avg_stress_score)
-                                : "—"}
-                            </div>
-                          </div>
-                          <div>
-                            <span className="text-gray-600">Varietas unik</span>
-                            <div className="text-xl font-bold text-gray-800 tabular-nums">
-                              {report.bibit_summary.varietas_count}
-                            </div>
-                          </div>
-                          <div className="text-emerald-800">
-                            On track: <strong>{report.bibit_summary.on_track}</strong>
-                          </div>
-                          <div className="text-amber-800">
-                            Terlambat: <strong>{report.bibit_summary.terlambat}</strong>
-                          </div>
-                          <div className="text-red-800">
-                            Perlu evaluasi: <strong>{report.bibit_summary.perlu_evaluasi}</strong>
-                          </div>
-                          <div className="text-gray-600">
-                            Belum diisi: <strong>{report.bibit_summary.belum_disi ?? 0}</strong>
-                          </div>
-                        </div>
-                        <div className="pt-3 mt-1 border-t border-emerald-100 space-y-2 text-sm text-gray-700">
-                          <div className="flex items-start gap-2">
-                            <Timer size={14} className="shrink-0 mt-0.5" aria-hidden />
-                            <span>
-                              Rata-rata durasi siklus:{" "}
-                              <strong className="text-gray-900 tabular-nums">
-                                {report.bibit_summary.avg_cycle_duration_days != null
-                                  ? `${report.bibit_summary.avg_cycle_duration_days} hari`
-                                  : "—"}
-                              </strong>
-                            </span>
-                          </div>
-                          {report.bibit_summary.most_stable_varietas && (
-                            <div className="flex items-start gap-2">
-                              <Sprout size={14} className="shrink-0 mt-0.5" aria-hidden />
-                              <span>
-                                Varietas paling stabil:{" "}
-                                <strong className="text-gray-900">
-                                  {report.bibit_summary.most_stable_varietas.nama}
-                                </strong>
-                                {" "}
-                                (Rata-rata skor:{" "}
-                                <span className="tabular-nums font-semibold text-emerald-800">
-                                  {Math.round(report.bibit_summary.most_stable_varietas.avg_score)}
-                                </span>
-                                )
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {report.seedling_progress_by_district?.length > 0 && (
-                    <div className="overflow-x-auto">
-                      <div className="text-xs font-semibold text-gray-700 mb-2">
-                        Progres pembibitan per kecamatan
-                      </div>
-                      <table className="w-full text-sm text-left">
-                        <thead>
-                          <tr className="text-table-head">
-                            <th className="px-3 py-2 font-medium">Kecamatan</th>
-                            <th className="px-3 py-2 font-medium text-center">Total</th>
-                            <th className="px-3 py-2 font-medium text-center">On track</th>
-                            <th className="px-3 py-2 font-medium text-center">Terlambat</th>
-                            <th className="px-3 py-2 font-medium text-center">Perlu evaluasi</th>
-                            <th className="px-3 py-2 font-medium">Varietas dominan</th>
-                            <th className="px-3 py-2 font-medium text-center">Rata-rata durasi</th>
-                            <th className="px-3 py-2 font-medium text-center">Rata-rata skor</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {report.seedling_progress_by_district.map((row) => {
-                            const scoreStyle =
-                              row.avg_stress_score != null
-                                ? getStressScoreStyle({
-                                    score: row.avg_stress_score,
-                                    category_key: categoryKeyFromScore(row.avg_stress_score),
-                                  })
-                                : null;
-                            return (
-                              <tr
-                                key={row.district_id}
-                                className="border-t border-gray-100 hover:bg-slate-50/80"
+                  <ReportCardList>
+                    {pagedProblematic.map((row) => {
+                      const scoreStyle =
+                        row.stress_score != null
+                          ? getStressScoreStyle({
+                              score: row.stress_score,
+                              category_key: categoryKeyFromScore(row.stress_score),
+                            })
+                          : null;
+                      const wilayah = [row.village, row.district].filter(Boolean).join(", ");
+                      const reason =
+                        row.insight ||
+                        (row.abnormal?.length ? row.abnormal.map((a) => a.label).join(", ") : "—");
+                      return (
+                        <ReportCard
+                          key={row.id}
+                          title={row.name}
+                          subtitle={[row.varietas_nama, wilayah].filter(Boolean).join(" · ")}
+                          badge={
+                            row.stress_score != null ? (
+                              <span
+                                className={`inline-flex min-w-[2.25rem] justify-center px-2 py-0.5 rounded-lg text-sm font-bold tabular-nums ${scoreStyle?.badge ?? ""}`}
                               >
-                                <td className="px-3 py-2 font-medium text-gray-800">
-                                  {row.district_name}
-                                  <span className="block text-[11px] text-gray-600 font-normal">
-                                    {row.regency}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2 text-center tabular-nums">{row.total}</td>
-                                <td className="px-3 py-2 text-center tabular-nums text-emerald-700">
-                                  {row.on_track}
-                                </td>
-                                <td className="px-3 py-2 text-center tabular-nums text-amber-700">
-                                  {row.terlambat}
-                                </td>
-                                <td className="px-3 py-2 text-center tabular-nums text-red-700">
-                                  {row.perlu_evaluasi}
-                                </td>
-                                <td className="px-3 py-2 text-gray-800 font-medium">
-                                  {row.dominant_varietas ?? "—"}
-                                </td>
-                                <td className="px-3 py-2 text-center tabular-nums text-gray-800">
-                                  {row.avg_cycle_duration_days != null
-                                    ? `${Math.round(row.avg_cycle_duration_days)} hari`
-                                    : "—"}
-                                </td>
-                                <td className="px-3 py-2 text-center">
-                                  {row.avg_stress_score != null ? (
-                                    <span
-                                      className={`inline-flex min-w-[2.25rem] px-2 py-0.5 rounded-lg text-sm font-bold tabular-nums ${scoreStyle?.badge ?? ""}`}
-                                    >
-                                      {Math.round(row.avg_stress_score)}
-                                    </span>
-                                  ) : (
-                                    <span className="text-gray-500">—</span>
+                                {row.stress_score}
+                              </span>
+                            ) : null
+                          }
+                          items={[
+                            { label: "Alasan", value: reason },
+                            {
+                              label: "Petani",
+                              value: (
+                                <>
+                                  {row.owner_name ?? "—"}
+                                  {row.owner_phone && (
+                                    <span className="block text-xs text-gray-500">{row.owner_phone}</span>
                                   )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {report.varietas_duration_stats?.length > 0 && (
-                    <div className="overflow-x-auto border-t border-gray-100 pt-4">
-                      <div className="text-xs font-semibold text-gray-700 mb-2">
-                        Durasi pembibitan aktual vs standar biologis (per varietas)
-                      </div>
-                      <table className="w-full text-sm text-left">
-                        <thead>
-                          <tr className="text-table-head">
-                            <th className="px-3 py-2 font-medium">Varietas</th>
-                            <th className="px-3 py-2 font-medium text-center">Screenhouse</th>
-                            <th className="px-3 py-2 font-medium text-center">Rata-rata aktual</th>
-                            <th className="px-3 py-2 font-medium text-center">Standar biologis</th>
-                            <th className="px-3 py-2 font-medium text-center">Indeks keterlambatan</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {report.varietas_duration_stats.map((row) => (
-                            <tr
-                              key={row.nama}
-                              className="border-t border-gray-100 hover:bg-slate-50/80"
-                            >
-                              <td className="px-3 py-2 font-medium text-gray-800">{row.nama}</td>
-                              <td className="px-3 py-2 text-center tabular-nums">{row.screenhouse_count}</td>
-                              <td className="px-3 py-2 text-center tabular-nums">
-                                {row.avg_actual_days != null ? `${row.avg_actual_days} hari` : "—"}
-                              </td>
-                              <td className="px-3 py-2 text-center tabular-nums text-gray-600">
-                                {row.avg_standard_days != null
-                                  ? `${row.avg_standard_days} hari`
-                                  : "—"}
-                              </td>
-                              <td className="px-3 py-2 text-center tabular-nums">
-                                {row.delay_index_days == null ? (
-                                  <span className="text-gray-500">—</span>
-                                ) : row.delay_index_days > 0 ? (
-                                  <span className="text-amber-700 font-semibold">
-                                    +{row.delay_index_days} hari
-                                  </span>
-                                ) : row.delay_index_days < 0 ? (
-                                  <span className="text-emerald-700 font-semibold">
-                                    {row.delay_index_days} hari
-                                  </span>
-                                ) : (
-                                  <span className="text-emerald-700 font-semibold">Tepat</span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {(report.growth?.new_screenhouses > 0 ||
-                report.growth?.farmers_approved > 0 ||
-                report.growth?.farmers_pending > 0 ||
-                report.growth?.farmers_rejected > 0) && (
-                <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
-                  <div>
-                    <div className="text-sm font-semibold text-gray-800">Aktivitas registrasi dalam periode</div>
-                    <div className="text-xs text-gray-600 mt-0.5">
-                      Unit screenhouse dan akun petani dihitung terpisah
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
-                    <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3">
-                      <div className="text-xs text-gray-600">Unit screenhouse terdaftar</div>
-                      <div className="text-xl font-bold text-gray-900 tabular-nums mt-1">
-                        {report.growth.new_screenhouses}
-                      </div>
-                      {report.growth.distinct_petani_owners > 0 && (
-                        <div className="text-[11px] text-gray-600 mt-1">
-                          Terhubung ke {report.growth.distinct_petani_owners} petani
-                        </div>
-                      )}
-                    </div>
-                    <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3">
-                      <div className="text-xs text-gray-600">Akun petani baru disetujui</div>
-                      <div className="text-xl font-bold text-gray-900 tabular-nums mt-1">
-                        {report.growth.farmers_approved}
-                      </div>
-                      <div className="text-[11px] text-gray-600 mt-1">Daftar &amp; disetujui dalam periode</div>
-                    </div>
-                    <div className="rounded-xl border border-amber-100 bg-amber-50/80 p-3">
-                      <div className="text-xs text-amber-800">Menunggu approval</div>
-                      <div className="text-xl font-bold text-amber-900 tabular-nums mt-1">
-                        {report.growth.farmers_pending}
-                      </div>
-                      <div className="text-[11px] text-amber-800/80 mt-1">Akun petani belum disetujui</div>
-                    </div>
-                    <div className="rounded-xl border border-red-100 bg-red-50/80 p-3">
-                      <div className="text-xs text-red-800">Ditolak</div>
-                      <div className="text-xl font-bold text-red-900 tabular-nums mt-1">
-                        {report.growth.farmers_rejected}
-                      </div>
-                      <div className="text-[11px] text-red-800/80 mt-1">Akun petani ditolak dalam periode</div>
-                    </div>
-                  </div>
-                  {report.growth.note && (
-                    <p className="text-xs text-gray-600 leading-relaxed border-t border-gray-100 pt-3">
-                      {report.growth.note}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                <div className="bg-white rounded-2xl border border-gray-200 p-4">
-                  <div className="text-sm font-semibold text-gray-800 mb-1">
-                    Status screenhouse per {groupLabel.toLowerCase()}
-                  </div>
-                  <div className="text-xs text-gray-600 mb-3">
-                    Distribusi sehat, peringatan, kritis, dan tidak terhubung
-                  </div>
-                  {statusChartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={280}>
-                      <BarChart data={statusChartData} layout="vertical" margin={{ left: 8, right: 8 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
-                        <YAxis
-                          type="category"
-                          dataKey="name"
-                          width={88}
-                          tick={{ fontSize: 10 }}
+                                </>
+                              ),
+                            },
+                            {
+                              label: "Status",
+                              value: (
+                                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-800">
+                                  {row.status_label}
+                                </span>
+                              ),
+                            },
+                            { label: "Estimasi siap tanam", value: row.estimasi_siap_label ?? "—" },
+                            { label: "Alert aktif", value: row.active_alerts },
+                          ]}
                         />
-                        <Tooltip />
-                        <Legend />
-                        {STATUS_ORDER.map((key) => (
-                          <Bar
-                            key={key}
-                            dataKey={SCREENHOUSE_STATUS[key].label}
-                            stackId="status"
-                            fill={STATUS_BAR_COLORS[key]}
-                          >
-                            <StackedSegmentLabels dataKey={SCREENHOUSE_STATUS[key].label} />
-                          </Bar>
-                        ))}
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="h-[280px] flex items-center text-sm text-gray-600">
-                      Tidak ada data untuk filter ini
-                    </div>
-                  )}
-                </div>
-
-                <div className="bg-white rounded-2xl border border-gray-200 p-4">
-                  <div className="text-sm font-semibold text-gray-800 mb-1">Tren alert harian</div>
-                  <div className="text-xs text-gray-600 mb-3">
-                    Jumlah alert terpicu dalam {report.period_days} hari terakhir
+                      );
+                    })}
+                  </ReportCardList>
+                  <Pagination
+                    page={worklistPage}
+                    pageCount={worklistPageCount}
+                    total={worklistTotal}
+                    pageSize={worklistPageSize}
+                    onPageChange={setWorklistPage}
+                    itemLabel="screenhouse"
+                    className="border-t border-gray-100"
+                  />
+                  <div className="px-4 py-2 text-[11px] text-gray-500 border-t border-gray-100">
+                    Unduhan PDF/CSV memuat seluruh {worklistTotal} screenhouse, bukan hanya halaman ini.
                   </div>
-                  {alertTrendData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={280}>
-                      <LineChart data={alertTrendData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                        <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                        <Tooltip />
-                        <Line
-                          type="monotone"
-                          dataKey="count"
-                          name="Alert"
-                          stroke="#dc2626"
-                          strokeWidth={2}
-                          dot={{ r: 3 }}
-                        >
-                          <LinePointLabels dataKey="count" />
-                        </Line>
-                      </LineChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="h-[280px] flex items-center text-sm text-gray-600">
-                      Belum ada alert dalam periode ini
-                    </div>
-                  )}
                 </div>
-              </div>
+              )}
 
+              {/* 5. Prioritas wilayah — satu tabel gabungan progres IP400 + kesehatan */}
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                <div className="bg-white rounded-2xl border border-gray-200 p-4">
-                  <div className="text-sm font-semibold text-gray-800 mb-1">
-                    Rata-rata kelembapan tanah
-                  </div>
-                  <div className="text-xs text-gray-600 mb-3">
-                    Per {groupLabel.toLowerCase()} · satuan %
-                  </div>
-                  {sensorTrendData.length > 0 ? (
-                    <>
-                      <ResponsiveContainer width="100%" height={240}>
-                        <BarChart data={sensorTrendData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                          <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                          <YAxis tick={{ fontSize: 10 }} unit="%" />
-                          <Tooltip formatter={(v) => (v != null ? `${v}%` : "—")} />
-                          <Bar dataKey="kelembapan" name="Kelembapan (%)" fill="#2563eb" radius={[4, 4, 0, 0]}>
-                            <VerticalCountLabels dataKey="kelembapan" suffix="%" />
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                      {regionsTruncated && (
-                        <p className="text-[11px] text-gray-500 text-right mt-1">
-                          Menampilkan 8 dari {report.regions.length} {groupLabel.toLowerCase()}
-                        </p>
-                      )}
-                    </>
-                  ) : (
-                    <div className="h-[240px] flex items-center text-sm text-gray-600">
-                      Belum ada data kelembapan
-                    </div>
-                  )}
-                </div>
-
-                <div className="bg-white rounded-2xl border border-gray-200 p-4">
-                  <div className="text-sm font-semibold text-gray-800 mb-1">
-                    Rata-rata suhu tanah
-                  </div>
-                  <div className="text-xs text-gray-600 mb-3">
-                    Per {groupLabel.toLowerCase()} · satuan °C
-                  </div>
-                  {sensorTrendData.length > 0 ? (
-                    <>
-                      <ResponsiveContainer width="100%" height={240}>
-                        <BarChart data={sensorTrendData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                          <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                          <YAxis tick={{ fontSize: 10 }} unit="°C" />
-                          <Tooltip formatter={(v) => (v != null ? `${v}°C` : "—")} />
-                          <Bar dataKey="suhu" name="Suhu tanah (°C)" fill="#d97706" radius={[4, 4, 0, 0]}>
-                            <VerticalCountLabels dataKey="suhu" suffix="°C" />
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                      {regionsTruncated && (
-                        <p className="text-[11px] text-gray-500 text-right mt-1">
-                          Menampilkan 8 dari {report.regions.length} {groupLabel.toLowerCase()}
-                        </p>
-                      )}
-                    </>
-                  ) : (
-                    <div className="h-[240px] flex items-center text-sm text-gray-600">
-                      Belum ada data suhu tanah
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl border border-gray-200 p-4">
-                <div className="text-sm font-semibold text-gray-800 mb-1">
-                  Parameter alert terbanyak
-                </div>
-                <div className="text-xs text-gray-600 mb-3">
-                  Ranking parameter yang paling sering melanggar batas aman
-                </div>
-                {paramChartData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={260}>
-                    <BarChart data={paramChartData} layout="vertical" margin={{ left: 8, right: 28 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                      <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
-                      <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 10 }} />
-                      <Tooltip />
-                      <Bar dataKey="count" name="Jumlah alert" radius={[0, 4, 4, 0]}>
-                        {paramChartData.map((_, i) => (
-                          <Cell key={i} fill={i === 0 ? "#dc2626" : "#f59e0b"} />
-                        ))}
-                        <HorizontalCountLabels dataKey="count" />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-[260px] flex items-center text-sm text-gray-600">
-                    Belum ada alert dalam periode ini
-                  </div>
-                )}
-              </div>
-
-              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-                <div className="px-4 py-3 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold text-gray-800">Detail per {groupLabel.toLowerCase()}</div>
+                <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-gray-100">
+                    <div className="text-sm font-semibold text-gray-800">Prioritas per {groupLabel.toLowerCase()}</div>
                     <div className="text-xs text-gray-600 mt-0.5">
-                      Pilih tab untuk melihat status atau data sensor · export PDF/CSV mencakup keduanya
+                      Progres pembibitan + kesehatan perangkat · fokuskan wilayah dengan terlambat/perlu evaluasi terbanyak
                     </div>
                   </div>
-                  <div className="flex rounded-xl border border-gray-200 p-0.5 bg-gray-50 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setRegionTableTab("status")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                        regionTableTab === "status"
-                          ? "bg-white text-emerald-800 shadow-sm"
-                          : "text-gray-600 hover:text-gray-800"
-                      }`}
-                    >
-                      Status & Uptime
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setRegionTableTab("sensor")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                        regionTableTab === "sensor"
-                          ? "bg-white text-emerald-800 shadow-sm"
-                          : "text-gray-600 hover:text-gray-800"
-                      }`}
-                    >
-                      Data Sensor Rata-rata
-                    </button>
-                  </div>
-                </div>
-                <div className="overflow-x-auto">
-                  {regionTableTab === "status" ? (
+                  <div className="hidden sm:block overflow-x-auto">
                     <table className="w-full text-sm text-left">
                       <thead>
                         <tr className="text-table-head">
                           <th className="px-4 py-3 font-medium">{groupLabel}</th>
-                          <th className="px-4 py-3 font-medium text-center">Total</th>
-                          <th className="px-4 py-3 font-medium text-center">Sehat</th>
-                          <th className="px-4 py-3 font-medium text-center">Peringatan</th>
-                          <th className="px-4 py-3 font-medium text-center">Kritis</th>
-                          <th className="px-4 py-3 font-medium text-center">Tidak terhubung</th>
-                          <th className="px-4 py-3 font-medium text-center">Uptime</th>
-                          <th className="px-4 py-3 font-medium text-center">Skor rata-rata</th>
+                          <th className="px-3 py-3 font-medium text-center">Total</th>
+                          <th className="px-3 py-3 font-medium text-center">On track</th>
+                          <th className="px-3 py-3 font-medium text-center">Terlambat</th>
+                          <th className="px-3 py-3 font-medium text-center">Perlu evaluasi</th>
+                          <th className="px-3 py-3 font-medium text-center">Uptime</th>
+                          <th className="px-3 py-3 font-medium text-center">Skor</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {report.regions.map((row) => {
+                        {pagedRegions.map((row) => {
                           const scoreStyle =
                             row.avg_stress_score != null
                               ? getStressScoreStyle({
@@ -1158,13 +997,12 @@ function OperatorLaporanPage() {
                           return (
                           <tr key={row.region_id} className="border-t border-gray-100 hover:bg-slate-50/80">
                             <td className="px-4 py-3 font-medium text-gray-800">{row.region_name}</td>
-                            <td className="px-4 py-3 text-center tabular-nums">{row.total}</td>
-                            <td className="px-4 py-3 text-center tabular-nums text-bl-primary">{row.healthy}</td>
-                            <td className="px-4 py-3 text-center tabular-nums text-amber-700">{row.warning}</td>
-                            <td className="px-4 py-3 text-center tabular-nums text-red-700">{row.critical}</td>
-                            <td className="px-4 py-3 text-center tabular-nums text-slate-600 font-medium">{row.offline}</td>
-                            <td className="px-4 py-3 text-center tabular-nums">{row.uptime_pct}%</td>
-                            <td className="px-4 py-3 text-center">
+                            <td className="px-3 py-3 text-center tabular-nums">{row.total}</td>
+                            <td className="px-3 py-3 text-center tabular-nums text-emerald-700">{row.on_track ?? 0}</td>
+                            <td className="px-3 py-3 text-center tabular-nums text-amber-700">{row.terlambat ?? 0}</td>
+                            <td className="px-3 py-3 text-center tabular-nums text-red-700">{row.perlu_evaluasi ?? 0}</td>
+                            <td className="px-3 py-3 text-center tabular-nums">{row.uptime_pct}%</td>
+                            <td className="px-3 py-3 text-center">
                               {row.avg_stress_score != null ? (
                                 <span
                                   className={`inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 rounded-lg text-sm font-bold tabular-nums ${scoreStyle?.badge ?? ""}`}
@@ -1180,7 +1018,334 @@ function OperatorLaporanPage() {
                         })}
                       </tbody>
                     </table>
+                  </div>
+                  <ReportCardList>
+                    {pagedRegions.map((row) => {
+                      const scoreStyle =
+                        row.avg_stress_score != null
+                          ? getStressScoreStyle({
+                              score: row.avg_stress_score,
+                              category_key: categoryKeyFromScore(row.avg_stress_score),
+                            })
+                          : null;
+                      return (
+                        <ReportCard
+                          key={row.region_id}
+                          title={row.region_name}
+                          badge={
+                            row.avg_stress_score != null ? (
+                              <span
+                                className={`inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 rounded-lg text-sm font-bold tabular-nums ${scoreStyle?.badge ?? ""}`}
+                              >
+                                {Math.round(row.avg_stress_score)}
+                              </span>
+                            ) : null
+                          }
+                          items={[
+                            { label: "Total", value: row.total },
+                            { label: "On track", value: <span className="text-emerald-700">{row.on_track ?? 0}</span> },
+                            { label: "Terlambat", value: <span className="text-amber-700">{row.terlambat ?? 0}</span> },
+                            { label: "Perlu evaluasi", value: <span className="text-red-700">{row.perlu_evaluasi ?? 0}</span> },
+                            { label: "Uptime", value: `${row.uptime_pct}%` },
+                          ]}
+                        />
+                      );
+                    })}
+                  </ReportCardList>
+                  <Pagination
+                    page={regionPage}
+                    pageCount={regionPageCount}
+                    total={regionTotal}
+                    pageSize={regionPageSize}
+                    onPageChange={setRegionPage}
+                    itemLabel={groupLabel.toLowerCase()}
+                    className="border-t border-gray-100"
+                  />
+                </div>
+
+                <div className="bg-white rounded-2xl border border-gray-200 p-4">
+                  <div className="text-sm font-semibold text-gray-800 mb-1">
+                    Status per {groupLabel.toLowerCase()}
+                  </div>
+                  <div className="text-xs text-gray-600 mb-3">
+                    Distribusi sehat, peringatan, kritis, dan tidak terhubung
+                  </div>
+                  {statusChartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={320}>
+                      <BarChart data={statusChartData} layout="vertical" margin={{ left: 8, right: 8 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
+                        <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
+                        <YAxis type="category" dataKey="name" width={88} tick={{ fontSize: 10 }} />
+                        <Tooltip />
+                        <Legend />
+                        {STATUS_ORDER.map((key) => (
+                          <Bar
+                            key={key}
+                            dataKey={SCREENHOUSE_STATUS[key].label}
+                            stackId="status"
+                            fill={STATUS_BAR_COLORS[key]}
+                          >
+                            <StackedSegmentLabels dataKey={SCREENHOUSE_STATUS[key].label} />
+                          </Bar>
+                        ))}
+                      </BarChart>
+                    </ResponsiveContainer>
                   ) : (
+                    <div className="h-[320px] flex items-center text-sm text-gray-600">
+                      Tidak ada data untuk filter ini
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 6. Kalender kesiapan */}
+              <ReadinessCalendar readiness={report.readiness} />
+
+              {/* 7. Lampiran analitik — sekunder, dilipat */}
+              <CollapsibleSection
+                title="Analitik bibit & varietas"
+                subtitle="Performa varietas, throughput siklus selesai, dan aktivitas registrasi"
+              >
+                {varietasChartData.length > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold text-gray-700 mb-2">Distribusi & ketahanan varietas</div>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={varietasChartData} layout="vertical" margin={{ left: 4, right: 28 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
+                        <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
+                        <YAxis type="category" dataKey="name" width={92} tick={{ fontSize: 10 }} />
+                        <Tooltip />
+                        <Bar dataKey="count" name="Screenhouse" radius={[0, 4, 4, 0]}>
+                          {varietasChartData.map((_, i) => (
+                            <Cell key={i} fill={VARIETAS_CHART_COLORS[i % VARIETAS_CHART_COLORS.length]} />
+                          ))}
+                          <HorizontalCountLabels dataKey="count" />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                    {report.varietas_resilience?.length > 0 && (
+                      <p className="text-xs text-gray-600 mt-2 leading-relaxed">
+                        Skor rata-rata per varietas:{" "}
+                        {report.varietas_resilience
+                          .slice(0, 6)
+                          .map((v) => `${v.nama} ${v.avg_score != null ? Math.round(v.avg_score) : "—"}`)
+                          .join(" · ")}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {report.bibit_summary && (
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 space-y-2">
+                    <div className="text-xs font-semibold text-gray-700">Ringkasan pembibitan</div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                      <div>
+                        <span className="text-gray-600 text-xs">Skor rata-rata</span>
+                        <div className="text-xl font-bold text-emerald-800 tabular-nums">
+                          {report.bibit_summary.avg_stress_score != null
+                            ? Math.round(report.bibit_summary.avg_stress_score)
+                            : "—"}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 text-xs">Varietas unik</span>
+                        <div className="text-xl font-bold text-gray-800 tabular-nums">
+                          {report.bibit_summary.varietas_count}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 text-xs">Siklus selesai (periode)</span>
+                        <div className="text-xl font-bold text-gray-800 tabular-nums">
+                          {report.cycle_throughput?.completed_count ?? 0}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 text-xs">Grade A / B / C</span>
+                        <div className="text-sm font-semibold text-gray-800 tabular-nums mt-1">
+                          {report.cycle_throughput?.grade
+                            ? `${report.cycle_throughput.grade.A} / ${report.cycle_throughput.grade.B} / ${report.cycle_throughput.grade.C}`
+                            : "—"}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="pt-2 border-t border-emerald-100 text-sm text-gray-700 flex flex-wrap gap-x-6 gap-y-1">
+                      {report.bibit_summary.most_stable_varietas && (
+                        <span className="flex items-center gap-1.5">
+                          <Sprout size={14} aria-hidden />
+                          Varietas paling stabil:{" "}
+                          <strong className="text-gray-900">{report.bibit_summary.most_stable_varietas.nama}</strong>
+                          {" "}({Math.round(report.bibit_summary.most_stable_varietas.avg_score)})
+                        </span>
+                      )}
+                      {report.cycle_throughput?.low_adoption && (
+                        <span className="flex items-center gap-1.5 text-amber-800">
+                          <Timer size={14} aria-hidden />
+                          Data siklus selesai masih sedikit — throughput belum representatif.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {report.varietas_duration_stats?.length > 0 ? (
+                  <div>
+                    <div className="text-xs font-semibold text-gray-700 mb-2">
+                      Durasi pembibitan (dari siklus yang SELESAI) vs target
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm text-left">
+                        <thead>
+                          <tr className="text-table-head">
+                            <th className="px-3 py-2 font-medium">Varietas</th>
+                            <th className="px-3 py-2 font-medium text-center">Siklus selesai</th>
+                            <th className="px-3 py-2 font-medium text-center">Rata-rata aktual</th>
+                            <th className="px-3 py-2 font-medium text-center">Target</th>
+                            <th className="px-3 py-2 font-medium text-center">Selisih</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {report.varietas_duration_stats.map((row) => (
+                            <tr key={row.nama} className="border-t border-gray-100 hover:bg-slate-50/80">
+                              <td className="px-3 py-2 font-medium text-gray-800">{row.nama}</td>
+                              <td className="px-3 py-2 text-center tabular-nums">{row.cycle_count}</td>
+                              <td className="px-3 py-2 text-center tabular-nums">
+                                {row.avg_actual_days != null ? `${row.avg_actual_days} hari` : "—"}
+                              </td>
+                              <td className="px-3 py-2 text-center tabular-nums text-gray-600">
+                                {row.avg_standard_days != null ? `${row.avg_standard_days} hari` : "—"}
+                              </td>
+                              <td className="px-3 py-2 text-center tabular-nums">
+                                {row.delay_index_days == null ? (
+                                  <span className="text-gray-500">—</span>
+                                ) : row.delay_index_days > 0 ? (
+                                  <span className="text-amber-700 font-semibold">+{row.delay_index_days} hari</span>
+                                ) : row.delay_index_days < 0 ? (
+                                  <span className="text-emerald-700 font-semibold">{row.delay_index_days} hari</span>
+                                ) : (
+                                  <span className="text-emerald-700 font-semibold">Tepat</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500 border border-gray-100 rounded-xl px-3 py-2 bg-gray-50">
+                    Durasi aktual belum bisa dihitung — belum ada siklus semai yang berstatus <em>selesai</em> pada periode ini.
+                  </p>
+                )}
+
+                {(report.growth?.new_screenhouses > 0 ||
+                  report.growth?.farmers_approved > 0 ||
+                  report.growth?.farmers_pending > 0 ||
+                  report.growth?.farmers_rejected > 0) && (
+                  <div className="border-t border-gray-100 pt-3">
+                    <div className="text-xs font-semibold text-gray-700 mb-2">Aktivitas registrasi dalam periode</div>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+                      <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3">
+                        <div className="text-xs text-gray-600">Unit screenhouse baru</div>
+                        <div className="text-xl font-bold text-gray-900 tabular-nums mt-1">
+                          {report.growth.new_screenhouses}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3">
+                        <div className="text-xs text-gray-600">Petani baru disetujui</div>
+                        <div className="text-xl font-bold text-gray-900 tabular-nums mt-1">
+                          {report.growth.farmers_approved}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-amber-100 bg-amber-50/80 p-3">
+                        <div className="text-xs text-amber-800">Menunggu approval</div>
+                        <div className="text-xl font-bold text-amber-900 tabular-nums mt-1">
+                          {report.growth.farmers_pending}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-red-100 bg-red-50/80 p-3">
+                        <div className="text-xs text-red-800">Ditolak</div>
+                        <div className="text-xl font-bold text-red-900 tabular-nums mt-1">
+                          {report.growth.farmers_rejected}
+                        </div>
+                      </div>
+                    </div>
+                    {report.growth.note && (
+                      <p className="text-xs text-gray-600 leading-relaxed mt-2">{report.growth.note}</p>
+                    )}
+                  </div>
+                )}
+              </CollapsibleSection>
+
+              {/* 8. Diagnostik teknis — sekunder, dilipat */}
+              <CollapsibleSection
+                title="Diagnostik teknis"
+                subtitle="Tren alert, parameter penyebab, dan rata-rata sensor per wilayah"
+              >
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-sm font-semibold text-gray-800 mb-1">Tren alert harian</div>
+                    <div className="text-xs text-gray-600 mb-3">
+                      Jumlah alert terpicu dalam {report.period_days} hari terakhir
+                    </div>
+                    {alertTrendData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={260}>
+                        <LineChart data={alertTrendData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
+                          <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                          <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                          <Tooltip />
+                          <Line
+                            type="monotone"
+                            dataKey="count"
+                            name="Alert"
+                            stroke={CHART_STATUS.above}
+                            strokeWidth={2}
+                            dot={{ r: 3 }}
+                          >
+                            <LinePointLabels dataKey="count" />
+                          </Line>
+                        </LineChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-[260px] flex items-center text-sm text-gray-600">
+                        Belum ada alert dalam periode ini
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="text-sm font-semibold text-gray-800 mb-1">Parameter alert terbanyak</div>
+                    <div className="text-xs text-gray-600 mb-3">
+                      Parameter yang paling sering melanggar batas aman
+                    </div>
+                    {paramChartData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={260}>
+                        <BarChart data={paramChartData} layout="vertical" margin={{ left: 8, right: 28 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
+                          <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
+                          <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 10 }} />
+                          <Tooltip />
+                          <Bar dataKey="count" name="Jumlah alert" radius={[0, 4, 4, 0]}>
+                            {paramChartData.map((_, i) => (
+                              <Cell key={i} fill={i === 0 ? CHART_STATUS.above : CHART_STATUS.below} />
+                            ))}
+                            <HorizontalCountLabels dataKey="count" />
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-[260px] flex items-center text-sm text-gray-600">
+                        Belum ada alert dalam periode ini
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-sm font-semibold text-gray-800 mb-2">
+                    Rata-rata sensor per {groupLabel.toLowerCase()}
+                  </div>
+                  <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left">
                       <thead>
                         <tr className="text-table-head">
@@ -1194,37 +1359,36 @@ function OperatorLaporanPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {report.regions.map((row) => (
+                        {pagedRegions.map((row) => (
                           <tr key={row.region_id} className="border-t border-gray-100 hover:bg-slate-50/80">
                             <td className="px-4 py-3 font-medium text-gray-800">{row.region_name}</td>
                             <td className="px-4 py-3 text-right tabular-nums text-gray-600">
-                              {row.sensor_avg?.nitrogen != null ? row.sensor_avg.nitrogen : "—"}
+                              {row.sensor_avg?.nitrogen ?? "—"}
                             </td>
                             <td className="px-4 py-3 text-right tabular-nums text-gray-600">
-                              {row.sensor_avg?.phosphorus != null ? row.sensor_avg.phosphorus : "—"}
+                              {row.sensor_avg?.phosphorus ?? "—"}
                             </td>
                             <td className="px-4 py-3 text-right tabular-nums text-gray-600">
-                              {row.sensor_avg?.potassium != null ? row.sensor_avg.potassium : "—"}
+                              {row.sensor_avg?.potassium ?? "—"}
                             </td>
                             <td className="px-4 py-3 text-right tabular-nums text-gray-600">
-                              {row.sensor_avg?.soil_moisture != null
-                                ? `${row.sensor_avg.soil_moisture}%`
-                                : "—"}
+                              {row.sensor_avg?.soil_moisture != null ? `${row.sensor_avg.soil_moisture}%` : "—"}
                             </td>
                             <td className="px-4 py-3 text-right tabular-nums text-gray-600">
-                              {row.sensor_avg?.soil_temperature != null
-                                ? `${row.sensor_avg.soil_temperature}°C`
-                                : "—"}
+                              {row.sensor_avg?.soil_temperature != null ? `${row.sensor_avg.soil_temperature}°C` : "—"}
                             </td>
                             <td className="px-4 py-3 text-center tabular-nums">{row.active_alerts}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                  )}
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-2">
+                    Rata-rata dihitung dari unit yang mengirim data. Kelembapan/suhu antar wilayah bukan target intervensi
+                    langsung — nilai keputusan ada di kolom progres & worklist di atas.
+                  </p>
                 </div>
-              </div>
-
+              </CollapsibleSection>
             </>
           ) : (
             <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center text-gray-600 font-medium text-sm">

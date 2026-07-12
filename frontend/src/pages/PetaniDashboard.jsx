@@ -5,10 +5,13 @@ import Sidebar from "../layouts/Sidebar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import { useAlerts } from "../context/AlertContext";
 import PetaniTopbar from "../layouts/PetaniTopbar";
+import PetaniBottomNav from "../layouts/PetaniBottomNav";
 import ActuatorControls from "../components/ActuatorControls";
 import DashboardInsightPanel from "../components/DashboardInsightPanel";
 import ScreenhouseStatusPanel from "../components/ScreenhouseStatusPanel";
 import PembibitanProgressPanel from "../components/PembibitanProgressPanel";
+import PendingOnboardingPanel from "../components/PendingOnboardingPanel";
+import ScreenhouseDetailPage from "./ScreenhouseDetailPage";
 import { computeEstimasiTimeline } from "../utils/estimasiTanam";
 import { useScreenhouseStats } from "../context/ScreenhouseStatsContext";
 import { isAutoHandledAlert } from "../constants/actuatorRules";
@@ -331,6 +334,15 @@ function PetaniDashboard() {
 
   const showScreenhouseSearch = screenhouses.length > SEARCH_MIN_SCREENHOUSES;
 
+  const pendingCount = useMemo(
+    () => screenhouses.filter((sh) => sh.status === "pending").length,
+    [screenhouses]
+  );
+  // Petani baru: semua screenhouse masih pending (belum ada yang aktif). Rail kiri
+  // jadi kosong karena insight & progress panel return null — ganti dengan onboarding.
+  const showOnboarding =
+    screenhouses.length > 0 && !screenhouses.some((sh) => sh.status === "active");
+
   const sortedScreenhouses = useMemo(
     () =>
       [...screenhouses].sort((a, b) => {
@@ -409,6 +421,25 @@ function PetaniDashboard() {
     return items.sort((a, b) => a.sisaHari - b.sisaHari);
   }, [sortedScreenhouses, estimasiTanam]);
 
+  // Petani dengan tepat satu screenhouse (dan sudah aktif): tidak ada gunanya
+  // menampilkan list satu-kartu + rail insight yang cuma merangkum screenhouse itu.
+  // Langsung jadikan dashboard = halaman detail penuh (pola conditional-by-count
+  // yang sama dengan search >10 & selektor tren >1).
+  const soleActiveScreenhouse =
+    screenhouses.length === 1 && screenhouses[0]?.status === "active"
+      ? screenhouses[0]
+      : null;
+
+  if (!pageLoading && soleActiveScreenhouse) {
+    return (
+      <ScreenhouseDetailPage
+        screenhouseId={soleActiveScreenhouse.id}
+        basePath="/petani"
+        single
+      />
+    );
+  }
+
   return (
     <div className="app-shell fixed inset-0 flex bg-bl-surface overflow-hidden text-left">
       <Sidebar
@@ -438,6 +469,12 @@ function PetaniDashboard() {
           ) : (
             <div className="lg:flex lg:items-start lg:gap-4">
               <div className="lg:w-72 xl:w-80 shrink-0 lg:sticky lg:top-4 space-y-4">
+                {showOnboarding && (
+                  <PendingOnboardingPanel
+                    pendingCount={pendingCount}
+                    onAjukan={() => navigate("/petani/ajukan-screenhouse")}
+                  />
+                )}
                 <ScreenhouseStatusPanel
                   stats={footerStats}
                   loading={footerStatsLoading}
@@ -556,12 +593,12 @@ function PetaniDashboard() {
                     )}
 
                     <div className="flex flex-wrap gap-1.5 mt-2.5">
-                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-50 text-[11px] text-gray-600 font-medium">
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-50 text-xs text-gray-600 font-medium">
                         <MapPin size={11} className="shrink-0" />
                         {sh.village}
                       </span>
                       <span
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-50 text-[11px] text-gray-600 font-medium"
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-50 text-xs text-gray-600 font-medium"
                         title={
                           sensor?.created_at
                             ? formatLastSensorUpdate(sensor.created_at)
@@ -572,7 +609,7 @@ function PetaniDashboard() {
                         {sensor?.created_at ? timeAgo(sensor.created_at) : FARMER_LABELS.noDataHint}
                       </span>
                       {(sh.node_count ?? 0) > 0 && (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-50 text-[11px] text-gray-600 font-medium">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-50 text-xs text-gray-600 font-medium">
                           <Radio size={11} className="shrink-0" />
                           {FARMER_LABELS.nodeCount(sh.node_count)}
                         </span>
@@ -628,6 +665,7 @@ function PetaniDashboard() {
             </div>
           )}
         </PullToRefresh>
+        <PetaniBottomNav />
       </div>
     </div>
   );

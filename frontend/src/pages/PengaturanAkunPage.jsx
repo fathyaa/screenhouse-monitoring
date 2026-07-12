@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import Sidebar from "../layouts/Sidebar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import PetaniTopbar from "../layouts/PetaniTopbar";
+import PetaniBottomNav from "../layouts/PetaniBottomNav";
 import { API_URL } from "../config/api";
 
 function persistUser(updates) {
@@ -93,15 +94,15 @@ export default function PengaturanAkunPage() {
   const savePassword = async (e) => {
     e.preventDefault();
     if (!currentPassword || !newPassword) {
-      toast.error("Isi password lama dan password baru");
+      toast.error("Isi kata sandi lama dan kata sandi baru");
       return;
     }
     if (newPassword.length < 6) {
-      toast.error("Password baru minimal 6 karakter");
+      toast.error("Kata sandi baru minimal 6 karakter");
       return;
     }
     if (newPassword !== confirmPassword) {
-      toast.error("Konfirmasi password tidak cocok");
+      toast.error("Konfirmasi kata sandi tidak cocok");
       return;
     }
 
@@ -116,13 +117,13 @@ export default function PengaturanAkunPage() {
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.message || "Gagal mengubah password");
+      if (!res.ok) throw new Error(data.message || "Gagal mengubah kata sandi");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      toast.success("Password berhasil diubah");
+      toast.success("Kata sandi berhasil diubah");
     } catch (err) {
-      toast.error(err.message || "Gagal mengubah password");
+      toast.error(err.message || "Gagal mengubah kata sandi");
     } finally {
       setSavingPassword(false);
     }
@@ -142,7 +143,7 @@ export default function PengaturanAkunPage() {
         <PetaniTopbar
           onToggleSidebar={toggleSidebar}
           title="Pengaturan akun"
-          subtitle="Ubah nama dan password"
+          subtitle="Ubah nama dan kata sandi"
           onBack={() => {
             if (window.history.state?.idx > 0) navigate(-1);
             else navigate(homePathForRole(role));
@@ -204,14 +205,14 @@ export default function PengaturanAkunPage() {
                     <KeyRound size={18} className="text-amber-700" />
                   </div>
                   <div>
-                    <h2 className="text-sm font-semibold text-gray-800">Password</h2>
+                    <h2 className="text-sm font-semibold text-gray-800">Kata sandi</h2>
                     <p className="text-xs text-gray-600">Ganti kata sandi login</p>
                   </div>
                 </div>
 
                 <form onSubmit={savePassword} className="space-y-3">
                   <div>
-                    <label className="text-xs font-medium text-gray-600">Password lama</label>
+                    <label className="text-xs font-medium text-gray-600">Kata sandi lama</label>
                     <input
                       type="password"
                       value={currentPassword}
@@ -221,7 +222,7 @@ export default function PengaturanAkunPage() {
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-gray-600">Password baru</label>
+                    <label className="text-xs font-medium text-gray-600">Kata sandi baru</label>
                     <input
                       type="password"
                       value={newPassword}
@@ -231,7 +232,7 @@ export default function PengaturanAkunPage() {
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-gray-600">Ulangi password baru</label>
+                    <label className="text-xs font-medium text-gray-600">Ulangi kata sandi baru</label>
                     <input
                       type="password"
                       value={confirmPassword}
@@ -245,13 +246,14 @@ export default function PengaturanAkunPage() {
                     disabled={savingPassword}
                     className="w-full py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50"
                   >
-                    {savingPassword ? "Menyimpan..." : "Ubah password"}
+                    {savingPassword ? "Menyimpan..." : "Ubah kata sandi"}
                   </button>
                 </form>
               </section>
             </>
           )}
         </div>
+        {role === "petani" && <PetaniBottomNav />}
       </div>
     </div>
   );

@@ -59,21 +59,21 @@ function HealthCard({ item, getHint, stale, compactStaleBadge }) {
 
       <div className="space-y-1">
         <div
-          className="text-2xl sm:text-xl font-bold tabular-nums leading-none tracking-tight"
+          className="text-xl sm:text-2xl font-bold tabular-nums leading-none tracking-tight"
           style={{ color: stale ? "#64748b" : style.color }}
         >
           {formatValue(item.value, item.unit)}
         </div>
         {item.min != null && item.max != null ? (
           <div
-            className="text-[11px] text-gray-500 font-medium leading-snug"
+            className="text-xs text-gray-500 font-medium leading-snug"
             title={hint || undefined}
           >
             Batas aman{" "}
             <span className="text-gray-600">{formatRange(item.min, item.max, item.unit)}</span>
           </div>
         ) : (
-          <div className="text-[11px] text-gray-500 font-medium">Batas aman belum diatur</div>
+          <div className="text-xs text-gray-500 font-medium">Batas aman belum diatur</div>
         )}
       </div>
 
@@ -100,7 +100,7 @@ function HealthCard({ item, getHint, stale, compactStaleBadge }) {
       ) : null}
 
       {item.multiNode && item.nodeName && item.status !== "ideal" && item.status !== "unknown" && (
-        <div className="text-[11px] text-gray-500 font-medium -mt-1">
+        <div className="text-xs text-gray-500 font-medium -mt-1">
           Dari alat: {formatRackName(item.nodeName)}
         </div>
       )}
@@ -158,7 +158,7 @@ export default function ParamHealthCards({
               <div className="text-xs font-semibold text-amber-950">
                 Data terakhir {snapshotLabel}
               </div>
-              <div className="text-[11px] text-amber-800/90 mt-0.5">
+              <div className="text-xs text-amber-800/90 mt-0.5">
                 Angka di bawah adalah data terakhir yang tersimpan, bukan pembacaan langsung.
               </div>
             </div>

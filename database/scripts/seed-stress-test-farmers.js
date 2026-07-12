@@ -24,7 +24,10 @@ dotenv.config({ path: path.join(ROOT, "services/app-service/.env") });
 const BCRYPT_123456 = "$2b$10$CpSrK0m24PkChDP3crnSjuarCH3OFl9m2tr3f.fPmD7J7GO3c4biS";
 const REGENCY_KODE = "32.02";
 const PROVINCE_KODE = "32";
-const STRESS_PREFIX = "Stress Demo";
+const SH_NAME_PREFIX = "Screenhouse";
+// Cocokkan hanya screenhouse hasil seed ini ("Screenhouse <Kecamatan> 001"),
+// bukan sembarang screenhouse yang kebetulan berawalan "Screenhouse".
+const SEED_NAME_RE = "^Screenhouse .+ [0-9]{3}$";
 
 const appPool = new pg.Pool({
   host: process.env.DB_HOST || "localhost",
@@ -91,11 +94,11 @@ function nearestMapIndex(lat, lng) {
   return best;
 }
 
-/** Hapus Stress Demo di titik peta sama — simpan id terbesar (terbaru) */
+/** Hapus screenhouse seed di titik peta sama — simpan id terbesar (terbaru) */
 async function dedupeStressDemoByCoordinates(appClient, monClient) {
   const rows = await appClient.query(
-    `SELECT id, latitude, longitude FROM screenhouses WHERE name LIKE $1 ORDER BY id`,
-    [`${STRESS_PREFIX}%`]
+    `SELECT id, latitude, longitude FROM screenhouses WHERE name ~ $1 ORDER BY id`,
+    [SEED_NAME_RE]
   );
 
   const byMapPoint = new Map();
@@ -415,7 +418,7 @@ async function main() {
       const point = MAP_SCREENHOUSES[i];
       const ownerId = farmerIds[i % farmerIds.length];
       const seq = String(i + 1).padStart(3, "0");
-      const name = `${STRESS_PREFIX} ${point.district} ${seq}`;
+      const name = `${SH_NAME_PREFIX} ${point.district} ${seq}`;
 
       const wilayah = await resolveWilayah(appClient, point.district, districts, i);
       if (!wilayah) continue;
@@ -442,11 +445,11 @@ async function main() {
     await monClient.query("COMMIT");
 
     const total = await appClient.query(
-      `SELECT COUNT(*)::int AS n FROM screenhouses WHERE name LIKE $1`,
-      [`${STRESS_PREFIX}%`]
+      `SELECT COUNT(*)::int AS n FROM screenhouses WHERE name ~ $1`,
+      [SEED_NAME_RE]
     );
 
-    console.log(`Selesai: ${created.length} di-upsert · ${total.rows[0].n} Stress Demo aktif (unik per koordinat)`);
+    console.log(`Selesai: ${created.length} di-upsert · ${total.rows[0].n} screenhouse seed aktif (unik per koordinat)`);
     console.log(`Contoh login petani: ${farmerPhone(1)} / 123456`);
     if (created[0]) {
       console.log(

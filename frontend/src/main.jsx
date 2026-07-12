@@ -7,6 +7,11 @@ import { RefreshCw } from 'lucide-react'
 import "leaflet/dist/leaflet.css"
 import './index.css'
 import App from './App.jsx'
+import { installAuthInterceptor } from './utils/apiClient'
+
+// Pasang sebelum render supaya semua fetch (termasuk saat mount pertama)
+// sudah terbungkus interceptor 401.
+installAuthInterceptor()
 
 registerSW({
   immediate: true,

@@ -24,18 +24,6 @@ const STATUS_COLORS = {
 
 const FOOTER_TEXT = "Digenerate otomatis oleh BibitLive — UPTD Mektan Jabar";
 
-function fmtDate(iso) {
-  return new Date(iso).toLocaleString("id-ID", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Jakarta",
-  });
-}
-
 function periodLabel(days) {
   if (days === 1) return "24 jam terakhir";
   return `${days} hari terakhir`;
@@ -84,32 +72,77 @@ function drawPageHeader(doc, report, meta, logoDataUrl) {
   const filterText = meta.filterLabel || "Semua wilayah";
   const operatorName = meta.operatorName || "Operator";
 
+  // Letterhead ringkas ala laporan resmi: latar putih, aksen tipis, logo + judul
+  // di kiri, blok metadata rata-kanan, ditutup garis pemisah.
   doc.setFillColor(...BRAND.dark);
-  doc.rect(0, 0, w, 36, "F");
-  doc.setFillColor(...BRAND.mid);
-  doc.rect(0, 36, w, 2, "F");
+  doc.rect(0, 0, w, 3, "F");
 
+  const leftX = 14;
+  let textX = leftX;
   if (logoDataUrl) {
-    doc.addImage(logoDataUrl, "PNG", 12, 6, 16, 16);
+    doc.addImage(logoDataUrl, "PNG", leftX, 8, 15, 15);
+    textX = leftX + 19;
   }
 
-  const textX = logoDataUrl ? 32 : 14;
-  doc.setTextColor(...BRAND.white);
+  // Eyebrow instansi
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
-  doc.text("BibitLive — Laporan Wilayah", textX, 14);
+  doc.setFontSize(7);
+  doc.setTextColor(...BRAND.slate);
+  doc.text("BIBITLIVE  ·  UPTD MEKANISASI PERTANIAN — JAWA BARAT", textX, 11);
 
+  // Judul dokumen
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(15);
+  doc.setTextColor(...BRAND.dark);
+  doc.text("Laporan Monitoring Wilayah", textX, 18);
+
+  // Sub-judul program
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.text(`Operator: ${operatorName}`, textX, 21);
-  doc.text(
-    `Periode: ${periodLabel(report.period_days)}  ·  Wilayah: ${filterText}  ·  Kelompok: ${groupLabel}`,
-    textX,
-    27
-  );
-  doc.text(`Dicetak: ${fmtDate(report.generated_at)}`, textX, 33);
+  doc.setFontSize(8.5);
+  doc.setTextColor(...BRAND.mid);
+  doc.text("Program IP400 — Pembibitan Padi", textX, 23.5);
 
-  return 44;
+  // Blok metadata rata-kanan (label + nilai). Tanggal diringkas agar tak menabrak label.
+  const printedAt = new Date(report.generated_at).toLocaleString("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Jakarta",
+  });
+  const metaRows = [
+    ["Periode", periodLabel(report.period_days)],
+    ["Wilayah", filterText],
+    ["Kelompok", groupLabel],
+    ["Operator", operatorName],
+    ["Dicetak", printedAt],
+  ];
+  const rightX = w - 14;
+  const labelX = rightX - 58;
+  let my = 9;
+  metaRows.forEach(([label, value]) => {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.5);
+    doc.setTextColor(...BRAND.slate);
+    doc.text(label.toUpperCase(), labelX, my);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(51, 65, 85);
+    doc.text(String(value), rightX, my, { align: "right", maxWidth: 42 });
+    my += 3.9;
+  });
+
+  // Garis pemisah
+  const ruleY = 28;
+  doc.setDrawColor(...BRAND.dark);
+  doc.setLineWidth(0.6);
+  doc.line(leftX, ruleY, w - 14, ruleY);
+  doc.setLineWidth(0.2);
+  doc.setDrawColor(...BRAND.mid);
+  doc.line(leftX, ruleY + 0.9, w - 14, ruleY + 0.9);
+
+  return 38;
 }
 
 function drawPageFooter(doc) {
@@ -137,11 +170,21 @@ function drawExecutiveSummary(doc, report, startY) {
   doc.setFontSize(12);
   doc.text("Ringkasan Eksekutif", 14, startY);
 
+  const kpis = report.kpis ?? {};
   const bigCards = [
-    { label: "Total Screenhouse", value: String(report.kpis.total_screenhouses), color: BRAND.dark },
-    { label: "Uptime 24 Jam", value: `${report.kpis.uptime_pct}%`, color: STATUS_COLORS.healthy },
-    { label: "Alert Aktif", value: String(report.kpis.active_alerts), color: STATUS_COLORS.critical },
-    { label: "Skor Bibit Rata-rata", value: bibit?.avg_stress_score != null ? String(Math.round(bibit.avg_stress_score)) : "—", color: BRAND.mid },
+    {
+      label: `Kesiapan Tepat Waktu (target ${kpis.target_readiness_pct ?? 90}%)`,
+      value: kpis.on_time_readiness_pct != null ? `${kpis.on_time_readiness_pct}%` : "—",
+      color:
+        kpis.on_time_readiness_pct == null
+          ? BRAND.mid
+          : kpis.on_time_readiness_pct >= (kpis.target_readiness_pct ?? 90)
+          ? STATUS_COLORS.healthy
+          : STATUS_COLORS.critical,
+    },
+    { label: "Siap <= 14 Hari", value: String(kpis.ready_within_14d ?? 0), color: BRAND.dark },
+    { label: "Terlambat / Perlu Evaluasi", value: String(kpis.behind_count ?? 0), color: STATUS_COLORS.warning },
+    { label: "Uptime Perangkat", value: `${kpis.uptime_pct}%`, color: BRAND.mid },
   ];
 
   const gap = 6;
@@ -169,17 +212,22 @@ function drawExecutiveSummary(doc, report, startY) {
   let nextY = y + 40;
 
   // Kotak insight — satu kalimat ringkas, sebelum detail mentah di bawahnya.
+  // PENTING: set fontSize dulu; kalau tidak, teks mewarisi 22pt dari kartu KPI
+  // di atas → meluber dan menabrak section berikutnya.
   const insightText = buildPdfInsight(report);
-  const insightLines = doc.splitTextToSize(insightText, w - 34);
-  const insightH = 6 + insightLines.length * 4.5;
+  const INSIGHT_FS = 9.5;
+  const INSIGHT_LH = 5;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(INSIGHT_FS);
+  const insightLines = doc.splitTextToSize(insightText, w - 40);
+  const insightH = Math.max(12, 5 + insightLines.length * INSIGHT_LH);
   doc.setFillColor(...BRAND.light);
   doc.setDrawColor(187, 240, 208);
   doc.roundedRect(14, nextY, w - 28, insightH, 2, 2, "FD");
   doc.setFillColor(...BRAND.mid);
-  doc.circle(17, nextY + 4, 1.4, "F");
-  doc.setFont("helvetica", "normal");
+  doc.circle(19, nextY + insightH / 2, 1.4, "F");
   doc.setTextColor(20, 83, 45);
-  doc.text(insightLines, 24, nextY + 6);
+  doc.text(insightLines, 24, nextY + 5.5, { lineHeightFactor: INSIGHT_LH / 3.5 });
   nextY += insightH + 6;
 
   doc.setFont("helvetica", "bold");
@@ -345,14 +393,14 @@ function drawAppendixPage(doc, report) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9.5);
     doc.setTextColor(...BRAND.dark);
-    doc.text("Durasi Pembibitan Aktual vs Standar Biologis (per Varietas)", 14, y);
+    doc.text("Durasi Pembibitan (dari Siklus Selesai) vs Target (per Varietas)", 14, y);
 
     autoTable(doc, {
       startY: y + 3,
-      head: [["Varietas", "Screenhouse", "Rata-rata aktual", "Standar biologis", "Indeks keterlambatan"]],
+      head: [["Varietas", "Siklus selesai", "Rata-rata aktual", "Target", "Selisih"]],
       body: report.varietas_duration_stats.map((row) => [
         row.nama,
-        row.screenhouse_count,
+        row.cycle_count,
         row.avg_actual_days != null ? `${row.avg_actual_days} hari` : "—",
         row.avg_standard_days != null ? `${row.avg_standard_days} hari` : "—",
         row.delay_index_days == null
@@ -780,27 +828,29 @@ export async function exportOperatorReportPdf(report, meta = {}) {
 
   doc.setPage(1);
   drawExecutiveSummary(doc, report, drawPageHeader(doc, report, meta, logoDataUrl));
-  drawPageFooter(doc);
 
   doc.addPage();
   drawPageHeader(doc, report, meta, logoDataUrl);
   drawProblematicTablePage(doc, report);
-  drawPageFooter(doc);
 
   doc.addPage();
   drawPageHeader(doc, report, meta, logoDataUrl);
   drawChartsPage(doc, report);
-  drawPageFooter(doc);
 
   doc.addPage();
   drawPageHeader(doc, report, meta, logoDataUrl);
   drawAlertTrendPage(doc, report);
-  drawPageFooter(doc);
 
   doc.addPage();
   drawPageHeader(doc, report, meta, logoDataUrl);
   drawAppendixPage(doc, report);
-  drawPageFooter(doc);
+
+  // Footer digambar terakhir agar nomor "Halaman X / N" memakai total final.
+  const totalPages = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    drawPageFooter(doc);
+  }
 
   const stamp = new Date().toISOString().slice(0, 10);
   doc.save(`laporan-bibitlive-wilayah-${stamp}.pdf`);

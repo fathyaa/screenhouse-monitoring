@@ -28,7 +28,7 @@ export default function PembibitanProgressPanel({ items, className = "" }) {
           <Sprout size={14} className="text-emerald-600 shrink-0" aria-hidden />
           Proses pembibitan
         </div>
-        <p className="text-[11px] text-gray-500 mt-0.5">Progres tiap screenhouse yang sedang semai.</p>
+        <p className="text-xs text-gray-500 mt-0.5">Progres tiap screenhouse yang sedang semai.</p>
       </div>
 
       <div className="space-y-3">
@@ -36,7 +36,7 @@ export default function PembibitanProgressPanel({ items, className = "" }) {
           <div key={item.id}>
             <div className="flex items-baseline justify-between gap-2">
               <span className="text-xs font-medium text-gray-800 truncate min-w-0">{item.name}</span>
-              <span className="text-[10px] text-gray-500 shrink-0 tabular-nums">
+              <span className="text-[11px] text-gray-500 shrink-0 tabular-nums">
                 Hari {item.hariKe}/{item.totalDays}
               </span>
             </div>
@@ -46,13 +46,13 @@ export default function PembibitanProgressPanel({ items, className = "" }) {
                 style={{ width: `${item.progressPct}%` }}
               />
             </div>
-            <p className="text-[10px] text-gray-500 mt-1">{sisaHariLabel(item.sisaHari)}</p>
+            <p className="text-[11px] text-gray-500 mt-1">{sisaHariLabel(item.sisaHari)}</p>
           </div>
         ))}
       </div>
 
       {hiddenCount > 0 && (
-        <p className="text-[11px] text-gray-500 pt-1 border-t border-gray-100">
+        <p className="text-xs text-gray-500 pt-1 border-t border-gray-100">
           +{hiddenCount} screenhouse lainnya sedang semai
         </p>
       )}

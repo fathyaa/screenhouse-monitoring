@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
 import { Sprout } from "lucide-react";
-import { API_URL } from "../config/api";
+import useVarietasList from "../hooks/useVarietasList";
 
 export default function VarietasSelect({
   value,
@@ -10,28 +9,15 @@ export default function VarietasSelect({
   className = "",
   token = null,
   compact = false,
+  options = null,
 }) {
-  const [list, setList] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
-
-    fetch(`${API_URL}/varietas-bibit`, { headers })
-      .then((r) => r.json())
-      .then((data) => {
-        if (!cancelled) setList(Array.isArray(data) ? data : []);
-      })
-      .catch(console.error)
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
+  // Kalau daftar varietas dioper dari luar (`options`), jangan fetch sendiri —
+  // ini yang mencegah N request identik saat banyak selector di satu halaman.
+  const { list: fetchedList, loading: fetchedLoading } = useVarietasList(token, {
+    enabled: options == null,
+  });
+  const list = options ?? fetchedList;
+  const loading = options == null ? fetchedLoading : false;
 
   const selected = list.find((v) => String(v.id) === String(value));
 

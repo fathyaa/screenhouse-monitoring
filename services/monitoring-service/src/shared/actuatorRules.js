@@ -25,7 +25,7 @@ const ACTUATOR_RULES = {
 const LABEL_TO_KEY = {
   nitrogen: "nitrogen",
   phosphorus: "phosphorus",
-  potassium: "potassium",
+  kalium: "potassium",
   "kelembapan tanah": "soil_moisture",
   "suhu tanah": "soil_temperature",
   "ph tanah": "soil_ph",
@@ -55,6 +55,24 @@ function resolveActuatorActions(violations) {
   return out;
 }
 
+/**
+ * Aksi aktuator saat parameter pulih ke rentang ideal (bukan cuma pindah ke
+ * arah pelanggaran sebaliknya). Membalik rule ON (`true`) dari arah yang baru
+ * saja resolve jadi OFF — rule yang sudah OFF di arah itu tidak perlu dibalik
+ * karena aktuator memang seharusnya sudah mati.
+ */
+function resolveActuatorRecoveryActions(recoveries) {
+  const out = {};
+  for (const { key, direction } of recoveries) {
+    const rule = ACTUATOR_RULES[key]?.[direction];
+    if (!rule) continue;
+    if (rule.fan === true) out.fan = false;
+    if (rule.irrigation === true) out.irrigation = false;
+    if (rule.lamp === true) out.lamp = false;
+  }
+  return out;
+}
+
 function resolveActuatorActionsFromAlertMessage(message) {
   const lower = (message || "").toLowerCase();
   const key = paramKeyFromLabel(lower);
@@ -71,6 +89,7 @@ function resolveActuatorActionsFromAlertMessage(message) {
 module.exports = {
   ACTUATOR_RULES,
   resolveActuatorActions,
+  resolveActuatorRecoveryActions,
   resolveActuatorActionsFromAlertMessage,
   paramKeyFromLabel,
 };

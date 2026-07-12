@@ -9,8 +9,8 @@ import {
 
 export function EstimasiTanamDisclaimer({ className = "" }) {
   return (
-    <p className={`text-[10px] text-gray-600 leading-relaxed ${className}`}>
-      Estimasi berdasarkan data sensor dan standar varietas. 
+    <p className={`text-[11px] text-gray-600 leading-relaxed ${className}`}>
+      Estimasi berdasarkan data sensor dan standar varietas.
     </p>
   );
 }
@@ -101,7 +101,7 @@ export default function EstimasiTanamPanel({
     </>
   ) : (
     <>
-      <p className="text-[11px] text-gray-500 leading-relaxed">
+      <p className="text-xs text-gray-500 leading-relaxed">
         Mulai siklus semai untuk melihat timeline.
       </p>
       {estimasiFooter}
@@ -162,7 +162,7 @@ export default function EstimasiTanamPanel({
                 </p>
               </div>
               {countdownTimelineText(timeline.sisaHari, timeline.targetLabel) && (
-                <p className="text-[11px] text-gray-600 text-right leading-snug max-w-[55%]">
+                <p className="text-xs text-gray-600 text-right leading-snug max-w-[55%]">
                   {countdownTimelineText(timeline.sisaHari, timeline.targetLabel)}
                 </p>
               )}
@@ -170,7 +170,7 @@ export default function EstimasiTanamPanel({
             {estimasiFooter}
           </div>
         ) : (
-          <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/80 px-3 py-2.5 text-[11px] text-gray-600">
+          <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/80 px-3 py-2.5 text-xs text-gray-600">
             Mulai siklus semai untuk melihat timeline pembibitan.
             {estimasiFooter}
           </div>
@@ -191,7 +191,7 @@ export default function EstimasiTanamPanel({
             ) : (
               <p className="text-xs text-gray-500">Belum dipilih</p>
             )}
-            <p className="text-[11px] text-gray-600 mt-0.5 break-words">
+            <p className="text-xs text-gray-600 mt-0.5 break-words">
               Semai:{" "}
               <span className="font-medium text-gray-700">
                 {semaiLabel ?? "Belum mulai"}

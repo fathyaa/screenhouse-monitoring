@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import toast from "react-hot-toast";
 import { ArrowLeft, ChevronRight, Leaf, MapPin, Menu, Phone, User } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
@@ -27,7 +28,7 @@ function FarmerScreenhousesPage() {
         setScreenhouses(Array.isArray(data.screenhouses) ? data.screenhouses : []);
       })
       .catch(() => {
-        alert("Gagal memuat data petani");
+        toast.error("Gagal memuat data petani");
         navigate("/operator/petani");
       })
       .finally(() => setLoading(false));

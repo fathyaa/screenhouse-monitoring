@@ -3,6 +3,8 @@ import toast from "react-hot-toast";
 import { Search, Pencil, KeyRound, Users } from "lucide-react";
 import AdminPageShell from "../components/AdminPageShell";
 import { TableRowsSkeleton, ListPanelSkeleton } from "../components/LoadingUI";
+import Pagination from "../components/Pagination";
+import { usePagination } from "../hooks/usePagination";
 
 import { API_URL } from "../config/api";
 
@@ -144,6 +146,16 @@ export default function KelolaUserPage() {
     }
   };
 
+  const {
+    page,
+    setPage,
+    pageItems: pagedUsers,
+    pageCount,
+    total,
+    pageSize,
+    startIndex,
+  } = usePagination(users, 10, `${filters.role}|${filters.status}|${filters.search}`);
+
   return (
     <AdminPageShell
       title="Kelola User"
@@ -234,9 +246,9 @@ export default function KelolaUserPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((u, i) => (
+                  {pagedUsers.map((u, i) => (
                     <tr key={u.id} className="border-t border-gray-100 hover:bg-gray-50/50">
-                      <td className="px-4 py-3 text-gray-600">{i + 1}</td>
+                      <td className="px-4 py-3 text-gray-600">{startIndex + i + 1}</td>
                       <td className="px-4 py-3 font-medium text-gray-800">{u.name}</td>
                       <td className="px-4 py-3 text-gray-600">{u.phone_number}</td>
                       <td className="px-4 py-3 text-gray-600">{roleLabel(u.role)}</td>
@@ -269,7 +281,7 @@ export default function KelolaUserPage() {
 
             {/* Kartu — layar sempit di bawah sm */}
             <div className="sm:hidden divide-y divide-gray-100">
-              {users.map((u) => (
+              {pagedUsers.map((u) => (
                 <div key={u.id} className="p-4 flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-sm font-medium text-gray-800 truncate">{u.name}</div>
@@ -301,6 +313,16 @@ export default function KelolaUserPage() {
                 </div>
               ))}
             </div>
+
+            <Pagination
+              page={page}
+              pageCount={pageCount}
+              total={total}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              itemLabel="user"
+              className="border-t border-gray-100"
+            />
           </>
         )}
       </div>

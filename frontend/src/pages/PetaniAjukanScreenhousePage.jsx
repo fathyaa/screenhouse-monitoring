@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import Sidebar from "../layouts/Sidebar";
 import PetaniTopbar from "../layouts/PetaniTopbar";
+import PetaniBottomNav from "../layouts/PetaniBottomNav";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import ScreenhouseFormFields from "../components/ScreenhouseFormFields";
 import { useScreenhouseFormFields } from "../hooks/useScreenhouseFormFields";
@@ -108,6 +109,7 @@ function PetaniAjukanScreenhousePage() {
             </button>
           </div>
         </div>
+        <PetaniBottomNav />
       </div>
     </div>
   );

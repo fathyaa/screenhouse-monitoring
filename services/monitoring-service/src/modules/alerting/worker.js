@@ -2,7 +2,7 @@ const pool = require("../../config/db");
 const { THRESHOLD_METRICS } = require("./thresholdMetrics");
 const { subscriber, publisher } = require("../../config/redis");
 const { setActuators } = require("../ingest/actuatorService");
-const { resolveActuatorActions } = require("../../shared/actuatorRules");
+const { resolveActuatorActions, resolveActuatorRecoveryActions } = require("../../shared/actuatorRules");
 const {
   OFFLINE_ALERT_MESSAGE_SUFFIX,
   buildOfflineAlertMessage,
@@ -286,6 +286,7 @@ async function handleSensorDataCreated(message) {
   if (!threshold) return console.log("Threshold snapshot tidak ditemukan");
 
   const violations = [];
+  const recoveries = [];
 
   for (const m of THRESHOLD_METRICS) {
     const value = sensorData[m.key];
@@ -317,11 +318,12 @@ async function handleSensorDataCreated(message) {
         message: lowMsg,
       });
     } else if (lowRecovered) {
-      await resolveActiveAlertIfAny({
+      const resolved = await resolveActiveAlertIfAny({
         screenhouseId,
         sensorNodeId,
         message: lowMsg,
       });
+      if (resolved) recoveries.push({ key: m.key, direction: "low", label: m.label });
     }
 
     if (isHigh) {
@@ -333,19 +335,26 @@ async function handleSensorDataCreated(message) {
         message: highMsg,
       });
     } else if (highRecovered) {
-      await resolveActiveAlertIfAny({
+      const resolved = await resolveActiveAlertIfAny({
         screenhouseId,
         sensorNodeId,
         message: highMsg,
       });
+      if (resolved) recoveries.push({ key: m.key, direction: "high", label: m.label });
     }
   }
 
-  if (violations.length) {
-    const actions = resolveActuatorActions(violations);
+  if (violations.length || recoveries.length) {
+    // Aksi ON (violation) menang atas OFF (recovery) untuk aktuator yang sama
+    // (mis. kipas dipakai bareng air_temperature & air_humidity) — kalau salah
+    // satu masih melanggar, jangan sampai recovery parameter lain mematikannya.
+    const actions = {
+      ...resolveActuatorRecoveryActions(recoveries),
+      ...resolveActuatorActions(violations),
+    };
     if (Object.keys(actions).length) {
       try {
-        const reason = violations.map((v) => v.label).join(", ");
+        const reason = [...violations, ...recoveries].map((v) => v.label).join(", ");
         await setActuators({
           screenhouseId: Number(screenhouseId),
           fan: actions.fan,

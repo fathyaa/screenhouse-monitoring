@@ -562,8 +562,10 @@ async function getScreenhouseSensorHistory(req, res) {
           sd.soil_moisture,
           sd.soil_temperature,
           sd.soil_ph,
+          sd.conductivity,
           sd.air_temperature,
           sd.air_humidity,
+          sd.light_intensity,
           sd.created_at
         ${SENSOR_DATA_JOIN}
         WHERE sn.screenhouse_id = $1
@@ -715,7 +717,12 @@ async function getScreenhouseDashboardSummary(req, res) {
             ROUND(AVG(sd.soil_moisture))::numeric(5,2) AS avg_soil_moisture,
             ROUND(AVG(sd.phosphorus))::int AS avg_phosphorus,
             ROUND(AVG(sd.potassium))::int AS avg_potassium,
-            ROUND(AVG(sd.air_temperature)::numeric, 1) AS avg_air_temperature
+            ROUND(AVG(sd.soil_temperature)::numeric, 1) AS avg_soil_temperature,
+            ROUND(AVG(sd.soil_ph)::numeric, 1) AS avg_soil_ph,
+            ROUND(AVG(sd.conductivity))::int AS avg_conductivity,
+            ROUND(AVG(sd.air_temperature)::numeric, 1) AS avg_air_temperature,
+            ROUND(AVG(sd.air_humidity)::numeric, 1) AS avg_air_humidity,
+            ROUND(AVG(sd.light_intensity))::int AS avg_light_intensity
           ${SENSOR_DATA_JOIN}
           WHERE sn.screenhouse_id = $1
             AND sd.created_at >= NOW() - INTERVAL '24 hours'

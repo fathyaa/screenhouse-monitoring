@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
 import PetaniTopbar from "../layouts/PetaniTopbar";
+import PetaniBottomNav from "../layouts/PetaniBottomNav";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import { API_URL } from "../config/api";
 import { ScreenhouseDetailSkeleton } from "../components/LoadingUI";
@@ -264,6 +265,7 @@ export default function SemaiCycleDetailPage() {
             </div>
           )}
         </div>
+        <PetaniBottomNav />
       </div>
     </div>
   );

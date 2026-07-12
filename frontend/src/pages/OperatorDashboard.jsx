@@ -2,7 +2,10 @@ import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import L from "leaflet";
-import { RefreshCw, Phone, MessageCircle, AlertTriangle, User, MapPin, Lightbulb, CheckCircle2, ChevronDown, ArrowUp, ArrowDown } from "lucide-react";
+import MarkerClusterGroup from "react-leaflet-cluster";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
+import { RefreshCw, Phone, MessageCircle, AlertTriangle, User, MapPin, Lightbulb, CheckCircle2, ChevronDown, ArrowUp, ArrowDown, X, Search } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
 import OperatorTopbar from "../layouts/OperatorTopbar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
@@ -17,8 +20,18 @@ import {
   STATUS_ORDER,
   SCREENHOUSE_STATUS,
 } from "../constants/screenhouseStatus";
-import { ListPanelSkeleton, MapLoadingOverlay } from "../components/LoadingUI";
+import { MapLoadingOverlay } from "../components/LoadingUI";
+import WilayahFilter from "../components/WilayahFilter";
 import { whatsAppUrl, telUrl } from "../constants/farmerLabels";
+
+const EMPTY_WILAYAH = { regency_id: "", district_id: "", village_id: "" };
+
+function matchesWilayah(sh, w) {
+  if (w.village_id) return String(sh.village_id) === String(w.village_id);
+  if (w.district_id) return String(sh.district_id) === String(w.district_id);
+  if (w.regency_id) return String(sh.regency_id) === String(w.regency_id);
+  return true;
+}
 
 const METRIC_UNIT = Object.fromEntries(
   THRESHOLD_METRICS.map((m) => [m.key, m.unit])
@@ -118,14 +131,17 @@ function OperatorDashboard() {
   const [selectedId, setSelectedId] = useState(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [wilayah, setWilayah] = useState(EMPTY_WILAYAH);
   const [mobileView, setMobileView] = useState("map");
   const [mapSummary, setMapSummary] = useState({});
   const [summaryRefreshing, setSummaryRefreshing] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [mapSummaryLoading, setMapSummaryLoading] = useState(true);
   const [attentionDelta, setAttentionDelta] = useState(null);
   const mapRef = useRef(null);
   const markerRefs = useRef({});
+  const clusterRef = useRef(null);
   const prevAttentionCountRef = useRef(null);
 
   const loadMapSummary = useCallback(async () => {
@@ -146,18 +162,31 @@ function OperatorDashboard() {
     }
   }, []);
 
-  useEffect(() => {
+  const loadScreenhouses = useCallback(async () => {
     const token = localStorage.getItem("token");
-
     setPageLoading(true);
-    fetch(`${API_URL}/screenhouses`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.json())
-      .then(setScreenhouses)
-      .catch(console.error)
-      .finally(() => setPageLoading(false));
+    setLoadError(false);
+    try {
+      const res = await fetch(`${API_URL}/screenhouses`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      // Backend bisa balas objek error (mis. 500) — jangan sampai .filter meng-crash halaman.
+      setScreenhouses(Array.isArray(data) ? data : []);
+      if (!Array.isArray(data)) setLoadError(true);
+    } catch (err) {
+      console.error("[operator-dashboard] gagal memuat screenhouse", err);
+      setScreenhouses([]);
+      setLoadError(true);
+    } finally {
+      setPageLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadScreenhouses();
+  }, [loadScreenhouses]);
 
   useEffect(() => {
     let active = true;
@@ -221,20 +250,30 @@ function OperatorDashboard() {
   }, [loadMapSummary]);
 
   const filteredScreenhouses = screenhouses.filter((sh) => {
-    const keyword = search.toLowerCase();
-    const matchesSearch =
-      sh.name?.toLowerCase().includes(keyword) ||
-      sh.owner_name?.toLowerCase().includes(keyword) ||
-      sh.address_detail?.toLowerCase().includes(keyword) ||
-      sh.village?.toLowerCase().includes(keyword) ||
-      sh.district?.toLowerCase().includes(keyword) ||
-      sh.province?.toLowerCase().includes(keyword);
-    if (!matchesSearch) return false;
-
+    if (!matchesWilayah(sh, wilayah)) return false;
     if (statusFilter === "all") return true;
     const status = mapSummary[sh.id]?.status ?? "offline";
     return status === statusFilter;
   });
+
+  const wilayahActive = Boolean(
+    wilayah.regency_id || wilayah.district_id || wilayah.village_id
+  );
+
+  // Pencarian sebagai "locator": mencari dalam cakupan wilayah/status aktif.
+  const searchResults = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return [];
+    return filteredScreenhouses.filter(
+      (sh) =>
+        sh.name?.toLowerCase().includes(q) ||
+        sh.owner_name?.toLowerCase().includes(q) ||
+        sh.address_detail?.toLowerCase().includes(q) ||
+        sh.village?.toLowerCase().includes(q) ||
+        sh.district?.toLowerCase().includes(q) ||
+        sh.province?.toLowerCase().includes(q)
+    );
+  }, [filteredScreenhouses, search]);
 
   const statusCounts = useMemo(() => {
     const counts = { healthy: 0, warning: 0, critical: 0, offline: 0 };
@@ -263,18 +302,16 @@ function OperatorDashboard() {
     prevAttentionCountRef.current = total;
   }, [priorityList.all.length]);
 
-  const priorityIds = useMemo(
-    () => new Set(priorityList.all.map((sh) => sh.id)),
-    [priorityList]
-  );
-
-  const mainListScreenhouses = useMemo(
-    () => filteredScreenhouses.filter((sh) => !priorityIds.has(sh.id)),
-    [filteredScreenhouses, priorityIds]
-  );
-
   const focusScreenhouse = (screenhouse) => {
     setSelectedId(screenhouse.id);
+
+    const marker = markerRefs.current[screenhouse.id];
+    const cluster = clusterRef.current;
+    // Kalau marker sedang berada di dalam cluster, buka clusternya dulu baru popup.
+    if (marker && cluster && typeof cluster.zoomToShowLayer === "function") {
+      cluster.zoomToShowLayer(marker, () => marker.openPopup());
+      return;
+    }
 
     if (mapRef.current) {
       mapRef.current.flyTo([screenhouse.latitude, screenhouse.longitude], 15, {
@@ -363,6 +400,102 @@ function OperatorDashboard() {
           </button>
         </div>
 
+        {/* Filter wilayah (kab/kota → kecamatan → desa) + pencarian, satu baris. */}
+        <div className="shrink-0 border-b border-gray-200 bg-white px-4 py-2.5 relative z-[500]">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <div className="text-[10px] uppercase tracking-wider text-gray-600 font-semibold shrink-0 hidden sm:block">
+              Wilayah
+            </div>
+            <WilayahFilter value={wilayah} onChange={setWilayah} />
+            {wilayahActive && (
+              <button
+                type="button"
+                onClick={() => setWilayah(EMPTY_WILAYAH)}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 shrink-0"
+              >
+                <X size={13} />
+                Reset
+              </button>
+            )}
+
+            {/* Pencarian screenhouse — sejajar filter, hasil tampil di bawah kotak. */}
+            <div className="relative flex-1 min-w-[180px]">
+            <Search
+              size={15}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+            />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Cari screenhouse: nama, pemilik, alamat..."
+              className="w-full pl-9 pr-9 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-green-100 focus:border-green-300"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                aria-label="Hapus pencarian"
+              >
+                <X size={15} />
+              </button>
+            )}
+
+            {search.trim() && (
+              <div className="absolute left-0 right-0 top-full mt-1 z-[600] max-h-72 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg">
+                {searchResults.length === 0 ? (
+                  <div className="px-3 py-4 text-sm text-gray-500 text-center">
+                    Tidak ada screenhouse yang cocok
+                    {wilayahActive ? " di wilayah ini" : ""}.
+                  </div>
+                ) : (
+                  <>
+                    <div className="px-3 py-1.5 text-[11px] text-gray-500 border-b border-gray-100">
+                      {searchResults.length} hasil
+                    </div>
+                    {searchResults.map((sh) => {
+                      const status = mapSummary[sh.id]?.status ?? "offline";
+                      const meta = getStatusMeta(status);
+                      return (
+                        <button
+                          key={`search-${sh.id}`}
+                          type="button"
+                          onClick={() => {
+                            focusScreenhouse(sh);
+                            setSearch("");
+                            setMobileView("map");
+                          }}
+                          className="w-full text-left px-3 py-2.5 flex items-start gap-2.5 hover:bg-gray-50 border-b border-gray-50 last:border-b-0"
+                        >
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0 mt-1.5"
+                            style={{ backgroundColor: meta.color }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-gray-800 leading-snug break-words">
+                              {sh.name}
+                            </div>
+                            <div className="text-xs text-gray-600 mt-0.5 leading-relaxed break-words">
+                              {[sh.owner_name, sh.village, sh.district].filter(Boolean).join(" · ")}
+                            </div>
+                          </div>
+                          <span
+                            className={`text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 mt-0.5 ${meta.badgeClass}`}
+                          >
+                            {meta.label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </>
+                )}
+              </div>
+            )}
+            </div>
+          </div>
+        </div>
+
         {dashboardInsight && (
           <div className="shrink-0 border-b border-gray-200 bg-amber-50/60 px-4 py-2 flex items-center gap-2">
             <Lightbulb size={14} className="text-amber-700 shrink-0" aria-hidden />
@@ -380,12 +513,12 @@ function OperatorDashboard() {
           </div>
         )}
 
-        {/* Segment Peta/Daftar — HP saja, di lg: dua panel selalu tampil berdampingan */}
+        {/* Segment Peta/Prioritas — HP saja, di lg: dua panel selalu tampil berdampingan */}
         <div className="lg:hidden shrink-0 border-b border-gray-200 bg-white px-4 py-2">
           <div className="flex bg-gray-100 rounded-xl p-1">
             {[
               { key: "map", label: "Peta" },
-              { key: "list", label: "Daftar" },
+              { key: "list", label: "Prioritas" },
             ].map((tab) => (
               <button
                 key={tab.key}
@@ -423,6 +556,13 @@ function OperatorDashboard() {
                 attribution="&copy; OpenStreetMap"
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
+              <MarkerClusterGroup
+                ref={clusterRef}
+                chunkedLoading
+                maxClusterRadius={55}
+                showCoverageOnHover={false}
+                spiderfyOnMaxZoom
+              >
               {filteredScreenhouses.map((sh) => {
                 const summary = mapSummary[sh.id];
                 const status = summary?.status ?? "offline";
@@ -583,6 +723,7 @@ function OperatorDashboard() {
                   </Marker>
                 );
               })}
+              </MarkerClusterGroup>
             </MapContainer>
           </div>
 
@@ -610,28 +751,20 @@ function OperatorDashboard() {
               </div>
             </div>
 
-            {/* Pencarian — selalu di posisi tetap, tidak ikut terdesak konten "Perlu tindak lanjut". */}
-            <div className="shrink-0 px-4 py-3 border-b border-gray-100">
-              <input
-                type="text"
-                placeholder="Cari nama, owner, alamat..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-green-100 focus:border-green-300"
-              />
-            </div>
-
             {priorityList.all.length > 0 && (
-              <section className="flex flex-col flex-1 min-h-0 border-b border-gray-200">
+              <section className="flex flex-col flex-1 min-h-0">
                 <div className="px-4 py-3 border-b border-amber-100 bg-amber-50/50 shrink-0">
                   <div className="flex items-center gap-2 text-xs font-semibold text-amber-900">
                     <AlertTriangle size={14} className="shrink-0" />
                     Perlu tindak lanjut ({priorityList.all.length})
                   </div>
+                  <p className="text-xs text-amber-800/80 mt-1 leading-snug">
+                  Hubungi petani melalui telepon atau WhatsApp untuk memberikan pengingat, melakukan evaluasi, atau menanyakan kendala yang dihadapi.
+                  </p>
                 </div>
                 <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
                   <div className="space-y-2">
-                    {priorityList.visible.map((sh) => (
+                    {priorityList.all.map((sh) => (
                       <button
                         key={`prio-${sh.id}`}
                         type="button"
@@ -661,83 +794,32 @@ function OperatorDashboard() {
                       </button>
                     ))}
                   </div>
-                  {priorityList.all.length > PRIORITY_VISIBLE_LIMIT && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMobileView("list");
-                        setStatusFilter("all");
-                        setSearch("");
-                      }}
-                      className="w-full text-center text-xs font-semibold text-amber-800 hover:text-amber-900 py-2"
-                    >
-                      Lihat {priorityList.all.length - PRIORITY_VISIBLE_LIMIT} lainnya di daftar bawah ›
-                    </button>
-                  )}
                 </div>
               </section>
             )}
 
-            <section className="flex flex-col flex-1 min-h-0">
-              <div className="px-4 py-2.5 border-b border-gray-100 shrink-0">
-                <div className="text-xs uppercase tracking-widest text-gray-600 font-medium">
-                  Daftar screenhouse
+            {loadError ? (
+              <div className="shrink-0 px-4 py-6 text-center border-t border-gray-100">
+                <AlertTriangle size={22} className="mx-auto text-amber-500" aria-hidden />
+                <p className="text-sm text-gray-700 mt-2">Gagal memuat data screenhouse.</p>
+                <p className="text-xs text-gray-500 mt-1">Periksa koneksi atau server, lalu coba lagi.</p>
+                <button
+                  type="button"
+                  onClick={loadScreenhouses}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-lg btn-bl px-4 py-2 text-xs"
+                >
+                  <RefreshCw size={13} aria-hidden />
+                  Coba lagi
+                </button>
+              </div>
+            ) : (
+              !pageLoading &&
+              filteredScreenhouses.length === 0 && (
+                <div className="shrink-0 px-4 py-6 text-center text-sm text-gray-500 border-t border-gray-100">
+                  Tidak ada screenhouse aktif{wilayahActive ? " di wilayah ini" : ""}.
                 </div>
-              </div>
-              <div className="flex-1 min-h-0 overflow-y-auto p-2">
-                {pageLoading ? (
-                  <ListPanelSkeleton count={8} />
-                ) : filteredScreenhouses.length === 0 ? (
-                  <p className="px-3 py-6 text-sm text-gray-500 text-center">
-                    Tidak ada screenhouse yang cocok.
-                  </p>
-                ) : mainListScreenhouses.length === 0 && priorityList.length > 0 ? (
-                  <p className="px-3 py-4 text-xs text-gray-500 text-center leading-relaxed">
-                    Semua screenhouse yang cocok sudah ada di bagian perlu tindak lanjut.
-                  </p>
-                ) : (
-                  mainListScreenhouses.map((sh, i) => {
-                    const status = mapSummary[sh.id]?.status ?? "offline";
-                    const meta = getStatusMeta(status);
-                    return (
-                      <div
-                        key={sh.id}
-                        onClick={() => focusScreenhouse(sh)}
-                        className={`
-                          flex items-start gap-3 p-3 rounded-xl cursor-pointer mb-1
-                          border transition
-                          ${selectedId === sh.id
-                            ? "bg-bl-surface-muted border-bl-accent/30"
-                            : "border-transparent hover:bg-gray-50"
-                          }
-                        `}
-                      >
-                        <div className="relative w-7 h-7 rounded-lg bg-bl-primary text-white text-xs font-medium flex items-center justify-center shrink-0 mt-0.5">
-                          {i + 1}
-                          <span
-                            className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white"
-                            style={{ backgroundColor: meta.color }}
-                          />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-gray-800 leading-snug break-words">
-                            {sh.name}
-                          </div>
-                          <div className="text-xs text-gray-600 mt-0.5 leading-relaxed break-words">
-                            {[sh.village, sh.district].filter(Boolean).join(", ")}
-                          </div>
-                        </div>
-                        <span
-                          className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 mt-0.5 ${meta.badgeClass}`}
-                        >
-                          {meta.label}
-                        </span>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </section>
+              )
+            )}
           </div>
         </div>
       </div>

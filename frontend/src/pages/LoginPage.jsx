@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Phone, Lock, Eye, EyeOff } from "lucide-react";
+import { Phone, Lock, Eye, EyeOff, Info } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { API_URL } from "../config/api";
@@ -58,7 +58,7 @@ function LoginPage() {
             const routes = {
                 petani: "/petani",
                 operator: "/operator",
-                super_admin: "/admin/kelola-user",
+                super_admin: "/admin",
             };
 
             const path = routes[data.user.role];
@@ -130,6 +130,14 @@ function LoginPage() {
                     <button
                         onClick={() => navigate("/register")}
                         className="link-bl">Daftar di sini</button>
+                </div>
+
+                <div className="mt-4 flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-100 px-3 py-2.5">
+                    <Info size={14} className="text-amber-600 shrink-0 mt-0.5" aria-hidden />
+                    <p className="text-[11px] text-amber-800 leading-snug text-left">
+                        Baru mendaftar? Akun perlu disetujui operator dulu sebelum bisa masuk.
+                        Silakan coba masuk kembali setelah pengajuanmu disetujui.
+                    </p>
                 </div>
             </div>
         </div>

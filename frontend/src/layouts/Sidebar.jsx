@@ -12,9 +12,11 @@ import {
   FileBarChart,
   Bell,
   Settings,
+  TrendingUp,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { disconnectSocket } from "../lib/socket";
+import { clearSession } from "../utils/auth";
 import { useAlerts } from "../context/AlertContext";
 import { usePushNotifications } from "../context/PushNotificationContext";
 import { FARMER_LABELS } from "../constants/farmerLabels";
@@ -25,7 +27,8 @@ const MENUS_BY_ROLE = {
   operator: [
     { icon: <LayoutDashboard size={17} />, label: "Dashboard", path: "/operator" },
     { icon: <FileBarChart size={17} />, label: "Laporan Wilayah", path: "/operator/laporan" },
-    { icon: <Map size={17} />, label: "Approval Petani", path: "/operator/approval" },
+    { icon: <TrendingUp size={17} />, label: "Tren Wilayah", path: "/operator/tren" },
+    { icon: <Map size={17} />, label: "Persetujuan", path: "/operator/approval" },
     { icon: <Users size={17} />, label: "Daftar Petani", path: "/operator/petani" },
   ],
   petani: [
@@ -35,13 +38,15 @@ const MENUS_BY_ROLE = {
     { icon: <FileBarChart size={17} />, label: "Riwayat Semai", path: "/petani/riwayat-semai" },
   ],
   super_admin: [
+    { icon: <LayoutDashboard size={17} />, label: "Ringkasan", path: "/admin", section: "Admin" },
     { icon: <User size={17} />, label: "Kelola User", path: "/admin/kelola-user", section: "Admin" },
     { icon: <Leaf size={17} />, label: "Kelola Screenhouse", path: "/admin/kelola-screenhouse", section: "Admin" },
     { icon: <SlidersHorizontal size={17} />, label: "Kelola batas aman", path: "/admin/kelola-threshold", section: "Admin" },
     { icon: <Radio size={17} />, label: "Konfigurasi", path: "/admin/konfigurasi", section: "Admin" },
     { icon: <LayoutDashboard size={17} />, label: "Dashboard Operator", path: "/operator", section: "Operator" },
     { icon: <FileBarChart size={17} />, label: "Laporan Wilayah", path: "/operator/laporan", section: "Operator" },
-    { icon: <Map size={17} />, label: "Approval Petani", path: "/operator/approval", section: "Operator" },
+    { icon: <TrendingUp size={17} />, label: "Tren Wilayah", path: "/operator/tren", section: "Operator" },
+    { icon: <Map size={17} />, label: "Persetujuan", path: "/operator/approval", section: "Operator" },
     { icon: <Users size={17} />, label: "Daftar Petani", path: "/operator/petani", section: "Operator" },
   ],
 };
@@ -141,11 +146,7 @@ function Sidebar({ isOpen, onClose, role = "operator", user: userProp }) {
 
   const handleLogout = () => {
     disconnectSocket();
-    localStorage.removeItem("token");
-    localStorage.removeItem("role");
-    localStorage.removeItem("user");
-    localStorage.removeItem("push_subscribed");
-    localStorage.removeItem("push_muted");
+    clearSession();
     window.dispatchEvent(new Event("auth-changed"));
     navigate("/login");
     onClose?.();

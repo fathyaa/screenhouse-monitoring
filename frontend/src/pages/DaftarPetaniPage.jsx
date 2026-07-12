@@ -4,6 +4,8 @@ import { Menu, Search, Users } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import { KpiGridSkeleton, TableRowsSkeleton, ListPanelSkeleton } from "../components/LoadingUI";
+import Pagination from "../components/Pagination";
+import { usePagination } from "../hooks/usePagination";
 
 import { API_URL } from "../config/api";
 
@@ -87,6 +89,16 @@ function DaftarPetaniPage() {
             return name.includes(q) || phone.includes(q);
         });
     }, [farmers, search, statusFilter]);
+
+    const {
+        page,
+        setPage,
+        pageItems: pagedFarmers,
+        pageCount,
+        total,
+        pageSize,
+        startIndex,
+    } = usePagination(filteredFarmers, 10, `${search}|${statusFilter}`);
 
     return (
         <div className="app-shell fixed inset-0 flex bg-bl-surface overflow-hidden text-left">
@@ -196,9 +208,9 @@ function DaftarPetaniPage() {
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {filteredFarmers.map((farmer, index) => (
+                                                    {pagedFarmers.map((farmer, index) => (
                                                         <tr key={farmer.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition text-left">
-                                                            <td className="px-4 py-3 text-xs text-gray-600 font-medium">{index + 1}</td>
+                                                            <td className="px-4 py-3 text-xs text-gray-600 font-medium">{startIndex + index + 1}</td>
                                                             <td className="px-4 py-3 text-sm font-medium text-gray-800">{farmer.name}</td>
                                                             <td className="px-4 py-3 text-xs text-gray-600">{farmer.phone_number ?? "-"}</td>
                                                             <td className="px-4 py-3 text-xs">
@@ -220,10 +232,10 @@ function DaftarPetaniPage() {
 
                                         {/* Kartu — layar sempit di bawah sm */}
                                         <div className="sm:hidden divide-y divide-gray-100">
-                                            {filteredFarmers.map((farmer, index) => (
+                                            {pagedFarmers.map((farmer, index) => (
                                                 <div key={farmer.id} className="p-4 flex items-start justify-between gap-3">
                                                     <div className="min-w-0">
-                                                        <div className="text-xs text-gray-500">#{index + 1}</div>
+                                                        <div className="text-xs text-gray-500">#{startIndex + index + 1}</div>
                                                         <div className="text-sm font-medium text-gray-800 truncate">{farmer.name}</div>
                                                         <div className="text-xs text-gray-600 mt-0.5">{farmer.phone_number ?? "-"}</div>
                                                         <button
@@ -239,6 +251,16 @@ function DaftarPetaniPage() {
                                                 </div>
                                             ))}
                                         </div>
+
+                                        <Pagination
+                                            page={page}
+                                            pageCount={pageCount}
+                                            total={total}
+                                            pageSize={pageSize}
+                                            onPageChange={setPage}
+                                            itemLabel="petani"
+                                            className="border-t border-gray-100"
+                                        />
                                     </>
                                 )}
                             </div>

@@ -1,5 +1,6 @@
 const pool = require("../config/db");
 const monitoringPool = require("../config/monitoringDb");
+const { wibDateStr } = require("./estimasiTanam");
 
 const PARAM_DEFS = [
   { key: "soil_moisture", label: "Kelembapan Tanah", minCol: "min_soil_moisture", maxCol: "max_soil_moisture", icon: "💧" },
@@ -136,6 +137,12 @@ async function fetchAutoActuatorStats(screenhouseId, startDate, endDate) {
   return { fan, irrigation, lamp, details };
 }
 
+function toDateStr(value) {
+  if (value == null) return null;
+  if (value instanceof Date) return wibDateStr(value);
+  return String(value).slice(0, 10);
+}
+
 function diffCalendarDays(fromStr, toStr) {
   const from = new Date(`${String(fromStr).slice(0, 10)}T12:00:00+07:00`);
   const to = new Date(`${String(toStr).slice(0, 10)}T12:00:00+07:00`);
@@ -144,8 +151,8 @@ function diffCalendarDays(fromStr, toStr) {
 }
 
 async function buildCycleAnalytics(cycle) {
-  const startDate = String(cycle.tanggal_mulai).slice(0, 10);
-  const endDate = String(cycle.tanggal_selesai ?? new Date().toISOString()).slice(0, 10);
+  const startDate = toDateStr(cycle.tanggal_mulai);
+  const endDate = toDateStr(cycle.tanggal_selesai) ?? wibDateStr();
   const targetHari = cycle.durasi_target_hari ?? null;
   const aktualHari = diffCalendarDays(startDate, endDate);
   const selisih = targetHari != null ? aktualHari - targetHari : null;

@@ -5,6 +5,7 @@ import Sidebar from "../layouts/Sidebar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import { useAlerts, getAlertDetail } from "../context/AlertContext";
 import PetaniTopbar from "../layouts/PetaniTopbar";
+import PetaniBottomNav from "../layouts/PetaniBottomNav";
 import { pickPrimaryAlert, focusAlertHighlight } from "../utils/petaniAlertNav";
 import { isAutoHandledAlert, getAutoHandledExplanation } from "../constants/actuatorRules";
 import { RESOLVE_ACTION_OPTIONS } from "../constants/alertResolve";
@@ -265,6 +266,7 @@ function NotifikasiPage() {
                     )}
 
                 </PullToRefresh>
+                <PetaniBottomNav />
 
                 {resolveTarget && (
                     <div className="fixed inset-0 z-[2000] flex items-end sm:items-center justify-center p-4 bg-black/40">

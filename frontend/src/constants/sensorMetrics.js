@@ -1,7 +1,7 @@
 export const PRIMARY_SENSOR_FIELDS = [
   { key: "nitrogen", label: "Nitrogen", unit: "mg/kg" },
   { key: "phosphorus", label: "Phosphorus", unit: "mg/kg" },
-  { key: "potassium", label: "Potassium", unit: "mg/kg" },
+  { key: "potassium", label: "Kalium", unit: "mg/kg" },
   { key: "soil_moisture", label: "Kelembapan tanah", unit: "%" },
   { key: "soil_temperature", label: "Suhu tanah", unit: "°C" },
   { key: "soil_ph", label: "pH tanah", unit: "" },
@@ -19,7 +19,7 @@ export const POPUP_SENSOR_FIELDS = [
 export const ALERT_PARAM_MAP = [
   { match: "nitrogen", param: "nitrogen", actual: "actual_nitrogen", min: "min_nitrogen", max: "max_nitrogen", unit: "mg/kg" },
   { match: "phosphorus", param: "phosphorus", actual: "actual_phosphorus", min: "min_phosphorus", max: "max_phosphorus", unit: "mg/kg" },
-  { match: "potassium", param: "potassium", actual: "actual_potassium", min: "min_potassium", max: "max_potassium", unit: "mg/kg" },
+  { match: "kalium", param: "potassium", actual: "actual_potassium", min: "min_potassium", max: "max_potassium", unit: "mg/kg" },
   { match: "kelembapan tanah", param: "soil_moisture", actual: "actual_soil_moisture", min: "min_soil_moisture", max: "max_soil_moisture", unit: "%" },
   { match: "suhu tanah", param: "soil_temperature", actual: "actual_soil_temperature", min: "min_soil_temperature", max: "max_soil_temperature", unit: "°C" },
   { match: "ph tanah", param: "soil_ph", actual: "actual_soil_ph", min: "min_soil_ph", max: "max_soil_ph", unit: "" },
