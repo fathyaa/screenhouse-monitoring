@@ -1,5 +1,5 @@
 #STAE 1 : BUILD
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 
 LABEL maintainer="DevOps Team Smartscreenhouse"
 
@@ -12,7 +12,7 @@ RUN npm install
 COPY . .
 
 ENV VITE_API_URL=http://APP_API_URL
-ENV VITE_MONITORING_URL=http://APP_API_URL
+ENV VITE_MONITORING_URL=http://APP_MONITORING_URL
 ENV VITE_VAPID_PUBLIC_KEY=API_VAPID_KEY
 
 RUN npm run build
@@ -35,6 +35,6 @@ EXPOSE 80
 
 CMD ["/bin/sh", "-c", "\
 sed -i \"s|http://APP_API_URL|$VITE_API_URL|g\" ./assets/*.js && \
-sed -i \"s|http://APP_API_URL|$VITE_MONITORING_URL|g\" ./assets/*.js && \
+sed -i \"s|http://APP_MONITORING_URL|$VITE_MONITORING_URL|g\" ./assets/*.js && \
 sed -i \"s|API_VAPID_KEY|$VITE_VAPID_PUBLIC_KEY|g\" ./assets/*.js && \
 nginx -g 'daemon off;'"]
