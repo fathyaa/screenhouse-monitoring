@@ -67,6 +67,9 @@ export default function EstimasiTanamPanel({
   const semaiRaw = tanggalSemai ?? estimasi?.tanggal_semai;
   const semaiLabel = formatSemaiDate(semaiRaw);
   const varietas = varietasNama || estimasi?.varietas_nama;
+  // Skor bibit hanya bermakna saat siklus semai berjalan — tanpa siklus, angka
+  // seperti "100 Sangat baik" menyesatkan karena belum ada bibit yang dinilai.
+  const noCycle = !semaiRaw;
 
   const displayEstimasi = mergeEstimasiDisplay(estimasi, semaiRaw, durasiPembibitanHari);
   const timeline = buildTimelineTracker(semaiRaw, durasiPembibitanHari, displayEstimasi);
@@ -134,6 +137,7 @@ export default function EstimasiTanamPanel({
               <StressScoreCardBadge
                 scoreData={stressScore}
                 offline={deviceOffline}
+                noCycle={noCycle}
                 compact
               />
             </div>
@@ -207,7 +211,7 @@ export default function EstimasiTanamPanel({
 
           {showStressScore && (
             <InlineSegment icon={Clock} title="Skor kondisi bibit" compact={compact}>
-              <StressScoreDetailCard scoreData={stressScore} offline={deviceOffline} compact={compact} />
+              <StressScoreDetailCard scoreData={stressScore} offline={deviceOffline} noCycle={noCycle} compact={compact} />
             </InlineSegment>
           )}
         </div>
@@ -251,7 +255,7 @@ export default function EstimasiTanamPanel({
 
         {showStressScore && (
           <InfoCard icon={Clock} title="Skor kondisi bibit" compact={compact}>
-            <StressScoreDetailCard scoreData={stressScore} offline={deviceOffline} />
+            <StressScoreDetailCard scoreData={stressScore} offline={deviceOffline} noCycle={noCycle} />
           </InfoCard>
         )}
       </div>

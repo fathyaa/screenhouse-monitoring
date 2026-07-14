@@ -34,7 +34,32 @@ async function getOwnerUserId(screenhouseId) {
   return result.rows[0]?.owner_user_id ?? null;
 }
 
+// Alert auto-handled cuma dianggap masih "aktif dikontrol" bila screenhouse-nya
+// online — begitu alat berhenti kirim data, alert lama tidak pernah ter-resolve
+// otomatis (butuh data baru untuk konfirmasi kondisi normal) sehingga bisa
+// "nyangkut aktif" selamanya dan mengunci toggle padahal tidak ada sistem yang
+// sedang mengontrol. Ambang sama dengan map-summary/statsController (interval x3, min 15 menit).
+const SCREENHOUSE_ONLINE_SQL = `
+  EXISTS (
+    SELECT 1
+    FROM sensor_nodes sn
+    INNER JOIN sensor_data sd ON sd.sensor_node_id = sn.id
+    WHERE sn.screenhouse_id = $1
+      AND sn.is_active = true
+      AND sd.created_at >= NOW() - (
+        GREATEST(GREATEST(COALESCE(sn.send_interval_seconds, 60), 60) * 3, 900)
+        || ' seconds'
+      )::interval
+  )
+`;
+
 async function getActiveAutoActuatorLocks(screenhouseId) {
+  const onlineResult = await pool.query(
+    `SELECT ${SCREENHOUSE_ONLINE_SQL} AS online`,
+    [screenhouseId]
+  );
+  if (!onlineResult.rows[0]?.online) return {};
+
   const result = await pool.query(
     `
     SELECT message

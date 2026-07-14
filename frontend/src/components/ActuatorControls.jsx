@@ -133,18 +133,26 @@ export default function ActuatorControls({
   compact = false,
   wide = false,
   readOnly = false,
+  offline = false,
   onUpdated,
   className = "",
 }) {
   const [loadingKey, setLoadingKey] = useState(null);
   const [pendingConfirm, setPendingConfirm] = useState(null);
 
+  // Alert auto-handled lama bisa "nyangkut aktif" selamanya kalau screenhouse-nya
+  // offline (tidak ada data baru yang membuktikan kondisi sudah normal). Kalau
+  // offline, jangan klaim "sedang dikontrol otomatis" — tidak ada sistem yang
+  // benar-benar mengontrol saat ini. Mirror ke backend: assertManualActuatorAllowed
+  // di actuatorService.js.
   const autoLocks = useMemo(
     () =>
-      buildAutoActuatorLocks(autoAlerts, {
-        screenhouseId: screenhouseId ?? undefined,
-      }),
-    [autoAlerts, screenhouseId]
+      offline
+        ? {}
+        : buildAutoActuatorLocks(autoAlerts, {
+            screenhouseId: screenhouseId ?? undefined,
+          }),
+    [autoAlerts, screenhouseId, offline]
   );
 
   const autoBannerMessages = useMemo(

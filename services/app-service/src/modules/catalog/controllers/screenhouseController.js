@@ -429,10 +429,7 @@ async function submitMyScreenhouse(req, res) {
       varietas_id,
     } = req.body;
 
-    if (!varietas_id) {
-      return res.status(400).json({ message: "Varietas bibit wajib dipilih" });
-    }
-
+    // Varietas opsional di pengajuan — petani memilihnya saat mulai siklus semai.
     const varietas = await resolveVarietasId(pool, varietas_id);
 
     const parsedTrayCount = parseTrayCount(tray_count, 1);
@@ -485,8 +482,8 @@ async function submitMyScreenhouse(req, res) {
         Number(latitude),
         Number(longitude),
         parsedTrayCount,
-        varietas.id,
-        varietas.nama,
+        varietas?.id ?? null,
+        varietas?.nama ?? null,
       ]
     );
 

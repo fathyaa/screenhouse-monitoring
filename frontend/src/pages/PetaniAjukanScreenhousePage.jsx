@@ -95,7 +95,6 @@ function PetaniAjukanScreenhousePage() {
               resolving={resolving}
               handleMapPick={handleMapPick}
               compact
-              token={token}
             />
 
             <button

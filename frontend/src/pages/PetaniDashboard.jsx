@@ -8,13 +8,10 @@ import PetaniTopbar from "../layouts/PetaniTopbar";
 import PetaniBottomNav from "../layouts/PetaniBottomNav";
 import ActuatorControls from "../components/ActuatorControls";
 import DashboardInsightPanel from "../components/DashboardInsightPanel";
-import ScreenhouseStatusPanel from "../components/ScreenhouseStatusPanel";
-import PembibitanProgressPanel from "../components/PembibitanProgressPanel";
 import PendingOnboardingPanel from "../components/PendingOnboardingPanel";
 import ScreenhouseDetailPage from "./ScreenhouseDetailPage";
-import { computeEstimasiTimeline } from "../utils/estimasiTanam";
-import { useScreenhouseStats } from "../context/ScreenhouseStatsContext";
 import { isAutoHandledAlert } from "../constants/actuatorRules";
+import { staleThresholdMs } from "../utils/nodeOnline";
 
 import { API_URL } from "../config/api";
 import { getSocket } from "../lib/socket";
@@ -57,12 +54,36 @@ function shortenScreenhouseName(name) {
     .trim() || name;
 }
 
+/** Data terakhir kadaluarsa → node dianggap offline, sama dengan halaman detail
+ *  (isScreenhouseMonitorOffline). Payload /sensor-data/latest tidak membawa
+ *  send_interval, jadi pakai ambang default 15 menit. */
+function isSensorStale(sensor) {
+  const ts = sensor?.created_at;
+  if (!ts) return true;
+  const ageMs = Date.now() - new Date(ts).getTime();
+  if (Number.isNaN(ageMs)) return true;
+  return ageMs > staleThresholdMs(sensor.send_interval_seconds);
+}
+
 function getScreenhouseCardMeta(sensor, screenhouseAlerts = [], screenhouseStatus = "active") {
   if (screenhouseStatus === "pending") {
     return {
       status: "pending",
       rank: CARD_STATUS_RANK.pending,
       chip: { label: "Menunggu approval", cls: "bg-amber-50 text-amber-700" },
+      primaryAlert: null,
+    };
+  }
+
+  // Offline (tidak ada data / data basi) menang atas status lain — konsisten dgn
+  // halaman detail yg pakai `screenhouseOffline ? "offline" : rollupStatus`.
+  // Sebelumnya kartu cek `!sensor` saja, jadi data basi (mis. 4 hari lalu) tetap
+  // ditampilkan "Sehat" padahal detailnya "Tidak terhubung".
+  if (isSensorStale(sensor)) {
+    return {
+      status: "offline",
+      rank: CARD_STATUS_RANK.offline,
+      chip: { label: FARMER_LABELS.offline, cls: "bg-slate-100 text-slate-600" },
       primaryAlert: null,
     };
   }
@@ -91,15 +112,6 @@ function getScreenhouseCardMeta(sensor, screenhouseAlerts = [], screenhouseStatu
     };
   }
 
-  if (!sensor) {
-    return {
-      status: "offline",
-      rank: CARD_STATUS_RANK.offline,
-      chip: { label: FARMER_LABELS.offline, cls: "bg-slate-100 text-slate-600" },
-      primaryAlert: null,
-    };
-  }
-
   return {
     status: "healthy",
     rank: CARD_STATUS_RANK.healthy,
@@ -114,7 +126,6 @@ function PetaniDashboard() {
   const [stressScores, setStressScores] = useState({});
   const [estimasiTanam, setEstimasiTanam] = useState({});
   const { isOpen: sidebarOpen, toggle: toggleSidebar, close: closeSidebar } = useSidebarOpen();
-  const { footerStats, footerStatsLoading, refetch: refetchFooterStats } = useScreenhouseStats();
   const [searchQuery, setSearchQuery] = useState("");
   const [pageLoading, setPageLoading] = useState(true);
 
@@ -343,9 +354,25 @@ function PetaniDashboard() {
   const showOnboarding =
     screenhouses.length > 0 && !screenhouses.some((sh) => sh.status === "active");
 
+  // Urutan kartu: yang sedang dipakai kerja dulu.
+  // 0 = siklus semai berjalan + alat nyala, 1 = siklus berjalan + alat mati,
+  // 2 = tidak ada siklus. Dalam grup yang sama, yang perlu perhatian di atas.
+  const cycleGroupRank = useCallback(
+    (sh) => {
+      const hasCycle = Boolean(sh.tanggal_semai ?? sh.seedling_start_date);
+      if (!hasCycle) return 2;
+      return isSensorStale(latestSensorData[sh.id]) ? 1 : 0;
+    },
+    [latestSensorData]
+  );
+
   const sortedScreenhouses = useMemo(
     () =>
       [...screenhouses].sort((a, b) => {
+        const groupA = cycleGroupRank(a);
+        const groupB = cycleGroupRank(b);
+        if (groupA !== groupB) return groupA - groupB;
+
         const rankA = getScreenhouseCardMeta(
           latestSensorData[a.id],
           alertsByScreenhouse[a.id],
@@ -359,7 +386,7 @@ function PetaniDashboard() {
         if (rankB !== rankA) return rankB - rankA;
         return a.name.localeCompare(b.name, "id");
       }),
-    [screenhouses, latestSensorData, alertsByScreenhouse]
+    [screenhouses, latestSensorData, alertsByScreenhouse, cycleGroupRank]
   );
 
   const filteredScreenhouses = useMemo(() => {
@@ -405,21 +432,6 @@ function PetaniDashboard() {
 
     return { total, healthyCount, attentionCount, autoHandledCount, offlineCount, nearestReady };
   }, [sortedScreenhouses, latestSensorData, alertsByScreenhouse, estimasiTanam]);
-
-  const pembibitanProgress = useMemo(() => {
-    const items = [];
-    sortedScreenhouses.forEach((sh) => {
-      if (sh.status !== "active") return;
-      const timeline = computeEstimasiTimeline(
-        estimasiTanam[sh.id],
-        sh.tanggal_semai ?? sh.seedling_start_date,
-        sh.durasi_pembibitan_hari
-      );
-      if (!timeline) return;
-      items.push({ id: sh.id, name: shortenScreenhouseName(sh.name), ...timeline });
-    });
-    return items.sort((a, b) => a.sisaHari - b.sisaHari);
-  }, [sortedScreenhouses, estimasiTanam]);
 
   // Petani dengan tepat satu screenhouse (dan sudah aktif): tidak ada gunanya
   // menampilkan list satu-kartu + rail insight yang cuma merangkum screenhouse itu.
@@ -475,13 +487,7 @@ function PetaniDashboard() {
                     onAjukan={() => navigate("/petani/ajukan-screenhouse")}
                   />
                 )}
-                <ScreenhouseStatusPanel
-                  stats={footerStats}
-                  loading={footerStatsLoading}
-                  onRefresh={refetchFooterStats}
-                />
                 <DashboardInsightPanel insight={dashboardInsight} />
-                <PembibitanProgressPanel items={pembibitanProgress} />
               </div>
           <div className="flex-1 min-w-0 text-left space-y-3 mt-4 lg:mt-0">
             <div>
@@ -650,6 +656,7 @@ function PetaniDashboard() {
                             lamp_status={sensor?.lamp_status}
                             autoAlerts={shAlerts}
                             disabled={!sensor}
+                            offline={status === "offline"}
                             onUpdated={handleActuatorUpdated}
                           />
                         </div>

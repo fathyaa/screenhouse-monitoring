@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { API_URL } from "../config/api";
 
+// Varietas sengaja tidak ada di form ini — petani memilihnya saat mulai
+// siklus semai (CycleStartModal), bukan saat registrasi/pengajuan.
 const DEFAULT_SCREENHOUSE = {
   name: "",
   address_detail: "",
   latitude: null,
   longitude: null,
   tray_count: 1,
-  varietas_id: "",
 };
 
 /** State + validasi form data screenhouse, dipakai bersama oleh alur registrasi dan pengajuan tambahan. */
@@ -57,8 +58,6 @@ export function useScreenhouseFormFields(initial) {
     if (!Number.isInteger(trayCount) || trayCount < 1 || trayCount > 20)
       return "Jumlah rak bibit harus antara 1 dan 20";
 
-    if (!screenhouse.varietas_id) return "Pilih varietas bibit terlebih dahulu";
-
     return null;
   };
 
@@ -73,7 +72,6 @@ export function useScreenhouseFormFields(initial) {
     latitude: screenhouse.latitude,
     longitude: screenhouse.longitude,
     tray_count: Number(screenhouse.tray_count),
-    varietas_id: Number(screenhouse.varietas_id),
   });
 
   return {

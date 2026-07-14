@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
-import { Phone, UserX, Menu, Leaf, MapPin, Map, Layers, ArrowRight, Sprout, Pencil } from "lucide-react";
+import { Phone, UserX, Menu, Leaf, MapPin, Map, Layers, ArrowRight, Pencil } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
+import OperatorBottomNav from "../layouts/OperatorBottomNav";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import MapPointPreview from "../components/MapPointPreview";
-import VarietasSelect from "../components/VarietasSelect";
-import useVarietasList from "../hooks/useVarietasList";
 import { ApprovalListSkeleton } from "../components/LoadingUI";
 import Pagination from "../components/Pagination";
 import { usePagination } from "../hooks/usePagination";
@@ -43,67 +42,29 @@ function TrayCountField({ value, onChange, disabled }) {
     );
 }
 
-function resolveVarietasNama(options, id, fallback = null) {
-    const found = options.find((v) => String(v.id) === String(id));
-    return found?.nama ?? fallback;
-}
-
 /**
- * Ringkasan "konfirmasi ajuan petani": default hanya menampilkan varietas +
- * jumlah rak yang diajukan petani sebagai teks, dengan tombol "Sesuaikan".
- * Field editable baru muncul saat operator memang perlu meng-override
- * (mis. varietas/tray berubah saat pemasangan). Otomatis terbuka bila petani
- * belum sempat mengisi varietas.
+ * Ringkasan "konfirmasi ajuan petani": default menampilkan jumlah rak yang
+ * diajukan sebagai teks, dengan tombol "Sesuaikan" bila kondisi pemasangan
+ * di lapangan berbeda. Varietas TIDAK diatur di sini — petani memilihnya
+ * sendiri saat mulai siklus semai.
  */
-function SetupConfirm({
-    varietasId,
-    varietasNamaProposed,
-    onVarietasChange,
-    trayCount,
-    onTrayCountChange,
-    options,
-    token,
-    busy,
-}) {
-    const hasVarietas = varietasId !== "" && varietasId != null;
-    const [editing, setEditing] = useState(!hasVarietas);
-    const namaTerpilih = resolveVarietasNama(options, varietasId, varietasNamaProposed);
+function SetupConfirm({ trayCount, onTrayCountChange, busy }) {
+    const [editing, setEditing] = useState(false);
 
     if (editing) {
         return (
             <div className="space-y-2.5 rounded-xl border border-bl-accent/30 bg-white/70 p-3">
                 <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-gray-700">Sesuaikan data pemasangan</span>
-                    {hasVarietas && (
-                        <button
-                            type="button"
-                            onClick={() => setEditing(false)}
-                            className="text-xs font-semibold text-bl-primary hover:underline"
-                        >
-                            Selesai
-                        </button>
-                    )}
+                    <button
+                        type="button"
+                        onClick={() => setEditing(false)}
+                        className="text-xs font-semibold text-bl-primary hover:underline"
+                    >
+                        Selesai
+                    </button>
                 </div>
                 <TrayCountField value={trayCount} onChange={onTrayCountChange} disabled={busy} />
-                <div className="space-y-1.5">
-                    <div className="text-xs font-semibold text-gray-700">
-                        Varietas bibit
-                        {varietasNamaProposed && (
-                            <span className="font-normal text-gray-600 ml-1">
-                                (diajukan: {varietasNamaProposed})
-                            </span>
-                        )}
-                    </div>
-                    <VarietasSelect
-                        compact
-                        token={token}
-                        options={options}
-                        value={varietasId}
-                        onChange={onVarietasChange}
-                        disabled={busy}
-                        required
-                    />
-                </div>
             </div>
         );
     }
@@ -112,11 +73,6 @@ function SetupConfirm({
         <div className="flex items-start justify-between gap-3 rounded-xl border border-bl-accent/20 bg-white/70 p-3">
             <div className="min-w-0 space-y-1.5 text-sm">
                 <div className="flex items-center gap-2 text-gray-700">
-                    <Sprout size={15} className="shrink-0 text-bl-primary" />
-                    <span className="font-semibold">Varietas:</span>
-                    <span className="truncate text-gray-800">{namaTerpilih || "belum dipilih"}</span>
-                </div>
-                <div className="flex items-center gap-2 text-gray-700">
                     <Layers size={15} className="shrink-0 text-gray-600" />
                     <span className="font-semibold">Jumlah rak:</span>
                     <span className="text-gray-800">{trayCount}</span>
@@ -124,6 +80,7 @@ function SetupConfirm({
                 </div>
                 <p className="text-[11px] leading-relaxed text-gray-500">
                     Sesuai ajuan petani. Ubah bila kondisi pemasangan di lapangan berbeda.
+                    Varietas bibit dipilih petani saat mulai siklus semai.
                 </p>
             </div>
             <button
@@ -219,7 +176,7 @@ function ApprovalConfirmDialog({ dialog, busy, onCancel, onConfirm }) {
     );
 }
 
-function ScreenhouseInfo({ farmer, trayCount, onTrayCountChange, varietasId, onVarietasChange, onViewMap, busy, token, varietasOptions }) {
+function ScreenhouseInfo({ farmer, trayCount, onTrayCountChange, onViewMap, busy }) {
     const wilayah = formatWilayah(farmer);
     const hasScreenhouse = Boolean(farmer.screenhouse_id || farmer.screenhouse_name);
 
@@ -243,13 +200,8 @@ function ScreenhouseInfo({ farmer, trayCount, onTrayCountChange, varietasId, onV
                         {wilayah || "-"}
                     </div>
                     <SetupConfirm
-                        varietasId={varietasId}
-                        varietasNamaProposed={farmer.varietas_nama}
-                        onVarietasChange={onVarietasChange}
                         trayCount={trayCount}
                         onTrayCountChange={onTrayCountChange}
-                        options={varietasOptions}
-                        token={token}
                         busy={busy}
                     />
                     <div className="flex items-center flex-wrap gap-2 text-sm text-gray-600">
@@ -288,7 +240,6 @@ function ApprovalPage() {
     const [shActionId, setShActionId] = useState(null);
     const [mapPreview, setMapPreview] = useState(null);
     const [trayCounts, setTrayCounts] = useState({});
-    const [varietasSelections, setVarietasSelections] = useState({});
     const [loading, setLoading] = useState(true);
     const [confirmDialog, setConfirmDialog] = useState(null);
     const user = JSON.parse(localStorage.getItem("user"));
@@ -296,9 +247,6 @@ function ApprovalPage() {
 
     const authHeaders = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
 
-    // Fetch daftar varietas sekali di parent, lalu oper ke setiap kartu —
-    // menghindari N request identik ke /varietas-bibit saat banyak kartu pending.
-    const { list: varietasOptions } = useVarietasList(token);
 
     const {
         page: shPage,
@@ -333,17 +281,13 @@ function ApprovalPage() {
             setPendingScreenhouses(Array.isArray(pendingShData) ? pendingShData : []);
 
             const nextTrayCounts = {};
-            const nextVarietas = {};
             (Array.isArray(pendingData) ? pendingData : []).forEach((f) => {
                 nextTrayCounts[`u-${f.id}`] = f.tray_count ?? 1;
-                nextVarietas[`u-${f.id}`] = f.varietas_id ?? "";
             });
             (Array.isArray(pendingShData) ? pendingShData : []).forEach((sh) => {
                 nextTrayCounts[`s-${sh.id}`] = sh.tray_count ?? 1;
-                nextVarietas[`s-${sh.id}`] = sh.varietas_id ?? "";
             });
             setTrayCounts(nextTrayCounts);
-            setVarietasSelections(nextVarietas);
 
             window.dispatchEvent(new Event("approval-changed"));
         } catch (err) {
@@ -363,11 +307,6 @@ function ApprovalPage() {
         return Number.isInteger(n) && n >= 1 && n <= 20 ? n : fallback;
     };
 
-    const getVarietasId = (key, fallback = "") => {
-        const val = varietasSelections[key] ?? fallback;
-        return val === "" || val == null ? null : Number(val);
-    };
-
     const approveUser = async (farmer) => {
         if (!farmer.screenhouse_id && !farmer.screenhouse_name) {
             toast.error("Tidak bisa disetujui: data screenhouse belum ada.");
@@ -375,19 +314,13 @@ function ApprovalPage() {
         }
 
         const trayCount = getTrayCount(`u-${farmer.id}`, farmer.tray_count ?? 1);
-        const varietasId = getVarietasId(`u-${farmer.id}`, farmer.varietas_id);
-
-        if (!varietasId) {
-            toast.error("Pilih varietas bibit sebelum menyetujui.");
-            return;
-        }
 
         setActionId(farmer.id);
         try {
             const response = await fetch(`${API_URL}/auth/${farmer.id}/approve`, {
                 method: "PATCH",
                 headers: { ...authHeaders, "Content-Type": "application/json" },
-                body: JSON.stringify({ tray_count: trayCount, varietas_id: varietasId }),
+                body: JSON.stringify({ tray_count: trayCount }),
             });
             const data = await response.json();
 
@@ -430,19 +363,13 @@ function ApprovalPage() {
 
     const approveScreenhouse = async (sh) => {
         const trayCount = getTrayCount(`s-${sh.id}`, sh.tray_count ?? 1);
-        const varietasId = getVarietasId(`s-${sh.id}`, sh.varietas_id);
-
-        if (!varietasId) {
-            toast.error("Pilih varietas bibit sebelum menyetujui.");
-            return;
-        }
 
         setShActionId(sh.id);
         try {
             const response = await fetch(`${API_URL}/screenhouses/${sh.id}/approve`, {
                 method: "PATCH",
                 headers: { ...authHeaders, "Content-Type": "application/json" },
-                body: JSON.stringify({ tray_count: trayCount, varietas_id: varietasId }),
+                body: JSON.stringify({ tray_count: trayCount }),
             });
             const data = await response.json();
 
@@ -626,20 +553,10 @@ function ApprovalPage() {
                                                         {wilayah || "-"}
                                                     </div>
                                                     <SetupConfirm
-                                                        varietasId={varietasSelections[`s-${sh.id}`] ?? sh.varietas_id ?? ""}
-                                                        varietasNamaProposed={sh.varietas_nama}
-                                                        onVarietasChange={(id) =>
-                                                            setVarietasSelections((prev) => ({
-                                                                ...prev,
-                                                                [`s-${sh.id}`]: id,
-                                                            }))
-                                                        }
                                                         trayCount={getTrayCount(`s-${sh.id}`, sh.tray_count ?? 1)}
                                                         onTrayCountChange={(n) =>
                                                             setTrayCounts((prev) => ({ ...prev, [`s-${sh.id}`]: n }))
                                                         }
-                                                        options={varietasOptions}
-                                                        token={token}
                                                         busy={busy}
                                                     />
                                                     <div className="flex items-center flex-wrap gap-2 text-sm text-gray-600">
@@ -714,15 +631,6 @@ function ApprovalPage() {
                                                     onTrayCountChange={(n) =>
                                                         setTrayCounts((prev) => ({ ...prev, [`u-${farmer.id}`]: n }))
                                                     }
-                                                    varietasId={varietasSelections[`u-${farmer.id}`] ?? farmer.varietas_id ?? ""}
-                                                    onVarietasChange={(id) =>
-                                                        setVarietasSelections((prev) => ({
-                                                            ...prev,
-                                                            [`u-${farmer.id}`]: id,
-                                                        }))
-                                                    }
-                                                    token={token}
-                                                    varietasOptions={varietasOptions}
                                                     busy={busy}
                                                     onViewMap={(f) =>
                                                         setMapPreview({
@@ -776,6 +684,8 @@ function ApprovalPage() {
                     )}
 
                 </div>
+
+                <OperatorBottomNav />
             </div>
 
             <ApprovalConfirmDialog

@@ -52,6 +52,12 @@ const SH_COUNT = Math.min(
 );
 const FARMER_COUNT = Number(process.env.STRESS_FARMER_COUNT || Math.min(25, SH_COUNT));
 
+// Mode representatif untuk load test dashboard: setiap petani mendapat 1
+// screenhouse + data (reading sensor + 1 siklus completed), supaya VU k6 tidak
+// memukul endpoint kosong. 60 titik peta dipakai ulang dengan jitter koordinat,
+// dan dedupe-per-koordinat dilewati (kalau tidak, screenhouse "kembar" dihapus).
+const PER_FARMER = /^(1|true|yes)$/i.test(process.env.STRESS_PER_FARMER || "");
+
 function formatShCode(screenhouseId) {
   return `SH${String(screenhouseId).padStart(2, "0")}`;
 }
@@ -78,6 +84,54 @@ async function deleteStressScreenhouse(monClient, appClient, screenhouseId) {
   await monClient.query(`DELETE FROM screenhouse_registry WHERE screenhouse_id = $1`, [screenhouseId]);
   await appClient.query(`DELETE FROM thresholds WHERE screenhouse_id = $1`, [screenhouseId]);
   await appClient.query(`DELETE FROM screenhouses WHERE id = $1`, [screenhouseId]);
+}
+
+// Geser koordinat ~100 m per "lapisan" wrap supaya tiap screenhouse unik saat
+// 60 titik peta dipakai ulang untuk ratusan petani (mode PER_FARMER).
+function jitterPoint(point, wrap) {
+  const d = 0.0009 * wrap;
+  return {
+    ...point,
+    lat: point.lat + d,
+    lng: point.lng + d * 0.6,
+    address: `${point.address} (blok ${wrap + 1})`,
+  };
+}
+
+// Satu siklus semai "completed" per screenhouse agar GET /my-cycles?status=completed
+// mengembalikan data (dengan payload analytics JSONB) — bukan array kosong.
+async function upsertCompletedCycle(appClient, screenhouseId, profileIndex) {
+  const exists = await appClient.query(
+    `SELECT 1 FROM semai_cycles WHERE screenhouse_id = $1 AND status = 'completed' LIMIT 1`,
+    [screenhouseId]
+  );
+  if (exists.rows[0]) return;
+
+  const profile = seedProfile(profileIndex);
+  const grade = ["A", "B", "C"][profileIndex % 3];
+  const durasi = profile.seedling_days || 21;
+  const analytics = {
+    durasi,
+    uptime: 98,
+    stability: [],
+    stress: [],
+    actuators: [],
+    grade,
+    computed_at: new Date().toISOString(),
+  };
+
+  await appClient.query(
+    `
+    INSERT INTO semai_cycles (
+      screenhouse_id, varietas_nama, tanggal_mulai, tanggal_selesai, estimasi_siap,
+      durasi_target_hari, status, grade, analytics
+    ) VALUES (
+      $1, $2, CURRENT_DATE - ($3 + 14)::int, CURRENT_DATE - 14, CURRENT_DATE - 14,
+      $3, 'completed', $4, $5::jsonb
+    )
+    `,
+    [screenhouseId, profile.seed_variety, durasi, grade, JSON.stringify(analytics)]
+  );
 }
 
 function nearestMapIndex(lat, lng) {
@@ -378,7 +432,10 @@ async function provisionMonitoring(monClient, screenhouseId, ownerId, screenhous
 
 async function main() {
   const dedupeOnly = process.argv.includes("--dedupe-only");
-  console.log(`═══ Seed stress test + demo UI (${SH_COUNT} titik unik, ${FARMER_COUNT} petani) ═══`);
+  const shPlan = PER_FARMER ? `${FARMER_COUNT} screenhouse (1/petani)` : `${SH_COUNT} titik unik`;
+  console.log(
+    `═══ Seed stress test + demo UI (${shPlan}, ${FARMER_COUNT} petani${PER_FARMER ? ", mode PER_FARMER" : ""}) ═══`
+  );
 
   const appClient = await appPool.connect();
   const monClient = await monPool.connect();
@@ -391,9 +448,13 @@ async function main() {
       await cleanupLegacyLoadTest(monClient);
     }
 
-    const removed = await dedupeStressDemoByCoordinates(appClient, monClient);
-    if (removed > 0) {
-      console.log(`Dedupe koordinat: ${removed} screenhouse lama dihapus (simpan yang terbaru)`);
+    // Mode PER_FARMER sengaja memakai koordinat kembar (jitter) — jangan dedupe,
+    // karena dedupe-per-koordinat akan menghapus screenhouse per petani ini.
+    if (!PER_FARMER) {
+      const removed = await dedupeStressDemoByCoordinates(appClient, monClient);
+      if (removed > 0) {
+        console.log(`Dedupe koordinat: ${removed} screenhouse lama dihapus (simpan yang terbaru)`);
+      }
     }
 
     if (dedupeOnly) {
@@ -413,14 +474,19 @@ async function main() {
       farmerIds.push(await upsertFarmer(appClient, f));
     }
 
+    // Mode default: 1 screenhouse per titik peta unik (demo UI).
+    // Mode PER_FARMER: 1 screenhouse per petani (data representatif load test).
+    const shTargets = PER_FARMER ? FARMER_COUNT : SH_COUNT;
     const created = [];
-    for (let i = 0; i < SH_COUNT; i += 1) {
-      const point = MAP_SCREENHOUSES[i];
-      const ownerId = farmerIds[i % farmerIds.length];
+    for (let i = 0; i < shTargets; i += 1) {
+      const basePoint = MAP_SCREENHOUSES[i % MAX_MAP_POINTS];
+      const wrap = Math.floor(i / MAX_MAP_POINTS);
+      const point = wrap === 0 ? basePoint : jitterPoint(basePoint, wrap);
+      const ownerId = PER_FARMER ? farmerIds[i] : farmerIds[i % farmerIds.length];
       const seq = String(i + 1).padStart(3, "0");
-      const name = `${SH_NAME_PREFIX} ${point.district} ${seq}`;
+      const name = `${SH_NAME_PREFIX} ${basePoint.district} ${seq}`;
 
-      const wilayah = await resolveWilayah(appClient, point.district, districts, i);
+      const wilayah = await resolveWilayah(appClient, basePoint.district, districts, i);
       if (!wilayah) continue;
 
       const villageId = await getVillageId(appClient, wilayah.district_id);
@@ -436,10 +502,15 @@ async function main() {
       });
       await upsertThreshold(appClient, screenhouseId);
       const nodes = await provisionMonitoring(monClient, screenhouseId, ownerId, name, i);
+      if (PER_FARMER) {
+        await upsertCompletedCycle(appClient, screenhouseId, i);
+      }
       created.push({ screenhouseId, name, ownerId, ...nodes });
     }
 
-    await dedupeStressDemoByCoordinates(appClient, monClient);
+    if (!PER_FARMER) {
+      await dedupeStressDemoByCoordinates(appClient, monClient);
+    }
 
     await appClient.query("COMMIT");
     await monClient.query("COMMIT");

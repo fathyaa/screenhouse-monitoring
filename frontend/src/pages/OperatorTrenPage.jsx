@@ -13,6 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import Sidebar from "../layouts/Sidebar";
+import OperatorBottomNav from "../layouts/OperatorBottomNav";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import OperatorTopbar from "../layouts/OperatorTopbar";
 import WilayahFilter from "../components/WilayahFilter";
@@ -468,6 +469,8 @@ function OperatorTrenPage() {
             </>
           )}
         </PullToRefresh>
+
+        <OperatorBottomNav />
       </div>
     </div>
   );

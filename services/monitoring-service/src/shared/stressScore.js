@@ -99,49 +99,71 @@ function computeStressScore(reading, threshold, { offline = false } = {}) {
 }
 
 function computeScreenhouseStressScore(nodeReadings, threshold, { offline = false } = {}) {
-  if (offline || !nodeReadings?.length) {
+  if (!nodeReadings?.length) {
     return {
       score: 0,
       ...getCategory(0),
       params: zeroParams(),
+      stale: offline,
+      last_reading_at: null,
       nodes: [],
     };
   }
 
+  // Skor per node dihitung dari pembacaan TERAKHIR yang tersimpan, walau node
+  // sudah offline — skor "0 Kritis" saat alat mati itu menyesatkan (kondisi
+  // tidak diketahui, bukan kritis). Konsumen wajib cek flag `stale` dan
+  // menampilkan skor sebagai snapshot, bukan pembacaan langsung.
   const nodes = nodeReadings.map((row) => ({
     node_id: row.node_id,
     node_code: row.node_code,
     node_name: row.node_name,
     offline: Boolean(row.offline),
-    ...computeStressScore(row.offline ? null : row, threshold, { offline: row.offline }),
+    last_reading_at: row.last_reading_at ?? null,
+    ...computeStressScore(row, threshold),
   }));
 
-  const activeNodes = nodes.filter((n) => !n.offline);
-  if (!activeNodes.length) {
+  // Online: rata-rata node yang masih live (perilaku lama).
+  // Offline: snapshot — rata-rata semua node yang pernah punya pembacaan.
+  const scoredNodes = offline
+    ? nodes.filter((n) => n.last_reading_at != null)
+    : nodes.filter((n) => !n.offline && n.last_reading_at != null);
+
+  if (!scoredNodes.length) {
     return {
       score: 0,
       ...getCategory(0),
       params: zeroParams(),
+      stale: offline,
+      last_reading_at: null,
       nodes,
     };
   }
 
   const score = Math.round(
-    activeNodes.reduce((sum, n) => sum + n.score, 0) / activeNodes.length
+    scoredNodes.reduce((sum, n) => sum + n.score, 0) / scoredNodes.length
   );
 
   const params = {};
   for (const m of STRESS_SCORE_METRICS) {
-    const vals = activeNodes.map((n) => n.params[m.key]).filter((v) => v != null);
+    const vals = scoredNodes.map((n) => n.params[m.key]).filter((v) => v != null);
     params[m.key] = vals.length
       ? Math.round(vals.reduce((sum, n) => sum + n, 0) / vals.length)
       : 0;
   }
 
+  const lastReadingAt = scoredNodes.reduce((latest, n) => {
+    if (!n.last_reading_at) return latest;
+    const t = new Date(n.last_reading_at).getTime();
+    return latest == null || t > new Date(latest).getTime() ? n.last_reading_at : latest;
+  }, null);
+
   return {
     score,
     ...getCategory(score),
     params,
+    stale: offline,
+    last_reading_at: lastReadingAt,
     nodes,
   };
 }

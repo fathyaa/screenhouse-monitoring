@@ -642,6 +642,7 @@ async function getScreenhouseStressScore(req, res) {
       soil_moisture: row.soil_moisture,
       soil_temperature: row.soil_temperature,
       soil_ph: row.soil_ph,
+      last_reading_at: row.last_reading_at,
       offline: nodeIsOffline(row, now),
     }));
 

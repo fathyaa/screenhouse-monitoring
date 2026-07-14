@@ -1,12 +1,11 @@
 import { Leaf, MapPin, Layers } from "lucide-react";
 import LocationPickerMap from "./LocationPickerMap";
-import VarietasSelect from "./VarietasSelect";
 
 /**
- * Field-field form data screenhouse (nama, alamat, rak, varietas, peta, wilayah).
+ * Field-field form data screenhouse (nama, alamat, rak, peta, wilayah).
  * Dipakai oleh RegisterScreenhousePage (alur registrasi) dan PetaniAjukanScreenhousePage
  * (pengajuan screenhouse tambahan) — keduanya punya chrome & submit yang berbeda,
- * tapi isi form-nya identik.
+ * tapi isi form-nya identik. Varietas dipilih saat mulai siklus semai, bukan di sini.
  */
 export default function ScreenhouseFormFields({
   screenhouse,
@@ -16,7 +15,6 @@ export default function ScreenhouseFormFields({
   resolving,
   handleMapPick,
   compact = false,
-  token = null,
 }) {
   const labelCls = compact
     ? "block text-xs font-semibold text-gray-700 mb-1.5"
@@ -76,18 +74,6 @@ export default function ScreenhouseFormFields({
         <p className={hintCls}>
           Satu rak bibit memakai satu alat pengukur. Operator dapat menyesuaikan saat verifikasi.
         </p>
-      </div>
-
-      <div>
-        <label className={labelCls}>Varietas bibit</label>
-        <VarietasSelect
-          compact={compact}
-          token={token}
-          value={screenhouse.varietas_id}
-          onChange={(id) => setScreenhouse({ ...screenhouse, varietas_id: id })}
-          required
-        />
-        <p className={hintCls}>Kami atur batas aman sensor otomatis sesuai jenis bibit yang Anda pilih.</p>
       </div>
 
       <div>

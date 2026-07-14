@@ -1,4 +1,5 @@
 import { getStressScoreStyle } from "../constants/stressScore";
+import { timeAgo } from "../constants/screenhouseStatus";
 
 // Penjelasan permanen — jangan taruh hanya di title="" (tooltip tidak muncul di layar sentuh/HP).
 const SCORE_EXPLANATION = "Menilai kondisi tanah & udara dari sensor, 0–100. Makin tinggi makin baik.";
@@ -68,8 +69,37 @@ export function StressScoreDonutWithValue({
 }
 
 /** Skor besar untuk kartu dashboard petani. */
-export function StressScoreCardBadge({ scoreData, compact = false, offline = false }) {
-  if (offline) {
+export function StressScoreCardBadge({ scoreData, compact = false, offline = false, noCycle = false }) {
+  if (noCycle) {
+    return (
+      <div className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600 font-medium">
+        <span className="text-lg font-bold text-slate-400 tabular-nums">—</span>
+        <span>Belum mulai siklus</span>
+      </div>
+    );
+  }
+  if (offline || scoreData?.stale) {
+    // Alat mati tapi ada snapshot terakhir → tampilkan skor lama apa adanya,
+    // abu-abu + label waktu, bukan "0 Kritis" (kondisi tidak diketahui ≠ kritis).
+    if (scoreData?.last_reading_at != null) {
+      const staleScore = scoreData.score ?? 0;
+      return (
+        <div className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200">
+          <StressScoreDonut score={staleScore} color="#94a3b8" size={40} strokeWidth={4} />
+          <div className="text-left leading-tight min-w-0">
+            <div className="text-[9px] uppercase tracking-wide text-slate-500 font-semibold">
+              Skor bibit
+            </div>
+            <div className="text-lg font-bold tabular-nums leading-none text-slate-600">
+              {staleScore}
+            </div>
+            <div className="text-[10px] font-medium text-slate-500">
+              Data terakhir, {timeAgo(scoreData.last_reading_at)}
+            </div>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600 font-medium">
         <span className="text-lg font-bold text-slate-400 tabular-nums">—</span>
@@ -130,11 +160,51 @@ export function StressScoreCardBadge({ scoreData, compact = false, offline = fal
 }
 
 /** Kartu skor untuk panel estimasi di halaman detail. */
-export function StressScoreDetailCard({ scoreData, offline = false, compact = false }) {
+export function StressScoreDetailCard({ scoreData, offline = false, compact = false, noCycle = false }) {
   const donutSize = compact ? 48 : 64;
   const strokeWidth = compact ? 4 : 5;
 
-  if (offline) {
+  if (noCycle) {
+    return (
+      <div className="flex flex-col items-center justify-center text-center py-0.5">
+        <StressScoreDonutWithValue
+          score={0}
+          display="—"
+          color="#cbd5e1"
+          size={donutSize}
+          strokeWidth={strokeWidth}
+          textClassName="text-slate-400"
+        />
+        <p className={`font-medium text-slate-600 mt-1 leading-snug ${compact ? "text-[10px]" : "text-xs"}`}>
+          Belum mulai siklus
+        </p>
+      </div>
+    );
+  }
+
+  if (offline || scoreData?.stale) {
+    // Snapshot terakhir sebelum alat mati — abu-abu + label waktu, jangan "0 Kritis".
+    if (scoreData?.last_reading_at != null) {
+      return (
+        <div className="flex flex-col items-center justify-center text-center py-0.5">
+          <StressScoreDonutWithValue
+            score={scoreData.score ?? 0}
+            color="#94a3b8"
+            size={donutSize}
+            strokeWidth={strokeWidth}
+            textClassName="text-slate-600"
+          />
+          <p className={`font-medium text-slate-600 mt-1 leading-snug ${compact ? "text-[10px]" : "text-xs"}`}>
+            Dari data terakhir, {timeAgo(scoreData.last_reading_at)}
+          </p>
+          {!compact && (
+            <p className="text-[11px] text-gray-600 leading-relaxed mt-1 max-w-[200px]">
+              Alat sedang tidak terhubung — skor ini kondisi terakhir yang tersimpan, bukan pembacaan langsung.
+            </p>
+          )}
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col items-center justify-center text-center py-0.5">
         <StressScoreDonutWithValue

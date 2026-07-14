@@ -55,10 +55,9 @@ async function register(req, res) {
       return res.status(400).json({ message: "Jumlah tray harus bilangan bulat antara 1 dan 20" });
     }
 
-    if (!screenhouse.varietas_id) {
-      return res.status(400).json({ message: "Varietas bibit wajib dipilih" });
-    }
-
+    // Varietas TIDAK diminta saat registrasi — dipilih petani saat mulai
+    // siklus semai (CycleStartModal → /cycles/start). Tetap diterima bila
+    // dikirim (kompatibilitas payload lama).
     const phoneCheck = validateIndonesianPhone(phone_number);
     if (!phoneCheck.ok) {
       return res.status(400).json({ message: phoneCheck.message });
@@ -142,8 +141,8 @@ async function register(req, res) {
           Number(screenhouse.latitude),
           Number(screenhouse.longitude),
           trayCount,
-          varietas.id,
-          varietas.nama,
+          varietas?.id ?? null,
+          varietas?.nama ?? null,
         ]
       );
 
@@ -195,8 +194,8 @@ async function register(req, res) {
           Number(screenhouse.latitude),
           Number(screenhouse.longitude),
           trayCount,
-          varietas.id,
-          varietas.nama,
+          varietas?.id ?? null,
+          varietas?.nama ?? null,
         ]
       );
 

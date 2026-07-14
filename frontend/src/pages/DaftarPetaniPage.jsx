@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Menu, Search, Users } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
+import OperatorBottomNav from "../layouts/OperatorBottomNav";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import { KpiGridSkeleton, TableRowsSkeleton, ListPanelSkeleton } from "../components/LoadingUI";
 import Pagination from "../components/Pagination";
@@ -267,6 +268,8 @@ function DaftarPetaniPage() {
                         </>
                     )}
                 </div>
+
+                <OperatorBottomNav />
             </div>
         </div>
     );

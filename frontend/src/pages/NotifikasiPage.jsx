@@ -375,17 +375,22 @@ function AlertRow({ alert, blinkId, resolvingAlertId, onOpenResolve, navigate })
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                     <span className={getCategoryBadgeClasses(category)}>{categoryLabel}</span>
-                    <span
-                        className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                            alert.status === "active" ? "bg-red-50 text-red-700" : "bg-gray-100 text-gray-600"
-                        }`}
-                    >
-                        {alert.status === "active" ? "Aktif" : "Selesai"}
-                    </span>
+                    {/* Alert yang ditangani otomatis jangan tampilkan badge merah "Aktif" —
+                        menyesatkan (seolah petani harus bertindak) padahal sistem sudah
+                        menangani. Cukup badge hijau "Ditangani otomatis". */}
+                    {!(autoHandled && alert.status === "active") && (
+                        <span
+                            className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                alert.status === "active" ? "bg-red-50 text-red-700" : "bg-gray-100 text-gray-600"
+                            }`}
+                        >
+                            {alert.status === "active" ? "Aktif" : "Selesai"}
+                        </span>
+                    )}
                     {autoHandled && alert.status === "active" && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-bl-surface-muted text-bl-primary">
                             <Bot size={12} aria-hidden />
-                            Ditangani otomatis
+                            Sedang ditangani otomatis
                         </span>
                     )}
                 </div>

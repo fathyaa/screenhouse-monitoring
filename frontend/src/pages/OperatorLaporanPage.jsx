@@ -25,6 +25,7 @@ import {
   YAxis,
 } from "recharts";
 import Sidebar from "../layouts/Sidebar";
+import OperatorBottomNav from "../layouts/OperatorBottomNav";
 import OperatorTopbar from "../layouts/OperatorTopbar";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import { API_URL } from "../config/api";
@@ -1396,6 +1397,8 @@ function OperatorLaporanPage() {
             </div>
           )}
         </div>
+
+        <OperatorBottomNav />
       </div>
     </div>
   );

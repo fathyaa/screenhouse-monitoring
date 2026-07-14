@@ -8,6 +8,7 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { RefreshCw, Phone, MessageCircle, AlertTriangle, User, MapPin, Lightbulb, CheckCircle2, ChevronDown, ArrowUp, ArrowDown, X, Search } from "lucide-react";
 import Sidebar from "../layouts/Sidebar";
 import OperatorTopbar from "../layouts/OperatorTopbar";
+import OperatorBottomNav from "../layouts/OperatorBottomNav";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import { useScreenhouseStats } from "../context/ScreenhouseStatsContext";
 import { API_URL } from "../config/api";
@@ -73,6 +74,58 @@ function statusIcon(status) {
   return icon;
 }
 
+// Urutan segmen donut cluster (paling mendesak dulu) + warna status.
+const CLUSTER_STATUS_SEQUENCE = ["critical", "warning", "offline", "healthy"];
+const CLUSTER_STATUS_COLOR = {
+  critical: "#dc2626",
+  warning: "#f59e0b",
+  offline: "#94a3b8",
+  healthy: "#40916c",
+};
+
+/**
+ * Ikon cluster proporsional: warnanya donut yang tiap segmennya sebanding jumlah
+ * screenhouse per status di dalamnya. Jadi saat zoom out tetap kelihatan mana
+ * area abu/kuning/merah/hijau — dan cluster campuran (mis. 1 aktif + 1 nonaktif)
+ * tampil setengah hijau setengah abu, bukan satu warna yang menyesatkan.
+ */
+function createClusterIcon(cluster) {
+  const children = cluster.getAllChildMarkers();
+  const total = children.length;
+  const counts = { critical: 0, warning: 0, offline: 0, healthy: 0 };
+  children.forEach((m) => {
+    const s = m.options?.shStatus;
+    if (counts[s] != null) counts[s] += 1;
+    else counts.offline += 1;
+  });
+
+  let acc = 0;
+  const stops = [];
+  CLUSTER_STATUS_SEQUENCE.forEach((s) => {
+    const c = counts[s];
+    if (!c) return;
+    const start = (acc / total) * 360;
+    acc += c;
+    const end = (acc / total) * 360;
+    stops.push(`${CLUSTER_STATUS_COLOR[s]} ${start}deg ${end}deg`);
+  });
+  const background = `conic-gradient(${stops.join(", ")})`;
+
+  const size = total >= 50 ? 48 : total >= 10 ? 42 : 36;
+  const inner = size - 12;
+  const html = `
+    <div style="width:${size}px;height:${size}px;border-radius:50%;background:${background};display:flex;align-items:center;justify-content:center;box-shadow:0 1px 5px rgba(0,0,0,0.35);">
+      <div style="width:${inner}px;height:${inner}px;border-radius:50%;background:rgba(255,255,255,0.92);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#374151;">${total}</div>
+    </div>`;
+
+  return L.divIcon({
+    html,
+    className: "sh-cluster-marker",
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  });
+}
+
 const PRIORITY_RANK = { critical: 4, warning: 3, offline: 2, healthy: 1 };
 const PRIORITY_VISIBLE_LIMIT = 12;
 
@@ -133,6 +186,9 @@ function OperatorDashboard() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [wilayah, setWilayah] = useState(EMPTY_WILAYAH);
   const [mobileView, setMobileView] = useState("map");
+  // HP: filter wilayah + pencarian dilipat default supaya peta dapat porsi layar
+  // lebih besar (dulu ~setengah layar habis untuk chrome di atas peta).
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [mapSummary, setMapSummary] = useState({});
   const [summaryRefreshing, setSummaryRefreshing] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
@@ -187,6 +243,14 @@ function OperatorDashboard() {
   useEffect(() => {
     loadScreenhouses();
   }, [loadScreenhouses]);
+
+  // Recolor ikon cluster saat status screenhouse berubah (realtime), tanpa perlu zoom.
+  useEffect(() => {
+    const group = clusterRef.current;
+    if (group && typeof group.refreshClusters === "function") {
+      group.refreshClusters();
+    }
+  }, [mapSummary]);
 
   useEffect(() => {
     let active = true;
@@ -400,9 +464,37 @@ function OperatorDashboard() {
           </button>
         </div>
 
-        {/* Filter wilayah (kab/kota → kecamatan → desa) + pencarian, satu baris. */}
+        {/* Filter wilayah (kab/kota → kecamatan → desa) + pencarian.
+            Desktop: satu baris selalu tampil. HP: dilipat di balik tombol
+            "Cari & filter" supaya peta tidak tenggelam oleh chrome. */}
         <div className="shrink-0 border-b border-gray-200 bg-white px-4 py-2.5 relative z-[500]">
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <button
+            type="button"
+            onClick={() => setShowMobileFilters((v) => !v)}
+            className="sm:hidden w-full flex items-center justify-between gap-2 text-sm font-medium text-gray-700"
+            aria-expanded={showMobileFilters}
+          >
+            <span className="flex items-center gap-2">
+              <Search size={14} className="text-gray-500" />
+              Cari & filter wilayah
+            </span>
+            <span className="flex items-center gap-1.5">
+              {(wilayahActive || search.trim()) && (
+                <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-semibold">
+                  aktif
+                </span>
+              )}
+              <ChevronDown
+                size={16}
+                className={`text-gray-500 transition-transform ${showMobileFilters ? "rotate-180" : ""}`}
+              />
+            </span>
+          </button>
+          <div
+            className={`${
+              showMobileFilters ? "flex mt-2.5" : "hidden"
+            } sm:flex sm:mt-0 flex-wrap items-center gap-2 sm:gap-3`}
+          >
             <div className="text-[10px] uppercase tracking-wider text-gray-600 font-semibold shrink-0 hidden sm:block">
               Wilayah
             </div>
@@ -465,6 +557,7 @@ function OperatorDashboard() {
                             focusScreenhouse(sh);
                             setSearch("");
                             setMobileView("map");
+                            setShowMobileFilters(false);
                           }}
                           className="w-full text-left px-3 py-2.5 flex items-start gap-2.5 hover:bg-gray-50 border-b border-gray-50 last:border-b-0"
                         >
@@ -518,7 +611,7 @@ function OperatorDashboard() {
           <div className="flex bg-gray-100 rounded-xl p-1">
             {[
               { key: "map", label: "Peta" },
-              { key: "list", label: "Prioritas" },
+              { key: "list", label: "Status" },
             ].map((tab) => (
               <button
                 key={tab.key}
@@ -562,6 +655,7 @@ function OperatorDashboard() {
                 maxClusterRadius={55}
                 showCoverageOnHover={false}
                 spiderfyOnMaxZoom
+                iconCreateFunction={createClusterIcon}
               >
               {filteredScreenhouses.map((sh) => {
                 const summary = mapSummary[sh.id];
@@ -576,6 +670,8 @@ function OperatorDashboard() {
                     icon={statusIcon(status)}
                     ref={(ref) => {
                       markerRefs.current[sh.id] = ref;
+                      // Simpan status di marker agar ikon cluster bisa dihitung per status.
+                      if (ref) ref.options.shStatus = status;
                     }}
                   >
                     <Popup>
@@ -758,9 +854,6 @@ function OperatorDashboard() {
                     <AlertTriangle size={14} className="shrink-0" />
                     Perlu tindak lanjut ({priorityList.all.length})
                   </div>
-                  <p className="text-xs text-amber-800/80 mt-1 leading-snug">
-                  Hubungi petani melalui telepon atau WhatsApp untuk memberikan pengingat, melakukan evaluasi, atau menanyakan kendala yang dihadapi.
-                  </p>
                 </div>
                 <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
                   <div className="space-y-2">
@@ -822,6 +915,8 @@ function OperatorDashboard() {
             )}
           </div>
         </div>
+
+        <OperatorBottomNav />
       </div>
     </div>
   );

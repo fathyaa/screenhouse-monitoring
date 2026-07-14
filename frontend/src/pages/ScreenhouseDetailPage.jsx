@@ -42,7 +42,7 @@ import {
 } from "../components/siklus/SemaiCycleModals";
 import { useSemaiCycle } from "../components/siklus/useSemaiCycle";
 import { useAlerts } from "../context/AlertContext";
-import { buildAutoActuatorLocks } from "../constants/actuatorRules";
+import { buildAutoActuatorLocks, isAutoHandledAlert } from "../constants/actuatorRules";
 import {
   evaluateParam,
   buildHealthList,
@@ -609,12 +609,21 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
   const flaggedRollup = rollupHealth.filter(
     (h) => h.status === "low" || h.status === "high"
   );
+  // Alert yang sudah ditangani otomatis TIDAK dihitung sebagai "perlu perhatian"
+  // (prinsip UX #6) — ditampilkan terpisah lewat ActuatorControls. Sisanya
+  // (mis. tray offline) tidak tercermin di flaggedRollup yang cuma parameter tanah,
+  // jadi status + jumlah pada banner harus memakai gabungan keduanya biar konsisten
+  // (dulu: tone "warning" tapi teks "0 hal perlu perhatian").
+  const attentionAlerts = screenhouseAutoAlerts.filter(
+    (a) => !isAutoHandledAlert(a)
+  );
+  const attentionCount = Math.max(flaggedRollup.length, attentionAlerts.length);
   const rollupStatus =
     rollupHealth.length === 0 && screenhouseAutoAlerts.length === 0
       ? "none"
       : deriveScreenhouseStatus({
           abnormalCount: flaggedRollup.length,
-          activeAlertCount: screenhouseAutoAlerts.length,
+          activeAlertCount: attentionAlerts.length,
         });
 
   const monitorStatus = screenhouseOffline ? "offline" : rollupStatus;
@@ -881,7 +890,7 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
                 >
                   {rollupStatus === "healthy"
                     ? "Screenhouse Anda sehat"
-                    : `${flaggedRollup.length} hal perlu perhatian`}
+                    : `${attentionCount} hal perlu perhatian`}
                 </div>
                 <div
                   className={`text-base mt-1 leading-relaxed ${
@@ -978,6 +987,7 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
                 lamp_status={dashboard.sinkNode.lamp_status}
                 autoAlerts={screenhouseAutoAlerts}
                 disabled={!dashboard.sinkNode.is_active}
+                offline={screenhouseOffline}
                 readOnly={!isPetani}
                 onUpdated={patchSinkActuators}
               />
