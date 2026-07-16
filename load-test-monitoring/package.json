@@ -1,0 +1,21 @@
+{
+  "name": "screenhouse-load-test",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MQTT IoT sensor load testing framework for Screenhouse Monitoring",
+  "type": "module",
+  "scripts": {
+    "prepare:env": "bash scripts/prepare.sh",
+    "seed:nodes": "node scripts/seed-loadtest-nodes.js",
+    "run": "node runner/run-scenario.js",
+    "run:all": "node runner/run-all.js",
+    "report": "node reporter/generate-report.js",
+    "report:direct": "node reporter/generate-report.js --mode=direct",
+    "simulator": "node simulator/mqtt-simulator.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "mqtt": "^5.10.4",
+    "pg": "^8.13.3"
+  }
+}

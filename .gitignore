@@ -15,6 +15,7 @@ npm-debug.log*
 # build
 dist/
 build/
+dev-dist/
 
 # vite
 .vite/
@@ -35,4 +36,9 @@ temp/
 
 # dokumentasi lokal (tidak di-push ke GitHub)
 docs/
-scripts/
+
+# skrip lokal di root (CV, dsb) — hanya /scripts di root, bukan database/scripts
+/scripts/
+
+# setelan lokal Claude Code (jangan di-push)
+**/.claude/settings.local.json

@@ -1,0 +1,55 @@
+{
+  "defaults": {
+    "topicPattern": "screenhouse/{screenhouseId}/sink/{sinkCode}/sensor",
+    "cooldownSec": 60,
+    "cooldownPollSec": 5,
+    "preDrainMaxSec": 60,
+    "directPreflightMaxSec": 180,
+    "directPreflightIdleSec": 15,
+    "directPreflightPollSec": 5,
+    "purgeQueueIfBacklog": true,
+    "mqttPoolSize": 32
+  },
+  "scenarios": [
+    {
+      "id": "S1",
+      "name": "80 Active Sensors",
+      "description": "80 active sensors, 1 message/second, 5 minutes",
+      "sensors": 80,
+      "intervalSec": 1,
+      "durationSec": 300
+    },
+    {
+      "id": "S2",
+      "name": "200 Active Sensors",
+      "description": "200 active sensors, 1 message/second, 5 minutes",
+      "sensors": 200,
+      "intervalSec": 1,
+      "durationSec": 300
+    },
+    {
+      "id": "S3",
+      "name": "400 Active Sensors",
+      "description": "400 active sensors, 1 message/second, 5 minutes",
+      "sensors": 400,
+      "intervalSec": 1,
+      "durationSec": 300
+    },
+    {
+      "id": "S4",
+      "name": "800 Active Sensors",
+      "description": "800 active sensors, 1 message/second, 5 minutes",
+      "sensors": 800,
+      "intervalSec": 1,
+      "durationSec": 300
+    },
+    {
+      "id": "S5",
+      "name": "1600 Active Sensors",
+      "description": "1600 active sensors, 1 message/second, 5 minutes",
+      "sensors": 1600,
+      "intervalSec": 1,
+      "durationSec": 300
+    }
+  ]
+}

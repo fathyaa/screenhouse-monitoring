@@ -1,0 +1,4 @@
+{
+  "comment": "Optional: pin one result JSON file per scenario. Leave empty to use the latest run for each S1-S5 scenario.",
+  "pinnedRuns": {}
+}

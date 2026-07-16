@@ -1,0 +1,378 @@
+<title>Laporan Pengujian Beban — REST API & WebSocket</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --plane:          #f9f9f7;
+    --surface-1:      #fcfcfb;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --muted:          #898781;
+    --grid:           #e1e0d9;
+    --axis:           #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-1:       #2a78d6;   /* throughput */
+    --pct-1:          #86b6ef;   /* p50 (ordinal blue, terang) */
+    --pct-2:          #2a78d6;   /* p95 */
+    --pct-3:          #184f95;   /* p99 (gelap) */
+    --err:            #d03b3b;   /* error rate (status critical) */
+    --good:           #0ca30c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --plane:          #0d0d0d;
+      --surface-1:      #1a1a19;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --muted:          #898781;
+      --grid:           #2c2c2a;
+      --axis:           #383835;
+      --border:         rgba(255,255,255,0.10);
+      --series-1:       #3987e5;
+      --pct-1:          #9ec5f4;
+      --pct-2:          #5598e7;
+      --pct-3:          #256abf;
+      --err:            #e34948;
+      --good:           #0ca30c;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    color-scheme: dark;
+    --plane:          #0d0d0d;
+    --surface-1:      #1a1a19;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --muted:          #898781;
+    --grid:           #2c2c2a;
+    --axis:           #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-1:       #3987e5;
+    --pct-1:          #9ec5f4;
+    --pct-2:          #5598e7;
+    --pct-3:          #256abf;
+    --err:            #e34948;
+    --good:           #0ca30c;
+  }
+
+  .viz-root {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--plane);
+    color: var(--text-primary);
+    margin: 0;
+    padding: 24px 20px 64px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 40px 0 4px; }
+  .sub { color: var(--text-secondary); font-size: 13px; margin: 0 0 8px; }
+  .demo-banner {
+    background: #fff6d9; color: #7a5a00; border: 1px solid #e8c65a;
+    padding: 8px 12px; border-radius: 8px; font-size: 13px; margin: 12px 0 4px;
+  }
+  :root[data-theme="dark"] .viz-root .demo-banner,
+  .viz-root .demo-banner { }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root .demo-banner {
+      background: #2a2410; color: #e8c65a; border-color: #5a4a1a;
+    }
+  }
+  :root[data-theme="dark"] .viz-root .demo-banner {
+    background: #2a2410; color: #e8c65a; border-color: #5a4a1a;
+  }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px; margin: 16px 0 8px; }
+  .kpi { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .kpi .label { font-size: 12px; color: var(--text-secondary); }
+  .kpi .value { font-size: 26px; font-weight: 600; margin-top: 2px; letter-spacing: -0.02em; }
+  .kpi .unit { font-size: 13px; color: var(--muted); font-weight: 400; }
+
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 16px 16px 8px; margin: 14px 0; }
+  .card h3 { font-size: 15px; margin: 0 0 2px; }
+  .card .hint { font-size: 12.5px; color: var(--text-secondary); margin: 0 0 6px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-secondary); margin: 2px 0 6px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+  .chart-scroll { overflow-x: auto; }
+  svg.chart { display: block; width: 100%; height: auto; min-width: 320px; touch-action: pan-y; }
+  svg.chart text { font-family: inherit; }
+  .axis-label { fill: var(--muted); font-size: 11px; }
+  .tick { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .dlabel { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .tooltip {
+    position: fixed; pointer-events: none; z-index: 20; opacity: 0;
+    background: var(--surface-1); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+    font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.18); transition: opacity .08s;
+    min-width: 120px;
+  }
+  .tooltip .tt-x { color: var(--text-secondary); font-size: 11px; margin-bottom: 4px; }
+  .tooltip .tt-row { display: flex; align-items: center; gap: 6px; justify-content: space-between; }
+  .tooltip .tt-row b { font-variant-numeric: tabular-nums; }
+  .tooltip .tt-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+  details { margin: 8px 0 0; }
+  summary { cursor: pointer; font-size: 13px; color: var(--text-secondary); }
+  table.data { border-collapse: collapse; width: 100%; font-size: 12.5px; margin-top: 8px; }
+  table.data th, table.data td { border: 1px solid var(--grid); padding: 5px 8px; text-align: right; font-variant-numeric: tabular-nums; }
+  table.data th:first-child, table.data td:first-child { text-align: left; }
+  table.data th { background: var(--plane); font-weight: 600; }
+  .foot { color: var(--muted); font-size: 12px; margin-top: 32px; }
+</style>
+
+<div class="viz-root">
+<div class="wrap">
+  <h1>Laporan Pengujian Beban — REST API &amp; WebSocket</h1>
+  <p class="sub" id="meta"></p>
+  <div id="demo-banner"></div>
+
+  <p class="sub" style="margin-top:14px">
+    Beban dinaikkan <b>bertahap</b> dari kecil ke besar. Tiap titik = satu run k6
+    steady-state di level itu. Yang dibaca: <b>throughput</b> (berapa banyak
+    ditangani per detik) dan <b>latency</b> (berapa lama tiap request ditangani,
+    persentil p50/p95/p99). Titik di mana throughput berhenti naik tapi latency
+    melonjak = <b>kapasitas maksimum</b> sistem.
+  </p>
+
+  <div id="kpis" class="kpis"></div>
+
+  <h2>REST API</h2>
+  <p class="sub">Variabel beban: jumlah pengguna aktif serentak (VU). Journey petani buka dashboard.</p>
+  <div id="rest-charts"></div>
+
+  <h2>WebSocket (realtime Socket.IO)</h2>
+  <p class="sub">Variabel beban: jumlah koneksi realtime konkuren. Tiap koneksi ditahan &amp; menerima broadcast sensor.</p>
+  <div id="ws-charts"></div>
+
+  <p class="foot" id="foot"></p>
+</div>
+</div>
+
+<div class="tooltip" id="tt"></div>
+
+<script>
+const DATA = /*__DATA__*/null;
+
+// ─── util ──────────────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const fmtMs  = (v) => v == null ? "–" : (v >= 1000 ? (v/1000).toFixed(2)+" s" : Math.round(v)+" ms");
+const fmtNum = (v) => v == null ? "–" : (v >= 100 ? Math.round(v).toLocaleString("id") : v.toFixed(1));
+const fmtPct = (v) => v == null ? "–" : v.toFixed(2)+"%";
+const cssVar = (n) => getComputedStyle(document.querySelector(".viz-root")).getPropertyValue(n).trim();
+
+// ─── line chart (SVG, 1–3 seri, hover, direct label) ────────────────────────
+// cfg: { xs:[..], xLabel, yLabel, valueFmt, series:[{name,colorVar,data:[..]}] }
+function lineChart(cfg) {
+  const W = 720, H = 300;
+  const m = { top: 18, right: 64, bottom: 42, left: 58 };
+  const iw = W - m.left - m.right, ih = H - m.top - m.bottom;
+  const xs = cfg.xs;
+  const allY = cfg.series.flatMap((s) => s.data).filter((v) => v != null);
+  const yMax = Math.max(1, ...allY);
+  const yTop = niceCeil(yMax);
+  const xAt = (i) => m.left + (xs.length === 1 ? iw/2 : (i/(xs.length-1))*iw);
+  const yAt = (v) => m.top + ih - (v/yTop)*ih;
+
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("class", "chart");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("role", "img");
+  const el = (tag, attrs, parent) => {
+    const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    (parent || svg).appendChild(n);
+    return n;
+  };
+
+  // gridlines + y ticks
+  const ticks = 4;
+  for (let t = 0; t <= ticks; t++) {
+    const val = (yTop/ticks)*t, y = yAt(val);
+    el("line", { x1: m.left, y1: y, x2: m.left+iw, y2: y, stroke: "var(--grid)", "stroke-width": 1 });
+    const tx = el("text", { x: m.left-8, y: y+4, "text-anchor": "end", class: "tick" });
+    tx.textContent = cfg.tickFmt ? cfg.tickFmt(val) : fmtNum(val);
+  }
+  // baseline / x axis
+  el("line", { x1: m.left, y1: m.top+ih, x2: m.left+iw, y2: m.top+ih, stroke: "var(--axis)", "stroke-width": 1 });
+  // x ticks
+  xs.forEach((xv, i) => {
+    const tx = el("text", { x: xAt(i), y: m.top+ih+18, "text-anchor": "middle", class: "tick" });
+    tx.textContent = xv;
+  });
+  // axis labels
+  const xl = el("text", { x: m.left+iw/2, y: H-4, "text-anchor": "middle", class: "axis-label" });
+  xl.textContent = cfg.xLabel;
+  const yl = el("text", { x: 14, y: m.top+ih/2, "text-anchor": "middle", class: "axis-label", transform: `rotate(-90 14 ${m.top+ih/2})` });
+  yl.textContent = cfg.yLabel;
+
+  // series
+  cfg.series.forEach((s) => {
+    const col = cssVar(s.colorVar) || s.colorVar;
+    const pts = s.data.map((v, i) => v == null ? null : [xAt(i), yAt(v)]);
+    const d = pts.filter(Boolean).map((p, i) => (i ? "L" : "M") + p[0] + " " + p[1]).join(" ");
+    el("path", { d, fill: "none", stroke: col, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" });
+    pts.forEach((p) => { if (p) {
+      el("circle", { cx: p[0], cy: p[1], r: 4.5, fill: col, stroke: "var(--surface-1)", "stroke-width": 2 });
+    }});
+    // direct label at line end
+    const last = pts.filter(Boolean).slice(-1)[0];
+    if (last && cfg.series.length > 1) {
+      const t = el("text", { x: last[0]+8, y: last[1]+4, class: "dlabel", fill: col });
+      t.textContent = s.name;
+    }
+  });
+
+  // hover overlay
+  const focus = el("line", { x1: 0, y1: m.top, x2: 0, y2: m.top+ih, stroke: "var(--muted)", "stroke-width": 1, "stroke-dasharray": "3 3", opacity: 0 });
+  const hitW = iw / Math.max(1, xs.length);
+  const tt = $("tt");
+  const move = (evt) => {
+    const rect = svg.getBoundingClientRect();
+    const sx = (evt.touches ? evt.touches[0].clientX : evt.clientX) - rect.left;
+    const px = sx / rect.width * W;
+    let i = 0, best = Infinity;
+    xs.forEach((_, k) => { const d = Math.abs(xAt(k)-px); if (d < best) { best = d; i = k; } });
+    focus.setAttribute("x1", xAt(i)); focus.setAttribute("x2", xAt(i)); focus.setAttribute("opacity", 1);
+    let rows = "";
+    cfg.series.forEach((s) => {
+      const col = cssVar(s.colorVar) || s.colorVar;
+      rows += `<div class="tt-row"><span><i class="tt-dot" style="background:${col}"></i>${s.name}</span><b>${cfg.valueFmt(s.data[i])}</b></div>`;
+    });
+    tt.innerHTML = `<div class="tt-x">${cfg.xLabel}: <b>${xs[i]}</b></div>${rows}`;
+    tt.style.opacity = 1;
+    const cx = (evt.touches ? evt.touches[0].clientX : evt.clientX);
+    const cy = (evt.touches ? evt.touches[0].clientY : evt.clientY);
+    tt.style.left = Math.min(cx+14, window.innerWidth-tt.offsetWidth-8) + "px";
+    tt.style.top  = Math.max(cy-tt.offsetHeight-10, 8) + "px";
+  };
+  const leave = () => { focus.setAttribute("opacity", 0); tt.style.opacity = 0; };
+  el("rect", { x: m.left, y: m.top, width: iw, height: ih, fill: "transparent" });
+  svg.addEventListener("mousemove", move);
+  svg.addEventListener("mouseleave", leave);
+  svg.addEventListener("touchmove", move, { passive: true });
+  svg.addEventListener("touchend", leave);
+  return svg;
+}
+
+function niceCeil(x) {
+  if (x <= 0) return 1;
+  const p = Math.pow(10, Math.floor(Math.log10(x)));
+  const n = x / p;
+  const step = n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10;
+  return step * p;
+}
+
+function card(title, hint, legendItems, svg, tableHtml) {
+  const c = document.createElement("div");
+  c.className = "card";
+  let leg = "";
+  if (legendItems && legendItems.length) {
+    leg = '<div class="legend">' + legendItems.map((l) =>
+      `<span><i style="background:${cssVar(l.colorVar)||l.colorVar}"></i>${l.name}</span>`).join("") + "</div>";
+  }
+  c.innerHTML = `<h3>${title}</h3><p class="hint">${hint}</p>${leg}<div class="chart-scroll"></div>` +
+    (tableHtml ? `<details><summary>Lihat tabel angka</summary>${tableHtml}</details>` : "");
+  c.querySelector(".chart-scroll").appendChild(svg);
+  return c;
+}
+
+function tableFor(rows, cols) {
+  let h = '<table class="data"><thead><tr>' + cols.map((c) => `<th>${c.h}</th>`).join("") + "</tr></thead><tbody>";
+  rows.forEach((r) => { h += "<tr>" + cols.map((c) => `<td>${c.f(r)}</td>`).join("") + "</tr>"; });
+  return h + "</tbody></table>";
+}
+
+// ─── render ─────────────────────────────────────────────────────────────────
+function render() {
+  if (!DATA) { $("meta").textContent = "Tidak ada data."; return; }
+  const d = new Date(DATA.generated_at || Date.now());
+  $("meta").textContent = "Dibuat " + d.toLocaleString("id");
+  if (DATA.demo) $("demo-banner").innerHTML =
+    '<div class="demo-banner">⚠ Ini <b>data contoh (DEMO)</b> untuk memperlihatkan bentuk grafik. ' +
+    'Jalankan <code>./run-stepped.sh</code> lalu <code>python3 build-report.py</code> untuk mengisi data asli.</div>';
+
+  const rest = DATA.rest || [], ws = DATA.ws || [];
+
+  // KPI
+  const kpis = [];
+  if (rest.length) {
+    const peak = Math.max(...rest.map((r) => r.rps || 0));
+    const top = rest[rest.length-1];
+    kpis.push({ label: "Throughput puncak REST", value: fmtNum(peak), unit: "req/dtk" });
+    kpis.push({ label: `Latensi p95 @ ${top.level} VU`, value: fmtMs(top.lat && top.lat.p95), unit: "" });
+  }
+  if (ws.length) {
+    const top = ws[ws.length-1];
+    kpis.push({ label: "Koneksi WS maks diuji", value: fmtNum(top.level), unit: "koneksi" });
+    kpis.push({ label: `Error koneksi @ ${top.level}`, value: fmtPct(top.err_pct), unit: "" });
+  }
+  $("kpis").innerHTML = kpis.map((k) =>
+    `<div class="kpi"><div class="label">${k.label}</div><div class="value">${k.value} <span class="unit">${k.unit}</span></div></div>`).join("");
+
+  // REST charts
+  const rc = $("rest-charts");
+  if (rest.length) {
+    const xs = rest.map((r) => r.level);
+    rc.appendChild(card(
+      "Throughput vs beban",
+      "Request per detik yang berhasil diselesaikan. Naik lalu mendatar (plateau) = mulai jenuh.",
+      null,
+      lineChart({ xs, xLabel: "Jumlah user serentak (VU)", yLabel: "req/detik", valueFmt: fmtNum,
+        series: [{ name: "throughput", colorVar: "--series-1", data: rest.map((r) => r.rps) }] }),
+      tableFor(rest, [ {h:"VU", f:(r)=>r.level}, {h:"req/dtk", f:(r)=>fmtNum(r.rps)}, {h:"total req", f:(r)=>fmtNum(r.reqs)} ])
+    ));
+    const latSeries = [
+      { name: "p50", colorVar: "--pct-1", data: rest.map((r)=>r.lat&&r.lat.p50) },
+      { name: "p95", colorVar: "--pct-2", data: rest.map((r)=>r.lat&&r.lat.p95) },
+      { name: "p99", colorVar: "--pct-3", data: rest.map((r)=>r.lat&&r.lat.p99) },
+    ];
+    rc.appendChild(card(
+      "Latensi vs beban (p50 / p95 / p99)",
+      "Waktu tangani per request. p50 = pengalaman tengah, p99 = ekor terburuk. Lonjakan tajam = titik jenuh.",
+      latSeries,
+      lineChart({ xs, xLabel: "Jumlah user serentak (VU)", yLabel: "milidetik", valueFmt: fmtMs, tickFmt: fmtMs, series: latSeries }),
+      tableFor(rest, [ {h:"VU",f:(r)=>r.level}, {h:"p50",f:(r)=>fmtMs(r.lat&&r.lat.p50)}, {h:"p95",f:(r)=>fmtMs(r.lat&&r.lat.p95)}, {h:"p99",f:(r)=>fmtMs(r.lat&&r.lat.p99)} ])
+    ));
+    rc.appendChild(card(
+      "Request gagal vs beban",
+      "Persentase request yang ditolak/timeout. Idealnya tetap 0% sampai beban tinggi.",
+      null,
+      lineChart({ xs, xLabel: "Jumlah user serentak (VU)", yLabel: "% gagal", valueFmt: fmtPct, tickFmt: (v)=>v.toFixed(0)+"%",
+        series: [{ name: "gagal", colorVar: "--err", data: rest.map((r) => r.failed_pct) }] }),
+      tableFor(rest, [ {h:"VU",f:(r)=>r.level}, {h:"gagal",f:(r)=>fmtPct(r.failed_pct)} ])
+    ));
+  } else { rc.innerHTML = '<p class="sub">Belum ada data REST.</p>'; }
+
+  // WS charts
+  const wc = $("ws-charts");
+  if (ws.length) {
+    const xs = ws.map((r) => r.level);
+    const conSeries = [
+      { name: "p50", colorVar: "--pct-1", data: ws.map((r)=>r.connect&&r.connect.p50) },
+      { name: "p95", colorVar: "--pct-2", data: ws.map((r)=>r.connect&&r.connect.p95) },
+      { name: "p99", colorVar: "--pct-3", data: ws.map((r)=>r.connect&&r.connect.p99) },
+    ];
+    wc.appendChild(card(
+      "Latensi buka koneksi vs jumlah koneksi konkuren",
+      "Waktu untuk membangun koneksi WebSocket saat makin banyak koneksi konkuren.",
+      conSeries,
+      lineChart({ xs, xLabel: "Koneksi konkuren", yLabel: "milidetik", valueFmt: fmtMs, tickFmt: fmtMs, series: conSeries }),
+      tableFor(ws, [ {h:"Koneksi",f:(r)=>r.level}, {h:"p50",f:(r)=>fmtMs(r.connect&&r.connect.p50)}, {h:"p95",f:(r)=>fmtMs(r.connect&&r.connect.p95)}, {h:"p99",f:(r)=>fmtMs(r.connect&&r.connect.p99)} ])
+    ));
+    wc.appendChild(card(
+      "Koneksi gagal vs jumlah koneksi konkuren",
+      "Persentase koneksi WebSocket yang gagal dibangun/terputus. Menunjukkan batas kapasitas realtime.",
+      null,
+      lineChart({ xs, xLabel: "Koneksi konkuren", yLabel: "% gagal", valueFmt: fmtPct, tickFmt: (v)=>v.toFixed(0)+"%",
+        series: [{ name: "gagal", colorVar: "--err", data: ws.map((r) => r.err_pct) }] }),
+      tableFor(ws, [ {h:"Koneksi",f:(r)=>r.level}, {h:"gagal",f:(r)=>fmtPct(r.err_pct)}, {h:"stabil",f:(r)=>fmtNum(r.sustained)} ])
+    ));
+  } else { wc.innerHTML = '<p class="sub">Belum ada data WebSocket.</p>'; }
+
+  $("foot").textContent = "BibitLive · k6 stepped load test · throughput & latency vs beban bertahap";
+}
+render();
+</script>
