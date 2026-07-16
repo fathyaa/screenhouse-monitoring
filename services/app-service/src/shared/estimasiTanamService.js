@@ -14,9 +14,9 @@ async function fetchScreenhouseEstimasiContext(client, screenhouseId) {
     `
     SELECT
       s.id,
-      s.tanggal_semai,
-      s.seedling_start_date,
-      s.estimasi_siap_tanam,
+      to_char(s.tanggal_semai, 'YYYY-MM-DD') AS tanggal_semai,
+      to_char(s.seedling_start_date, 'YYYY-MM-DD') AS seedling_start_date,
+      to_char(s.estimasi_siap_tanam, 'YYYY-MM-DD') AS estimasi_siap_tanam,
       s.status_estimasi,
       vb.nama AS varietas_nama,
       vb.durasi_pembibitan_hari
@@ -44,7 +44,7 @@ async function fetchSevenDaySensorStats(screenhouseId) {
   const result = await monitoringPool.query(
     `
     SELECT
-      DATE(sd.created_at AT TIME ZONE 'Asia/Jakarta') AS day,
+      to_char((sd.created_at AT TIME ZONE 'Asia/Jakarta')::date, 'YYYY-MM-DD') AS day,
       sn.id AS node_id,
       sn.node_code,
       sn.node_name,
@@ -82,9 +82,9 @@ async function fetchEstimasiContextBatch(screenhouseIds) {
     `
     SELECT
       s.id,
-      s.tanggal_semai,
-      s.seedling_start_date,
-      s.estimasi_siap_tanam,
+      to_char(s.tanggal_semai, 'YYYY-MM-DD') AS tanggal_semai,
+      to_char(s.seedling_start_date, 'YYYY-MM-DD') AS seedling_start_date,
+      to_char(s.estimasi_siap_tanam, 'YYYY-MM-DD') AS estimasi_siap_tanam,
       s.status_estimasi,
       vb.nama AS varietas_nama,
       vb.durasi_pembibitan_hari
@@ -113,7 +113,7 @@ async function fetchSevenDaySensorStatsBatch(screenhouseIds) {
     `
     SELECT
       sn.screenhouse_id,
-      DATE(sd.created_at AT TIME ZONE 'Asia/Jakarta') AS day,
+      to_char((sd.created_at AT TIME ZONE 'Asia/Jakarta')::date, 'YYYY-MM-DD') AS day,
       sn.id AS node_id,
       sn.node_code,
       sn.node_name,

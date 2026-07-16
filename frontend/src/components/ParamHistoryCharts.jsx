@@ -9,6 +9,7 @@ import {
   YAxis,
 } from "recharts";
 import { PARAM_COLORS, CHART_GRID, CHART_REFLINE } from "../constants/chartColors";
+import { ChartGuideToggle } from "../constants/chartGuide";
 
 /** Skala Y yang mencakup data + garis batas min/maks, dengan sedikit padding. */
 function domainFor(data, key, min, max) {
@@ -41,6 +42,8 @@ export default function ParamHistoryCharts({
   metrics = [],
   title = "Tren parameter lain (24 jam)",
   subtitle = "Garis putus-putus = batas aman minimum & maksimum.",
+  guideBody = null,
+  guideExtra = null,
 }) {
   const visible = metrics.filter((m) => hasData(data, m.key));
   if (!data.length || !visible.length) return null;
@@ -107,6 +110,8 @@ export default function ParamHistoryCharts({
           );
         })}
       </div>
+
+      <ChartGuideToggle body={guideBody} extra={guideExtra} />
     </div>
   );
 }

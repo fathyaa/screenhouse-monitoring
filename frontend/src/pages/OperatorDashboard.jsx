@@ -589,7 +589,7 @@ function OperatorDashboard() {
           </div>
         </div>
 
-        {dashboardInsight && (
+        {/* {dashboardInsight && (
           <div className="shrink-0 border-b border-gray-200 bg-amber-50/60 px-4 py-2 flex items-center gap-2">
             <Lightbulb size={14} className="text-amber-700 shrink-0" aria-hidden />
             <p className="text-xs text-amber-900 flex-1 min-w-0">
@@ -604,7 +604,7 @@ function OperatorDashboard() {
               )}
             </p>
           </div>
-        )}
+        )} */}
 
         {/* Segment Peta/Prioritas — HP saja, di lg: dua panel selalu tampil berdampingan */}
         <div className="lg:hidden shrink-0 border-b border-gray-200 bg-white px-4 py-2">

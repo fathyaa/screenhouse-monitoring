@@ -15,7 +15,6 @@ npm-debug.log*
 # build
 dist/
 build/
-dev-dist/
 
 # vite
 .vite/
@@ -36,5 +35,4 @@ temp/
 
 # dokumentasi lokal (tidak di-push ke GitHub)
 docs/
-load-test
-load-tests/
+scripts/

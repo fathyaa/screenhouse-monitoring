@@ -11,7 +11,6 @@ import OperatorLaporanPage from "./pages/OperatorLaporanPage";
 import ScreenhouseDetailPage from "./pages/ScreenhouseDetailPage";
 import PetaniDashboard from "./pages/PetaniDashboard";
 import PetaniRiwayatSemaiPage from "./pages/PetaniRiwayatSemaiPage";
-import OperatorTrenPage from "./pages/OperatorTrenPage";
 import SemaiCycleDetailPage from "./pages/SemaiCycleDetailPage";
 import NotifikasiPage from "./pages/NotifikasiPage";
 import ApprovalPage from "./pages/ApprovalPage";
@@ -76,7 +75,7 @@ function AppRoutes() {
       {/* OPERATOR (+ super_admin) */}
       <Route path="/operator" element={<PrivateRoute allowedRoles={OPERATOR}><OperatorDashboard /></PrivateRoute>} />
       <Route path="/operator/laporan" element={<PrivateRoute allowedRoles={OPERATOR}><OperatorLaporanPage /></PrivateRoute>} />
-      <Route path="/operator/tren" element={<PrivateRoute allowedRoles={OPERATOR}><OperatorTrenPage /></PrivateRoute>} />
+      <Route path="/operator/tren" element={<Navigate to="/operator" replace />} />
       <Route path="/operator/screenhouse/:id" element={<PrivateRoute allowedRoles={OPERATOR}><ScreenhouseDetailPage basePath="/operator" /></PrivateRoute>} />
       <Route path="/operator/approval" element={<PrivateRoute allowedRoles={OPERATOR}><ApprovalPage /></PrivateRoute>} />
       <Route path="/operator/petani" element={<PrivateRoute allowedRoles={OPERATOR}><DaftarPetaniPage /></PrivateRoute>} />

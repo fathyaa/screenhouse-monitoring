@@ -303,6 +303,9 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
   const [stressScore, setStressScore] = useState(null);
   const [estimasiTanam, setEstimasiTanam] = useState(null);
   const [history, setHistory] = useState([]);
+  // Tren sepanjang siklus semai aktif ({bucket_unit, rows}) — null bila tidak
+  // ada siklus; grafik lalu jatuh ke riwayat 24 jam.
+  const [cycleTrend, setCycleTrend] = useState(null);
   const [loading, setLoading] = useState(true);
   const [screenhouses, setScreenhouses] = useState([]);
   const [onlineTick, setOnlineTick] = useState(() => Date.now());
@@ -475,7 +478,71 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
     };
   }, [id]);
 
+  // Grafik per siklus semai: begitu screenhouse punya tanggal semai aktif,
+  // ambil tren sejak tanggal itu (bucket jam/hari diputuskan backend).
+  const cycleStartDate = screenhouse?.tanggal_semai ?? screenhouse?.seedling_start_date ?? null;
+
+  useEffect(() => {
+    if (!id || !token || !cycleStartDate) {
+      setCycleTrend(null);
+      return;
+    }
+    const since = new Date(cycleStartDate);
+    if (Number.isNaN(since.getTime())) {
+      setCycleTrend(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(
+      `${API_URL}/sensor-data/screenhouse/${id}/trend?since=${encodeURIComponent(since.toISOString())}`,
+      { headers }
+    )
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled) setCycleTrend(data?.rows?.length ? data : null);
+      })
+      .catch(() => {
+        if (!cancelled) setCycleTrend(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, token, headers, cycleStartDate]);
+
+  const usingCycleTrend = Boolean(cycleTrend?.rows?.length);
+
   const trendChartData = useMemo(() => {
+    if (usingCycleTrend) {
+      const dayMode = cycleTrend.bucket_unit === "day";
+      // Mode jam bisa melewati tengah malam (rentang ≤72 jam) — sertakan tanggal
+      // pada label supaya sumbu X tidak ambigu.
+      const spansMultipleDays =
+        !dayMode &&
+        new Date(cycleTrend.rows[0].bucket).toDateString() !==
+          new Date(cycleTrend.rows[cycleTrend.rows.length - 1].bucket).toDateString();
+      return cycleTrend.rows.map((row) => {
+        const d = new Date(row.bucket);
+        const label = dayMode
+          ? d.toLocaleDateString("id-ID", { day: "numeric", month: "short" })
+          : spansMultipleDays
+          ? d.toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+          : d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+        return {
+          label,
+          nitrogen: row.avg_nitrogen,
+          soil_moisture: row.avg_soil_moisture,
+          phosphorus: row.avg_phosphorus,
+          potassium: row.avg_potassium,
+          soil_temperature: row.avg_soil_temperature,
+          soil_ph: row.avg_soil_ph,
+          conductivity: row.avg_conductivity,
+          air_temperature: row.avg_air_temperature,
+          air_humidity: row.avg_air_humidity,
+          light_intensity: row.avg_light_intensity,
+        };
+      });
+    }
+
     if (dashboard?.hourlyTrend?.length) {
       return dashboard.hourlyTrend.map((row) => ({
         label: new Date(row.bucket).toLocaleTimeString("id-ID", {
@@ -531,7 +598,11 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
       });
       return out;
     });
-  }, [dashboard, history]);
+  }, [usingCycleTrend, cycleTrend, dashboard, history]);
+
+  // Label periode & granularitas untuk judul/subjudul grafik.
+  const trendPeriodLabel = usingCycleTrend ? "siklus semai" : "24 jam";
+  const trendBucketLabel = usingCycleTrend && cycleTrend.bucket_unit === "day" ? "hari" : "jam";
 
   const npkCompareData = useMemo(() => {
     const latest = dashboard?.latest;
@@ -1016,7 +1087,7 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
             <>
           {screenhouseOffline && (
             <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
-              Grafik di bawah menampilkan riwayat 24 jam.
+              Grafik di bawah menampilkan riwayat {trendPeriodLabel}.
               {latestLastSeen
                 ? ` ${FARMER_LABELS.lastReading} ${formatSnapshotTime(latestLastSeen)} (${timeAgo(latestLastSeen)}).`
                 : ` Belum ada ${FARMER_LABELS.lastReading.toLowerCase()} tersimpan.`}
@@ -1026,10 +1097,10 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <div className="bg-white rounded-2xl border border-gray-200 p-4 text-left">
               <div className="text-sm font-semibold text-gray-800 mb-1 text-left">
-                Tren nitrogen & kelembapan tanah (24 jam)
+                Tren nitrogen & kelembapan tanah ({trendPeriodLabel})
               </div>
               <div className="text-xs text-gray-600 mb-4 text-left">
-                Rata-rata per jam. Hijau muda = aman, merah muda = kurang, kuning = berlebih.
+                Rata-rata per {trendBucketLabel}. Hijau muda = aman, merah muda = kurang, kuning = berlebih.
               </div>
               {trendChartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={280}>
@@ -1054,7 +1125,7 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
                       nDomain={nMoistureDomains.n}
                       mDomain={nMoistureDomains.m}
                     />
-                    <Tooltip content={<ChartTooltip />} />
+                    <Tooltip content={<ChartTooltip labelPrefix={trendBucketLabel === "hari" ? "Tanggal" : "Jam"} />} />
                     <Legend content={(props) => <NMoistureChartLegendContent payload={props.payload} />} />
                     <Line
                       yAxisId="n"
@@ -1085,7 +1156,7 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
               )}
               <ChartGuideToggle
                 body={SCREENHOUSE_CHART_GUIDE[1].body}
-                extra="Arahkan kursor ke garis untuk melihat angka pada jam tertentu."
+                extra={`Arahkan kursor ke garis untuk melihat angka pada ${trendBucketLabel} tertentu.`}
               />
             </div>
 
@@ -1131,10 +1202,10 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
 
           <div className="bg-white rounded-2xl border border-gray-200 p-4 text-left">
             <div className="text-sm font-semibold text-gray-800 mb-1 text-left">
-              Tren fosfor & kalium (24 jam)
+              Tren fosfor & kalium ({trendPeriodLabel})
             </div>
             <div className="text-xs text-gray-600 mb-4 text-left">
-              Perubahan fosfor (P) dan kalium (K) per jam. Cek kebutuhan pupuk.
+              Perubahan fosfor (P) dan kalium (K) per {trendBucketLabel}. Cek kebutuhan pupuk.
             </div>
             {trendChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height={240}>
@@ -1150,7 +1221,7 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
                     threshold={threshold}
                     yDomain={getPkChartYDomain(trendChartData, threshold)}
                   />
-                  <Tooltip content={<ChartTooltip />} />
+                  <Tooltip content={<ChartTooltip labelPrefix={trendBucketLabel === "hari" ? "Tanggal" : "Jam"} />} />
                   <Legend content={(props) => <PkChartLegendContent payload={props.payload} />} />
                   <Line
                     type="monotone"
@@ -1177,7 +1248,7 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
             )}
             <ChartGuideToggle
               body={SCREENHOUSE_CHART_GUIDE[3].body}
-              extra="Arahkan kursor ke garis untuk melihat angka pada jam tertentu."
+              extra={`Arahkan kursor ke garis untuk melihat angka pada ${trendBucketLabel} tertentu.`}
             />
             </div>
 
@@ -1185,8 +1256,10 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
               data={trendChartData}
               threshold={threshold}
               metrics={ENV_HISTORY_METRICS}
-              title="Tren suhu, pH, EC & cahaya (24 jam)"
+              title={`Tren suhu, pH, EC & cahaya (${trendPeriodLabel})`}
               subtitle="Parameter lingkungan lain. Garis putus-putus = batas aman minimum & maksimum."
+              guideBody={SCREENHOUSE_CHART_GUIDE[4].body}
+              guideExtra={`Arahkan kursor ke garis untuk melihat angka pada ${trendBucketLabel} tertentu.`}
             />
             </>
           )}
@@ -1201,7 +1274,7 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
               Belum ada {FARMER_LABELS.traySensors.toLowerCase()} terdaftar
             </div>
           ) : (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               {nodes.map((node) => (
                 <NodeCard
                   key={node.id}

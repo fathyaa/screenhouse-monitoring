@@ -21,6 +21,7 @@ import {
   pickPrimaryAlert,
 } from "../utils/petaniAlertNav";
 import { screenhouseMatchesQuery } from "../utils/screenhouseSearch";
+import { computeEstimasiTimeline } from "../utils/estimasiTanam";
 import {
   deriveScreenhouseStatus,
   formatLastSensorUpdate,
@@ -430,7 +431,51 @@ function PetaniDashboard() {
       }
     });
 
-    return { total, healthyCount, attentionCount, autoHandledCount, offlineCount, nearestReady };
+    // Tips perawatan berdasar fase umur bibit — informasi yang belum ada di
+    // tempat lain: kartu menunjukkan "hari ke-X", tapi tidak menerjemahkannya
+    // jadi tindakan. Fase dari proporsi umur terhadap durasi varietas.
+    const phaseGroups = { awal: [], tengah: [], akhir: [] };
+    active.forEach((sh) => {
+      const timeline = computeEstimasiTimeline(
+        estimasiTanam[sh.id],
+        sh.tanggal_semai ?? sh.seedling_start_date,
+        sh.durasi_pembibitan_hari
+      );
+      if (!timeline?.totalDays) return;
+      const ratio = timeline.hariKe / timeline.totalDays;
+      const phase = ratio < 1 / 3 ? "awal" : ratio < 2 / 3 ? "tengah" : "akhir";
+      phaseGroups[phase].push(shortenScreenhouseName(sh.name));
+    });
+    const phaseTips = [
+      phaseGroups.awal.length && {
+        key: "awal",
+        names: phaseGroups.awal,
+        label: "baru semai",
+        tip: "Jaga media selalu lembap dan lindungi dari terik & hujan deras.",
+      },
+      phaseGroups.tengah.length && {
+        key: "tengah",
+        names: phaseGroups.tengah,
+        label: "pertumbuhan daun",
+        tip: "Siram rutin pagi hari dan perhatikan status pupuk di kartu.",
+      },
+      phaseGroups.akhir.length && {
+        key: "akhir",
+        names: phaseGroups.akhir,
+        label: "menjelang tanam",
+        tip: "Kurangi penyiraman bertahap dan mulai siapkan lahan tanam.",
+      },
+    ].filter(Boolean);
+
+    return {
+      total,
+      healthyCount,
+      attentionCount,
+      autoHandledCount,
+      offlineCount,
+      nearestReady,
+      phaseTips,
+    };
   }, [sortedScreenhouses, latestSensorData, alertsByScreenhouse, estimasiTanam]);
 
   // Petani dengan tepat satu screenhouse (dan sudah aktif): tidak ada gunanya

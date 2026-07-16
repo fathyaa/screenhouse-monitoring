@@ -582,6 +582,63 @@ async function getScreenhouseSensorHistory(req, res) {
   }
 }
 
+/**
+ * Tren rata-rata untuk rentang fleksibel — dipakai grafik detail per siklus
+ * semai (since = tanggal mulai semai). Bucket adaptif supaya jumlah titik
+ * tetap wajar: per jam bila rentang ≤ 72 jam, per hari bila lebih (siklus
+ * padi 21–23 hari ≈ 21–23 titik, bukan 550+).
+ */
+async function getScreenhouseSensorTrend(req, res) {
+  try {
+    const { screenhouseId } = req.params;
+    const sinceRaw = req.query.since;
+    const since = sinceRaw ? new Date(sinceRaw) : null;
+    if (!since || Number.isNaN(since.getTime())) {
+      return res
+        .status(400)
+        .json({ message: "Parameter since (tanggal ISO) wajib diisi" });
+    }
+
+    // Clamp maksimal 60 hari ke belakang — jaga-jaga siklus yang lupa diakhiri.
+    const minSince = Date.now() - 60 * 24 * 3600 * 1000;
+    const effectiveSince = new Date(Math.max(since.getTime(), minSince));
+    const rangeHours = (Date.now() - effectiveSince.getTime()) / 3600000;
+    const bucketUnit = rangeHours <= 72 ? "hour" : "day";
+
+    const result = await pool.query(
+      `
+        SELECT
+          date_trunc($3, sd.created_at) AS bucket,
+          ROUND(AVG(sd.nitrogen))::int AS avg_nitrogen,
+          ROUND(AVG(sd.soil_moisture))::numeric(5,2) AS avg_soil_moisture,
+          ROUND(AVG(sd.phosphorus))::int AS avg_phosphorus,
+          ROUND(AVG(sd.potassium))::int AS avg_potassium,
+          ROUND(AVG(sd.soil_temperature)::numeric, 1) AS avg_soil_temperature,
+          ROUND(AVG(sd.soil_ph)::numeric, 1) AS avg_soil_ph,
+          ROUND(AVG(sd.conductivity))::int AS avg_conductivity,
+          ROUND(AVG(sd.air_temperature)::numeric, 1) AS avg_air_temperature,
+          ROUND(AVG(sd.air_humidity)::numeric, 1) AS avg_air_humidity,
+          ROUND(AVG(sd.light_intensity))::int AS avg_light_intensity
+        ${SENSOR_DATA_JOIN}
+        WHERE sn.screenhouse_id = $1
+          AND sd.created_at >= $2
+        GROUP BY 1
+        ORDER BY 1
+        `,
+      [screenhouseId, effectiveSince.toISOString(), bucketUnit]
+    );
+
+    res.json({
+      bucket_unit: bucketUnit,
+      since: effectiveSince.toISOString(),
+      rows: result.rows,
+    });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
 function nodeIsOffline(node, now = Date.now()) {
   if (node.is_active === false) return true;
   const lastSeen = node.last_reading_at ?? node.created_at;
@@ -788,6 +845,7 @@ module.exports = {
   getSensorsByScreenhouse: getSensorNodesByScreenhouse,
   getSensorNodesByScreenhouse,
   getScreenhouseSensorHistory,
+  getScreenhouseSensorTrend,
   getScreenhouseDashboardSummary,
   getScreenhouseStressScore,
   getSinkNodeByScreenhouse,

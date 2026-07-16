@@ -12,7 +12,6 @@ import {
   FileBarChart,
   Bell,
   Settings,
-  TrendingUp,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { disconnectSocket } from "../lib/socket";
@@ -27,7 +26,6 @@ const MENUS_BY_ROLE = {
   operator: [
     { icon: <LayoutDashboard size={17} />, label: "Dashboard", path: "/operator" },
     { icon: <FileBarChart size={17} />, label: "Laporan Wilayah", path: "/operator/laporan" },
-    { icon: <TrendingUp size={17} />, label: "Tren Wilayah", path: "/operator/tren" },
     { icon: <Map size={17} />, label: "Persetujuan", path: "/operator/approval" },
     { icon: <Users size={17} />, label: "Daftar Petani", path: "/operator/petani" },
   ],
@@ -45,7 +43,6 @@ const MENUS_BY_ROLE = {
     { icon: <Radio size={17} />, label: "Konfigurasi", path: "/admin/konfigurasi", section: "Admin" },
     { icon: <LayoutDashboard size={17} />, label: "Dashboard Operator", path: "/operator", section: "Operator" },
     { icon: <FileBarChart size={17} />, label: "Laporan Wilayah", path: "/operator/laporan", section: "Operator" },
-    { icon: <TrendingUp size={17} />, label: "Tren Wilayah", path: "/operator/tren", section: "Operator" },
     { icon: <Map size={17} />, label: "Persetujuan", path: "/operator/approval", section: "Operator" },
     { icon: <Users size={17} />, label: "Daftar Petani", path: "/operator/petani", section: "Operator" },
   ],

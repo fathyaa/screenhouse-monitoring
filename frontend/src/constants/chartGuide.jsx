@@ -28,7 +28,7 @@ export const SCREENHOUSE_CHART_GUIDE = [
   },
   {
     title: "Grafik nitrogen & air tanah",
-    body: "Menampilkan perubahan selama 24 jam terakhir. Garis hijau = kadar nitrogen (N). Garis biru = kelembapan tanah (%). Area hijau muda = zona optimal/aman, merah muda = di bawah minimum (kurang), kuning = di atas maksimum (berlebih). Setiap garis dinilai terhadap batas aman masing-masing.",
+    body: "Menampilkan perubahan selama periode di judul grafik. Garis hijau = kadar nitrogen (N). Garis biru = kelembapan tanah (%). Area hijau muda = zona optimal/aman, merah muda = di bawah minimum (kurang), kuning = di atas maksimum (berlebih). Setiap garis dinilai terhadap batas aman masing-masing.",
   },
   {
     title: "Diagram batang N, P, K",
@@ -36,7 +36,11 @@ export const SCREENHOUSE_CHART_GUIDE = [
   },
   {
     title: "Grafik fosfor & kalium",
-    body: "Perubahan fosfor (P) dan kalium (K) per jam. Area hijau muda = zona optimal/aman, merah muda = di bawah minimum (kurang), kuning = di atas maksimum (berlebih). Setiap garis dinilai terhadap batas aman masing-masing.",
+    body: "Perubahan fosfor (P) dan kalium (K) selama periode di judul grafik. Area hijau muda = zona optimal/aman, merah muda = di bawah minimum (kurang), kuning = di atas maksimum (berlebih). Setiap garis dinilai terhadap batas aman masing-masing.",
+  },
+  {
+    title: "Grafik suhu, pH, EC & cahaya",
+    body: "Setiap kotak kecil menampilkan satu parameter lingkungan. Garis berwarna = nilai terukur dari sensor. Dua garis putus-putus = batas aman minimum (bawah) dan maksimum (atas). Kondisi bagus bila garis tetap berada di antara kedua garis putus-putus; turun di bawahnya berarti kurang, naik di atasnya berarti berlebih.",
   },
 ];
 
@@ -69,11 +73,14 @@ export function ChartGuideToggle({ body, extra }) {
   );
 }
 
-export function ChartTooltip({ active, payload, label }) {
+export function ChartTooltip({ active, payload, label, labelPrefix = "Jam" }) {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-white border border-gray-200 rounded-lg shadow-md px-3 py-2 text-xs text-left">
-      <div className="font-medium text-gray-700 mb-1">Jam {label}</div>
+      <div className="font-medium text-gray-700 mb-1">
+        {labelPrefix ? `${labelPrefix} ` : ""}
+        {label}
+      </div>
       {payload.map((p) => (
         <div key={p.dataKey} style={{ color: p.color }} className="text-left">
           <span className="font-semibold">{p.value}</span>

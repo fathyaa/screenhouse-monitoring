@@ -8,6 +8,7 @@ const {
   getMapSummary,
   getSensorNodesByScreenhouse,
   getScreenhouseSensorHistory,
+  getScreenhouseSensorTrend,
   getScreenhouseDashboardSummary,
   getScreenhouseStressScore,
   getSinkNodeByScreenhouse,
@@ -33,6 +34,10 @@ router.get(
 router.get(
   "/screenhouse/:screenhouseId/history",
   getScreenhouseSensorHistory
+);
+router.get(
+  "/screenhouse/:screenhouseId/trend",
+  getScreenhouseSensorTrend
 );
 router.get(
   "/screenhouse/:screenhouseId/sensor-nodes",

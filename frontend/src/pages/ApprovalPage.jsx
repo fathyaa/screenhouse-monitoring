@@ -76,12 +76,7 @@ function SetupConfirm({ trayCount, onTrayCountChange, busy }) {
                     <Layers size={15} className="shrink-0 text-gray-600" />
                     <span className="font-semibold">Jumlah rak:</span>
                     <span className="text-gray-800">{trayCount}</span>
-                    <span className="text-xs text-gray-500">(1 rak = 1 alat)</span>
                 </div>
-                <p className="text-[11px] leading-relaxed text-gray-500">
-                    Sesuai ajuan petani. Ubah bila kondisi pemasangan di lapangan berbeda.
-                    Varietas bibit dipilih petani saat mulai siklus semai.
-                </p>
             </div>
             <button
                 type="button"

@@ -4,12 +4,38 @@ const { recordMqttNacked } = require("./ingestMetrics");
 
 let consumerStarted = false;
 
+function waitForChannelDrain(ch) {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      ch.off("drain", onDrain);
+      ch.off("error", onError);
+      ch.off("close", onClose);
+    };
+    const onDrain = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = (err) => {
+      cleanup();
+      reject(err);
+    };
+    const onClose = () => {
+      cleanup();
+      reject(new Error("RabbitMQ channel closed while waiting for drain"));
+    };
+
+    ch.once("drain", onDrain);
+    ch.once("error", onError);
+    ch.once("close", onClose);
+  });
+}
+
 async function enqueueSensorReading(job) {
   const ch = await getChannel();
   const body = Buffer.from(JSON.stringify(job));
   const ok = ch.sendToQueue(QUEUE_NAME, body, { persistent: true, contentType: "application/json" });
   if (!ok) {
-    throw new Error("RabbitMQ queue penuh — pesan ditolak");
+    await waitForChannelDrain(ch);
   }
 }
 
