@@ -1,5 +1,9 @@
 const { Server } = require("socket.io");
 
+// Log broadcast per-pesan dimatikan default (hot path saat throughput tinggi);
+// set SOCKET_DEBUG=true untuk mengaktifkan lagi.
+const DEBUG = process.env.SOCKET_DEBUG === "true";
+
 function attachSocketServer(httpServer, subscriber) {
   const io = new Server(httpServer, {
     cors: { origin: "*" },
@@ -80,7 +84,7 @@ function attachSocketServer(httpServer, subscriber) {
         return;
       }
       io.to(`user:${ownerId}`).emit("sensor-update", data);
-      console.log(`Sensor update ke user:${ownerId} (SH ${data.screenhouse_id})`);
+      if (DEBUG) console.log(`Sensor update ke user:${ownerId} (SH ${data.screenhouse_id})`);
     } catch (err) {
       console.error("[socket] sensor-update:", err.message);
     }

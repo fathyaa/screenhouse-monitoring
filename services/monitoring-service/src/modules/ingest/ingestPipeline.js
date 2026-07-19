@@ -6,6 +6,67 @@ const {
   recordMqttEnqueued,
 } = require("./ingestMetrics");
 
+// Log per-pesan dimatikan default (blocking stdout I/O jadi bottleneck saat
+// throughput tinggi). Set INGEST_DEBUG=true untuk mengaktifkannya lagi.
+const DEBUG = process.env.INGEST_DEBUG === "true";
+
+// --- Cache lookup ringan -----------------------------------------------------
+// Node sensor/sink & pemilik screenhouse praktis statis selama satu run, tapi
+// sebelumnya di-SELECT ulang untuk SETIAP pesan. Cache ber-TTL memangkas
+// mayoritas round-trip DB pada hot path ingest. Status aktuator sink_node bisa
+// berubah, jadi jalur tulis aktuator (saveActuatorState) tetap baca fresh.
+const LOOKUP_TTL_MS = Number(process.env.INGEST_LOOKUP_TTL_MS || 60000);
+const sensorNodeCache = new Map();
+const sinkNodeCache = new Map();
+const fallbackSinkCache = new Map();
+const ownerCache = new Map();
+
+function cacheGet(map, key) {
+  const hit = map.get(key);
+  if (hit && Date.now() - hit.t < LOOKUP_TTL_MS) return hit;
+  return null;
+}
+
+function cacheSet(map, key, value) {
+  map.set(key, { value, t: Date.now() });
+  return value;
+}
+
+async function cachedSensorNodeByCode(code) {
+  if (!code) return null;
+  const key = String(code);
+  const hit = cacheGet(sensorNodeCache, key);
+  if (hit) return hit.value;
+  return cacheSet(sensorNodeCache, key, await resolveSensorNodeByCode(code));
+}
+
+async function cachedSinkNodeByCode(code) {
+  if (!code) return null;
+  const key = String(code);
+  const hit = cacheGet(sinkNodeCache, key);
+  if (hit) return hit.value;
+  return cacheSet(sinkNodeCache, key, await resolveSinkNodeByCode(code));
+}
+
+async function cachedFallbackSink(screenhouseId) {
+  const key = String(screenhouseId);
+  const hit = cacheGet(fallbackSinkCache, key);
+  if (hit) return hit.value;
+  const result = await pool.query(
+    `SELECT id, screenhouse_id, node_code, fan_status, irrigation_status, lamp_status
+     FROM sink_nodes WHERE screenhouse_id = $1 AND is_active = true LIMIT 1`,
+    [screenhouseId]
+  );
+  return cacheSet(fallbackSinkCache, key, result.rows[0] ?? null);
+}
+
+async function cachedOwnerUserId(screenhouseId) {
+  const key = String(screenhouseId);
+  const hit = cacheGet(ownerCache, key);
+  if (hit) return hit.value;
+  return cacheSet(ownerCache, key, await getOwnerUserId(screenhouseId));
+}
+
 const INSERT_ACTUATOR_LOG = `
   INSERT INTO actuator_logs (
     sink_node_id, screenhouse_id,
@@ -49,7 +110,7 @@ function hasActuatorReadings(data) {
 async function resolveSensorNodeByCode(nodeCode) {
   if (!nodeCode) return null;
   const result = await pool.query(
-    `SELECT id, screenhouse_id, node_code FROM sensor_nodes WHERE node_code = $1 AND is_active = true`,
+    `SELECT id, screenhouse_id, node_code, node_name FROM sensor_nodes WHERE node_code = $1 AND is_active = true`,
     [String(nodeCode)]
   );
   return result.rows[0] ?? null;
@@ -84,7 +145,7 @@ async function resolveSensorNodeLegacy(screenhouseIdFromTopic, data, topicParts)
 
   if (nodeId) {
     const byId = await pool.query(
-      `SELECT id, screenhouse_id, node_code FROM sensor_nodes WHERE id = $1`,
+      `SELECT id, screenhouse_id, node_code, node_name FROM sensor_nodes WHERE id = $1`,
       [nodeId]
     );
     if (byId.rows[0]) return byId.rows[0];
@@ -98,7 +159,7 @@ async function resolveSensorNodeLegacy(screenhouseIdFromTopic, data, topicParts)
   if (screenhouseIdFromTopic) {
     const fallback = await pool.query(
       `
-      SELECT id, screenhouse_id, node_code FROM sensor_nodes
+      SELECT id, screenhouse_id, node_code, node_name FROM sensor_nodes
       WHERE screenhouse_id = $1 AND is_active = true
       ORDER BY id ASC
       LIMIT 1
@@ -129,7 +190,7 @@ async function saveSensorReading({ sensorNode, sinkNode, data }) {
       air_temperature, air_humidity, light_intensity
     )
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-    RETURNING id
+    RETURNING *
     `,
     [
       sensorNode.id,
@@ -147,7 +208,8 @@ async function saveSensorReading({ sensorNode, sinkNode, data }) {
     ]
   );
 
-  const sensorDataId = saved.rows[0].id;
+  const row = saved.rows[0];
+  const sensorDataId = row.id;
   const screenhouseId = String(sensorNode.screenhouse_id);
 
   await publisher.publish(
@@ -173,46 +235,50 @@ async function saveSensorReading({ sensorNode, sinkNode, data }) {
     })
   );
 
-  const enriched = await pool.query(
-    `
-    SELECT sd.*,
-           sn.screenhouse_id,
-           sn.node_code,
-           sn.node_name,
-           sk.fan_status,
-           sk.irrigation_status,
-           sk.lamp_status,
-           sr.owner_user_id AS user_id
-    FROM sensor_data sd
-    INNER JOIN sensor_nodes sn ON sn.id = sd.sensor_node_id
-    LEFT JOIN sink_nodes sk ON sk.screenhouse_id = sn.screenhouse_id AND sk.is_active = true
-    LEFT JOIN screenhouse_registry sr ON sr.screenhouse_id = sn.screenhouse_id
-    WHERE sd.id = $1
-    `,
-    [sensorDataId]
-  );
-
-  if (enriched.rows[0]) {
-    await publisher.publish("sensor-update", JSON.stringify(enriched.rows[0]));
-  }
+  // Payload realtime disusun dari data yang sudah ada di memori (row hasil
+  // INSERT + node terselesaikan), menggantikan SELECT 3-JOIN per pesan.
+  // owner_user_id di-cache; status aktuator sink display-only (dijaga fresh
+  // lewat event "actuator-updated").
+  const enrichedRow = {
+    ...row,
+    screenhouse_id: sensorNode.screenhouse_id,
+    node_code: sensorNode.node_code,
+    node_name: sensorNode.node_name ?? null,
+    fan_status: sinkNode?.fan_status ?? null,
+    irrigation_status: sinkNode?.irrigation_status ?? null,
+    lamp_status: sinkNode?.lamp_status ?? null,
+    user_id: await cachedOwnerUserId(sensorNode.screenhouse_id),
+  };
+  await publisher.publish("sensor-update", JSON.stringify(enrichedRow));
 
   recordMqttProcessed(data);
-  console.log("Sensor data saved & event published:", sensorNode.node_code);
+  if (DEBUG) console.log("Sensor data saved & event published:", sensorNode.node_code);
 }
 
 async function saveActuatorState({ sinkNode, data, source = "telemetry", reason = null }) {
-  const nextFan = Boolean(pick(data, "fan_status", sinkNode.fan_status ?? false));
+  // sinkNode bisa berasal dari cache (status aktuator mungkin basi), jadi baca
+  // status terkini langsung dari DB sebelum membandingkan perubahan.
+  const current = (await resolveSinkNodeByCode(sinkNode.node_code)) ?? sinkNode;
+
+  const nextFan = Boolean(pick(data, "fan_status", current.fan_status ?? false));
   const nextIrrigation = Boolean(
-    pick(data, "irrigation_status", sinkNode.irrigation_status ?? false)
+    pick(data, "irrigation_status", current.irrigation_status ?? false)
   );
-  const nextLamp = Boolean(pick(data, "lamp_status", sinkNode.lamp_status ?? false));
+  const nextLamp = Boolean(pick(data, "lamp_status", current.lamp_status ?? false));
 
   const unchanged =
-    Boolean(sinkNode.fan_status) === nextFan &&
-    Boolean(sinkNode.irrigation_status) === nextIrrigation &&
-    Boolean(sinkNode.lamp_status) === nextLamp;
+    Boolean(current.fan_status) === nextFan &&
+    Boolean(current.irrigation_status) === nextIrrigation &&
+    Boolean(current.lamp_status) === nextLamp;
 
   if (unchanged) return;
+
+  // Status berubah → cache identitas sink boleh tetap, tapi status basi harus
+  // dibuang supaya payload berikutnya tidak menampilkan nilai lama.
+  sinkNodeCache.delete(String(sinkNode.node_code));
+  if (sinkNode.screenhouse_id != null) {
+    fallbackSinkCache.delete(String(sinkNode.screenhouse_id));
+  }
 
   await pool.query(
     `
@@ -250,7 +316,7 @@ async function saveActuatorState({ sinkNode, data, source = "telemetry", reason 
     })
   );
 
-  console.log("Actuator state saved:", sinkNode.node_code);
+  if (DEBUG) console.log("Actuator state saved:", sinkNode.node_code);
 }
 
 async function persistSensorReading({ sensorNode, sinkNode, data }) {
@@ -276,9 +342,9 @@ async function handleMqttPayload(data, topicParts, screenhouseIdFromTopic) {
     pick(data, "destination_code");
 
   const [sinkByDestination, asSensor, asSink] = await Promise.all([
-    destinationIdRaw ? resolveSinkNodeByCode(destinationIdRaw) : null,
-    nodeIdRaw ? resolveSensorNodeByCode(nodeIdRaw) : null,
-    nodeIdRaw ? resolveSinkNodeByCode(nodeIdRaw) : null,
+    destinationIdRaw ? cachedSinkNodeByCode(destinationIdRaw) : null,
+    nodeIdRaw ? cachedSensorNodeByCode(nodeIdRaw) : null,
+    nodeIdRaw ? cachedSinkNodeByCode(nodeIdRaw) : null,
   ]);
 
   let sinkNode = sinkByDestination;
@@ -298,12 +364,7 @@ async function handleMqttPayload(data, topicParts, screenhouseIdFromTopic) {
   }
 
   if (!sinkNode && sensorNode) {
-    const fallbackSink = await pool.query(
-      `SELECT id, screenhouse_id, node_code, fan_status, irrigation_status, lamp_status
-       FROM sink_nodes WHERE screenhouse_id = $1 AND is_active = true LIMIT 1`,
-      [sensorNode.screenhouse_id]
-    );
-    sinkNode = fallbackSink.rows[0] ?? null;
+    sinkNode = await cachedFallbackSink(sensorNode.screenhouse_id);
   }
 
   const isSinkOrigin =

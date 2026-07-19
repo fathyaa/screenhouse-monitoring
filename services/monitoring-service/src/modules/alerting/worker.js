@@ -17,6 +17,28 @@ const {
 // menariknya balik ke tengah rentang aman).
 const HYSTERESIS_RATIO = 0.05;
 
+// Log per-pesan dimatikan default; set ALERT_DEBUG=true untuk mengaktifkan.
+const DEBUG = process.env.ALERT_DEBUG === "true";
+
+// Threshold snapshot per screenhouse jarang berubah tapi sebelumnya di-SELECT
+// untuk SETIAP pesan sensor. Cache ber-TTL + invalidasi saat snapshot di-upsert
+// (channel "threshold.updated") memangkas satu round-trip DB per pesan.
+const THRESHOLD_TTL_MS = Number(process.env.THRESHOLD_CACHE_TTL_MS || 60000);
+const thresholdCache = new Map();
+
+async function getThresholdSnapshot(screenhouseId) {
+  const key = String(screenhouseId);
+  const hit = thresholdCache.get(key);
+  if (hit && Date.now() - hit.t < THRESHOLD_TTL_MS) return hit.value;
+  const result = await pool.query(
+    `SELECT * FROM threshold_snapshots WHERE screenhouse_id = $1`,
+    [screenhouseId]
+  );
+  const value = result.rows[0] ?? null;
+  thresholdCache.set(key, { value, t: Date.now() });
+  return value;
+}
+
 /** Cocokkan pesan alert offline (per node). */
 function staleThresholdMs(sendIntervalSeconds) {
   const intervalSec = Math.max(Number(sendIntervalSeconds) || 60, 60);
@@ -140,6 +162,9 @@ async function upsertThresholdSnapshot(row) {
     `,
     values
   );
+
+  // Buang cache agar pembacaan berikutnya memuat ambang terbaru.
+  thresholdCache.delete(String(screenhouseId));
 }
 
 async function upsertScreenhouseRegistry(row) {
@@ -276,14 +301,13 @@ async function handleSensorDataCreated(message) {
 
   await resolveOfflineAlertsForNode(screenhouseId, sensorNodeId);
 
-  console.log("Checking threshold...");
+  if (DEBUG) console.log("Checking threshold...");
 
-  const thresholdResult = await pool.query(
-    `SELECT * FROM threshold_snapshots WHERE screenhouse_id = $1`,
-    [screenhouseId]
-  );
-  const threshold = thresholdResult.rows[0];
-  if (!threshold) return console.log("Threshold snapshot tidak ditemukan");
+  const threshold = await getThresholdSnapshot(screenhouseId);
+  if (!threshold) {
+    if (DEBUG) console.log("Threshold snapshot tidak ditemukan");
+    return;
+  }
 
   const violations = [];
   const recoveries = [];
