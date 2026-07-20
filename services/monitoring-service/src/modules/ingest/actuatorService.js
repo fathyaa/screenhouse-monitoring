@@ -1,5 +1,6 @@
 const pool = require("../../config/db");
 const { publishTopic } = require("../../config/mqttClient");
+const { publishValveControl } = require("./hivemqBridge");
 const { publisher } = require("../../config/redis");
 
 const INSERT_ACTUATOR_LOG = `
@@ -165,6 +166,10 @@ async function setActuators({
 
   publishTopic(`screenhouse/${shId}/sink/${sink.node_code}/command`, commandPayload);
   publishTopic(`screenhouse/${shId}/actuator`, commandPayload);
+
+  // Perangkat HiveMQ sungguhan: kirim perintah katup irigasi (valve1) format
+  // plain "0"/"1". No-op untuk screenhouse non-HiveMQ (mis. simulator).
+  publishValveControl({ screenhouseId: shId, sinkCode: sink.node_code, irrigation: nextIrrigation });
 
   await pool.query(
     `
