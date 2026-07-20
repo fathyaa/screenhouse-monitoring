@@ -9,7 +9,7 @@ export function SemaiCycleEndButton({ onClick, className = "" }) {
       className={`mt-2.5 w-full flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-[11px] font-medium hover:bg-amber-100 transition ${className}`}
     >
       <Flag size={13} />
-      Akhiri siklus semai secara manual
+      Akhiri siklus semai
     </button>
   );
 }

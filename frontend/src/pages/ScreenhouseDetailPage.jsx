@@ -31,7 +31,6 @@ import PetaniBottomNav from "../layouts/PetaniBottomNav";
 import { useSidebarOpen } from "../hooks/useSidebarOpen";
 import ParamHealthCards from "../components/ParamHealthCards";
 import EstimasiTanamPanel from "../components/EstimasiTanamPanel";
-import { StressScoreNodeGauge } from "../components/StressScoreDisplay";
 import { ScreenhouseDetailSkeleton } from "../components/LoadingUI";
 import ActuatorControls from "../components/ActuatorControls";
 import {
@@ -69,7 +68,6 @@ import {
 import RackNameEditor from "../components/RackNameEditor";
 import ScreenhouseNameEditor from "../components/ScreenhouseNameEditor";
 import { FARMER_LABELS } from "../constants/farmerLabels";
-import { formatRackName } from "../utils/rackNames";
 import {
   SCREENHOUSE_CHART_GUIDE,
   ChartTooltip,
@@ -125,7 +123,7 @@ function formatParamValue(value) {
   return Number.isFinite(n) ? n.toFixed(1) : String(value);
 }
 
-function NodeCard({ node, threshold, canRename = false, onRenamed, nodeStressScore = null }) {
+function NodeCard({ node, threshold, canRename = false, onRenamed }) {
   const d = node.latest_data;
   const online = isNodeOnline(node);
   const lastSeen = node.last_seen ?? d?.created_at;
@@ -165,14 +163,6 @@ function NodeCard({ node, threshold, canRename = false, onRenamed, nodeStressSco
               ))}
           </div>
         </div>
-        {nodeStressScore && online && (
-          <div className="shrink-0">
-            <StressScoreNodeGauge
-              scoreData={nodeStressScore}
-              nodeName={formatRackName(node.node_name)}
-            />
-          </div>
-        )}
       </div>
 
       {!online ? (
@@ -668,14 +658,6 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
     () => buildWorstCaseHealth(healthSourceNodes, threshold),
     [healthSourceNodes, threshold]
   );
-
-  const nodeScoreById = useMemo(() => {
-    const map = {};
-    (stressScore?.nodes ?? []).forEach((n) => {
-      if (n.node_id != null) map[n.node_id] = n;
-    });
-    return map;
-  }, [stressScore]);
 
   const flaggedRollup = rollupHealth.filter(
     (h) => h.status === "low" || h.status === "high"
@@ -1282,7 +1264,6 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
                   threshold={threshold}
                   canRename={canRenameRack}
                   onRenamed={handleNodeRenamed}
-                  nodeStressScore={nodeScoreById[node.id]}
                 />
               ))}
             </div>
