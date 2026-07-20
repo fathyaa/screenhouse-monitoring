@@ -494,10 +494,6 @@ function ApprovalPage() {
                             <div className="text-xs text-gray-600 truncate hidden sm:block">Verifikasi pendaftaran petani baru dan pengajuan screenhouse tambahan</div>
                         </div>
                     </div>
-                    <div className="hidden sm:flex items-center gap-2 bg-green-50 text-green-800 text-xs font-medium px-3 py-1.5 rounded-full shrink-0">
-                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                        Siap pantau
-                    </div>
                 </header>
 
                 <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 text-left">

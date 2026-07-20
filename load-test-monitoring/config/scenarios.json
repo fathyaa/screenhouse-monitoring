@@ -13,14 +13,30 @@
   "scenarios": [
     {
       "id": "S1",
-      "name": "80 Active Sensors",
-      "description": "80 active sensors, 1 message/second, 5 minutes",
-      "sensors": 80,
+      "name": "50 Active Sensors",
+      "description": "50 active sensors, 1 message/second, 5 minutes",
+      "sensors": 50,
       "intervalSec": 1,
       "durationSec": 300
     },
     {
       "id": "S2",
+      "name": "100 Active Sensors",
+      "description": "100 active sensors, 1 message/second, 5 minutes",
+      "sensors": 100,
+      "intervalSec": 1,
+      "durationSec": 300
+    },
+    {
+      "id": "S3",
+      "name": "150 Active Sensors",
+      "description": "150 active sensors, 1 message/second, 5 minutes",
+      "sensors": 150,
+      "intervalSec": 1,
+      "durationSec": 300
+    },
+    {
+      "id": "S4",
       "name": "200 Active Sensors",
       "description": "200 active sensors, 1 message/second, 5 minutes",
       "sensors": 200,
@@ -28,26 +44,10 @@
       "durationSec": 300
     },
     {
-      "id": "S3",
-      "name": "400 Active Sensors",
-      "description": "400 active sensors, 1 message/second, 5 minutes",
-      "sensors": 400,
-      "intervalSec": 1,
-      "durationSec": 300
-    },
-    {
-      "id": "S4",
-      "name": "800 Active Sensors",
-      "description": "800 active sensors, 1 message/second, 5 minutes",
-      "sensors": 800,
-      "intervalSec": 1,
-      "durationSec": 300
-    },
-    {
       "id": "S5",
-      "name": "1600 Active Sensors",
-      "description": "1600 active sensors, 1 message/second, 5 minutes",
-      "sensors": 1600,
+      "name": "250 Active Sensors",
+      "description": "250 active sensors, 1 message/second, 5 minutes",
+      "sensors": 250,
       "intervalSec": 1,
       "durationSec": 300
     }
