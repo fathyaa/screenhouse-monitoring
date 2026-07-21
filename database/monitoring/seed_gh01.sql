@@ -35,3 +35,11 @@ ON CONFLICT (screenhouse_id) DO NOTHING;
 INSERT INTO sink_nodes (screenhouse_id, node_code, node_name, relay_channels, fan_status, irrigation_status, lamp_status, is_active)
 VALUES (700, '255', 'GH01 Sink (node 255)', 3, false, false, false, true)
 ON CONFLICT (node_code) DO NOTHING;
+
+-- Sensor node per tray (2 tray). PENTING: node_code HARUS sama dengan nodeId
+-- yang dikirim firmware di CSV. Asumsi saat ini: nodeId 1 = Tray 1, 2 = Tray 2
+-- (ikut penomoran valve). Kalau firmware beda, sesuaikan node_code di sini.
+INSERT INTO sensor_nodes (screenhouse_id, node_code, node_name, location, send_interval_seconds, is_active) VALUES
+(700, '1', 'Sensor Tray 1', 'Tray 1', 60, true),
+(700, '2', 'Sensor Tray 2', 'Tray 2', 60, true)
+ON CONFLICT (node_code) DO NOTHING;

@@ -1,6 +1,7 @@
 const pool = require("../../config/db");
 const { publisher } = require("../../config/redis");
 const { isRabbitMqEnabled } = require("../../config/rabbitmq");
+const { buildClientCapabilities } = require("../../shared/actuatorCapabilities");
 const {
   recordMqttProcessed,
   recordMqttEnqueued,
@@ -247,6 +248,7 @@ async function saveSensorReading({ sensorNode, sinkNode, data }) {
     fan_status: sinkNode?.fan_status ?? null,
     irrigation_status: sinkNode?.irrigation_status ?? null,
     lamp_status: sinkNode?.lamp_status ?? null,
+    capabilities: buildClientCapabilities(sensorNode.screenhouse_id),
     user_id: await cachedOwnerUserId(sensorNode.screenhouse_id),
   };
   await publisher.publish("sensor-update", JSON.stringify(enrichedRow));

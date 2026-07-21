@@ -42,3 +42,5 @@ docs/
 
 # setelan lokal Claude Code (jangan di-push)
 **/.claude/settings.local.json
+
+/services/_archive/

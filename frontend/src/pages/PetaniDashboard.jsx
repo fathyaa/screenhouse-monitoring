@@ -95,7 +95,9 @@ function getScreenhouseCardMeta(sensor, screenhouseAlerts = [], screenhouseStatu
     });
     // Kalau semua alert aktif sudah ditangani otomatis, chip tidak perlu
     // berteriak "Perlu perhatian" — samakan dengan warna kotak pesan di bawahnya.
-    const allAutoHandled = screenhouseAlerts.every((a) => isAutoHandledAlert(a));
+    const allAutoHandled = screenhouseAlerts.every((a) =>
+      isAutoHandledAlert(a, sensor?.capabilities)
+    );
     return {
       status,
       rank: CARD_STATUS_RANK[status],
@@ -589,7 +591,8 @@ function PetaniDashboard() {
               const isPending = sh.status === "pending";
               const needsAttention = isAttentionStatus(status);
 
-              const primaryAutoHandled = primaryAlert && isAutoHandledAlert(primaryAlert);
+              const primaryAutoHandled =
+                primaryAlert && isAutoHandledAlert(primaryAlert, sensor?.capabilities);
 
               return (
                 <div
@@ -699,6 +702,7 @@ function PetaniDashboard() {
                             fan_status={sensor?.fan_status}
                             irrigation_status={sensor?.irrigation_status}
                             lamp_status={sensor?.lamp_status}
+                            capabilities={sensor?.capabilities}
                             autoAlerts={shAlerts}
                             disabled={!sensor}
                             offline={status === "offline"}

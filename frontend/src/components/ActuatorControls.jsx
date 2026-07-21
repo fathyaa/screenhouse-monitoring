@@ -129,6 +129,7 @@ export default function ActuatorControls({
   irrigation_status,
   lamp_status,
   autoAlerts = [],
+  capabilities = null,
   disabled = false,
   compact = false,
   wide = false,
@@ -139,6 +140,13 @@ export default function ActuatorControls({
 }) {
   const [loadingKey, setLoadingKey] = useState(null);
   const [pendingConfirm, setPendingConfirm] = useState(null);
+
+  // Aktuator yang benar-benar ada di perangkat (mis. gh01 cuma irigasi).
+  // capabilities null → tampilkan semua (backward-compatible).
+  const visibleActuators = useMemo(
+    () => ACTUATORS.filter((a) => !capabilities || capabilities[a.key] !== false),
+    [capabilities]
+  );
 
   // Alert auto-handled lama bisa "nyangkut aktif" selamanya kalau screenhouse-nya
   // offline (tidak ada data baru yang membuktikan kondisi sudah normal). Kalau
@@ -151,8 +159,9 @@ export default function ActuatorControls({
         ? {}
         : buildAutoActuatorLocks(autoAlerts, {
             screenhouseId: screenhouseId ?? undefined,
+            capabilities,
           }),
-    [autoAlerts, screenhouseId, offline]
+    [autoAlerts, screenhouseId, offline, capabilities]
   );
 
   const autoBannerMessages = useMemo(
@@ -279,7 +288,7 @@ export default function ActuatorControls({
           compact ? (wide ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-1") : "grid-cols-1 sm:grid-cols-3"
         }`}
       >
-        {ACTUATORS.map(({ key, field, label, icon }) => {
+        {visibleActuators.map(({ key, field, label, icon }) => {
           const lock = autoLocks[key];
           const rawValue = values[field];
           const displayValue =

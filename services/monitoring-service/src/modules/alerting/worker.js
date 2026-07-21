@@ -20,6 +20,11 @@ const HYSTERESIS_RATIO = 0.05;
 // Log per-pesan dimatikan default; set ALERT_DEBUG=true untuk mengaktifkan.
 const DEBUG = process.env.ALERT_DEBUG === "true";
 
+// Kontrol aktuator otomatis dari alert. Set AUTO_ACTUATOR_ENABLED=false untuk
+// menonaktifkan (mis. saat uji koneksi device supaya app tidak menyetir valve).
+// Alert tetap dibuat/di-resolve seperti biasa — yang dimatikan hanya aksi aktuator.
+const AUTO_ACTUATOR_ENABLED = process.env.AUTO_ACTUATOR_ENABLED !== "false";
+
 // Threshold snapshot per screenhouse jarang berubah tapi sebelumnya di-SELECT
 // untuk SETIAP pesan sensor. Cache ber-TTL + invalidasi saat snapshot di-upsert
 // (channel "threshold.updated") memangkas satu round-trip DB per pesan.
@@ -368,7 +373,7 @@ async function handleSensorDataCreated(message) {
     }
   }
 
-  if (violations.length || recoveries.length) {
+  if (AUTO_ACTUATOR_ENABLED && (violations.length || recoveries.length)) {
     // Aksi ON (violation) menang atas OFF (recovery) untuk aktuator yang sama
     // (mis. kipas dipakai bareng air_temperature & air_humidity) — kalau salah
     // satu masih melanggar, jangan sampai recovery parameter lain mematikannya.
