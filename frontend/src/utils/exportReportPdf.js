@@ -24,6 +24,22 @@ const STATUS_COLORS = {
 
 const FOOTER_TEXT = "Digenerate otomatis oleh BibitLive — UPTD Mektan Jabar";
 
+// --- Konstanta layout cetak (A4 landscape) ---------------------------------
+// MARGIN dinaikkan ke 20mm (dari 14mm) sesuai standar laporan akademik/resmi.
+// HEADER_BOTTOM = garis akhir letterhead; CONTENT_TOP = titik mulai isi di
+// halaman lanjutan; FOOTER_RESERVE = pita bawah untuk footer + margin.
+const MARGIN = 20;
+const HEADER_BOTTOM = 38; // y tempat isi halaman pertama sebuah section mulai
+const CONTENT_TOP = 48; // y mulai isi pada halaman lanjutan (beri jarak dari header)
+const FOOTER_RESERVE = 20; // sisakan >=20mm di bawah untuk footer & margin
+
+function contentBottom(doc) {
+  return doc.internal.pageSize.getHeight() - FOOTER_RESERVE;
+}
+function contentWidth(doc) {
+  return doc.internal.pageSize.getWidth() - MARGIN * 2;
+}
+
 function periodLabel(days) {
   if (days === 1) return "24 jam terakhir";
   return `${days} hari terakhir`;
@@ -66,6 +82,27 @@ async function loadLogoDataUrl() {
   }
 }
 
+// --- Mesin paginasi --------------------------------------------------------
+// ctx menyimpan report/meta/logo supaya helper bisa menambah halaman baru
+// (lengkap dengan letterhead) tanpa harus dioper argumen berulang.
+
+/** Tambah halaman baru + gambar header, kembalikan y mulai isi. */
+function startNewPage(doc, ctx) {
+  doc.addPage();
+  drawPageHeader(doc, ctx.report, ctx.meta, ctx.logo);
+  return CONTENT_TOP;
+}
+
+/**
+ * Pastikan ada ruang `needed` mm sebelum menggambar blok berikutnya.
+ * Kalau tidak muat, pindah ke halaman baru dan kembalikan y baru — ini yang
+ * mencegah kartu KPI / grafik / judul section terpotong di batas halaman.
+ */
+function ensureSpace(doc, ctx, y, needed) {
+  if (y + needed > contentBottom(doc)) return startNewPage(doc, ctx);
+  return y;
+}
+
 function drawPageHeader(doc, report, meta, logoDataUrl) {
   const w = doc.internal.pageSize.getWidth();
   const groupLabel = GROUP_LABELS[report.group_by] ?? "Wilayah";
@@ -77,7 +114,7 @@ function drawPageHeader(doc, report, meta, logoDataUrl) {
   doc.setFillColor(...BRAND.dark);
   doc.rect(0, 0, w, 3, "F");
 
-  const leftX = 14;
+  const leftX = MARGIN;
   let textX = leftX;
   if (logoDataUrl) {
     doc.addImage(logoDataUrl, "PNG", leftX, 8, 15, 15);
@@ -118,7 +155,7 @@ function drawPageHeader(doc, report, meta, logoDataUrl) {
     ["Operator", operatorName],
     ["Dicetak", printedAt],
   ];
-  const rightX = w - 14;
+  const rightX = w - MARGIN;
   const labelX = rightX - 58;
   let my = 9;
   metaRows.forEach(([label, value]) => {
@@ -137,12 +174,12 @@ function drawPageHeader(doc, report, meta, logoDataUrl) {
   const ruleY = 28;
   doc.setDrawColor(...BRAND.dark);
   doc.setLineWidth(0.6);
-  doc.line(leftX, ruleY, w - 14, ruleY);
+  doc.line(leftX, ruleY, w - MARGIN, ruleY);
   doc.setLineWidth(0.2);
   doc.setDrawColor(...BRAND.mid);
-  doc.line(leftX, ruleY + 0.9, w - 14, ruleY + 0.9);
+  doc.line(leftX, ruleY + 0.9, w - MARGIN, ruleY + 0.9);
 
-  return 38;
+  return HEADER_BOTTOM;
 }
 
 function drawPageFooter(doc) {
@@ -152,23 +189,38 @@ function drawPageFooter(doc) {
   const totalPages = doc.internal.getNumberOfPages();
 
   doc.setDrawColor(226, 232, 240);
-  doc.line(14, h - 12, w - 14, h - 12);
+  doc.line(MARGIN, h - 12, w - MARGIN, h - 12);
   doc.setTextColor(...BRAND.slate);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
-  doc.text(FOOTER_TEXT, 14, h - 7);
-  doc.text(`Halaman ${pageNum} / ${totalPages}`, w - 14, h - 7, { align: "right" });
+  doc.text(FOOTER_TEXT, MARGIN, h - 7);
+  doc.text(`Halaman ${pageNum} / ${totalPages}`, w - MARGIN, h - 7, { align: "right" });
 }
 
-function drawExecutiveSummary(doc, report, startY) {
+/** Opsi autoTable standar: margin 20mm, header letterhead pada tiap halaman,
+ *  header kolom diulang, dan baris tidak dipecah antar halaman. */
+function tableDefaults(doc, ctx) {
+  return {
+    margin: { left: MARGIN, right: MARGIN, top: CONTENT_TOP, bottom: FOOTER_RESERVE },
+    rowPageBreak: "avoid", // jangan pecah satu baris ke dua halaman
+    showHead: "everyPage", // ulang header kolom di tiap halaman
+    styles: { overflow: "linebreak" }, // bungkus teks panjang otomatis
+    // Letterhead ikut tergambar di halaman lanjutan yang dibuat autoTable.
+    didDrawPage: () => drawPageHeader(doc, ctx.report, ctx.meta, ctx.logo),
+  };
+}
+
+function drawExecutiveSummary(doc, ctx, startY) {
+  const report = ctx.report;
   const w = doc.internal.pageSize.getWidth();
   const totals = report.status_totals ?? {};
   const bibit = report.bibit_summary;
 
+  let y = ensureSpace(doc, ctx, startY, 46); // judul + baris kartu KPI (32) utuh
   doc.setTextColor(...BRAND.dark);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
-  doc.text("Ringkasan Eksekutif", 14, startY);
+  doc.text("Ringkasan Eksekutif", MARGIN, y);
 
   const kpis = report.kpis ?? {};
   const bigCards = [
@@ -188,28 +240,28 @@ function drawExecutiveSummary(doc, report, startY) {
   ];
 
   const gap = 6;
-  const cardW = (w - 28 - gap * 3) / 4;
-  let x = 14;
-  const y = startY + 6;
+  const cardW = (contentWidth(doc) - gap * 3) / 4;
+  let x = MARGIN;
+  const cardsY = y + 6;
 
   bigCards.forEach((card) => {
     doc.setFillColor(...BRAND.light);
     doc.setDrawColor(220, 228, 220);
-    doc.roundedRect(x, y, cardW, 32, 2, 2, "FD");
+    doc.roundedRect(x, cardsY, cardW, 32, 2, 2, "FD");
     doc.setFillColor(...card.color);
-    doc.circle(x + 8, y + 10, 3, "F");
+    doc.circle(x + 8, cardsY + 10, 3, "F");
     doc.setTextColor(...BRAND.slate);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
-    doc.text(card.label, x + 14, y + 11);
+    doc.text(card.label, x + 14, cardsY + 11, { maxWidth: cardW - 16 });
     doc.setTextColor(30, 41, 59);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(22);
-    doc.text(card.value, x + 14, y + 24);
+    doc.text(card.value, x + 14, cardsY + 24);
     x += cardW + gap;
   });
 
-  let nextY = y + 40;
+  let nextY = cardsY + 40;
 
   // Kotak insight — satu kalimat ringkas, sebelum detail mentah di bawahnya.
   // PENTING: set fontSize dulu; kalau tidak, teks mewarisi 22pt dari kartu KPI
@@ -219,21 +271,25 @@ function drawExecutiveSummary(doc, report, startY) {
   const INSIGHT_LH = 5;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(INSIGHT_FS);
-  const insightLines = doc.splitTextToSize(insightText, w - 40);
+  const insightLines = doc.splitTextToSize(insightText, w - MARGIN * 2 - 12);
   const insightH = Math.max(12, 5 + insightLines.length * INSIGHT_LH);
+  nextY = ensureSpace(doc, ctx, nextY, insightH + 6);
   doc.setFillColor(...BRAND.light);
   doc.setDrawColor(187, 240, 208);
-  doc.roundedRect(14, nextY, w - 28, insightH, 2, 2, "FD");
+  doc.roundedRect(MARGIN, nextY, contentWidth(doc), insightH, 2, 2, "FD");
   doc.setFillColor(...BRAND.mid);
-  doc.circle(19, nextY + insightH / 2, 1.4, "F");
+  doc.circle(MARGIN + 5, nextY + insightH / 2, 1.4, "F");
   doc.setTextColor(20, 83, 45);
-  doc.text(insightLines, 24, nextY + 5.5, { lineHeightFactor: INSIGHT_LH / 3.5 });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(INSIGHT_FS);
+  doc.text(insightLines, MARGIN + 10, nextY + 5.5, { lineHeightFactor: INSIGHT_LH / 3.5 });
   nextY += insightH + 6;
 
+  nextY = ensureSpace(doc, ctx, nextY, 12);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.setTextColor(...BRAND.dark);
-  doc.text("Status Operasional", 14, nextY);
+  doc.text("Status Operasional", MARGIN, nextY);
   nextY += 5;
 
   doc.setFont("helvetica", "normal");
@@ -241,21 +297,24 @@ function drawExecutiveSummary(doc, report, startY) {
   doc.setTextColor(51, 65, 85);
   doc.text(
     `Sehat: ${totals.healthy ?? 0}, Peringatan: ${totals.warning ?? 0}, Kritis: ${totals.critical ?? 0}, Tidak terhubung: ${totals.offline ?? 0}`,
-    14,
+    MARGIN,
     nextY
   );
   nextY += 6;
 
   if (bibit) {
+    nextY = ensureSpace(doc, ctx, nextY, 22);
     doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
     doc.setTextColor(...BRAND.dark);
-    doc.text("Progres Pembibitan", 14, nextY);
+    doc.text("Progres Pembibitan", MARGIN, nextY);
     nextY += 5;
     doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
     doc.setTextColor(51, 65, 85);
     doc.text(
       `On track: ${bibit.on_track}  ·  Terlambat: ${bibit.terlambat}  ·  Perlu evaluasi: ${bibit.perlu_evaluasi}  ·  Belum diisi: ${bibit.belum_disi ?? 0}`,
-      14,
+      MARGIN,
       nextY
     );
     nextY += 6;
@@ -263,13 +322,15 @@ function drawExecutiveSummary(doc, report, startY) {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
       if (bibit.avg_cycle_duration_days != null) {
-        doc.text(`Rata-rata durasi siklus: ${bibit.avg_cycle_duration_days} hari`, 14, nextY);
+        nextY = ensureSpace(doc, ctx, nextY, 6);
+        doc.text(`Rata-rata durasi siklus: ${bibit.avg_cycle_duration_days} hari`, MARGIN, nextY);
         nextY += 5;
       }
       if (bibit.most_stable_varietas) {
+        nextY = ensureSpace(doc, ctx, nextY, 6);
         doc.text(
           `Varietas paling stabil: ${bibit.most_stable_varietas.nama} (skor rata-rata ${Math.round(bibit.most_stable_varietas.avg_score)})`,
-          14,
+          MARGIN,
           nextY
         );
         nextY += 5;
@@ -278,28 +339,36 @@ function drawExecutiveSummary(doc, report, startY) {
   }
 
   if (report.varietas_distribution?.length) {
+    nextY = ensureSpace(doc, ctx, nextY, 16);
     doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
     doc.setTextColor(...BRAND.dark);
-    doc.text("Distribusi Varietas", 14, nextY);
+    doc.text("Distribusi Varietas", MARGIN, nextY);
     nextY += 5;
     doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
     doc.setTextColor(51, 65, 85);
     const line = report.varietas_distribution
       .map((v) => `${v.nama}: ${v.count}`)
       .join("  ·  ");
-    doc.text(line, 14, nextY, { maxWidth: w - 28 });
-    nextY += 8;
+    const distLines = doc.splitTextToSize(line, contentWidth(doc));
+    doc.text(distLines, MARGIN, nextY);
+    nextY += distLines.length * 5 + 3;
   }
 
   if (report.growth) {
-    nextY = drawGrowthNote(doc, report, nextY);
+    nextY = drawGrowthNote(doc, ctx, nextY);
   }
 
   if (report.period_comparison?.alerts_delta != null) {
     const delta = report.period_comparison.alerts_delta;
     const sign = delta >= 0 ? "+" : "";
+    nextY = ensureSpace(doc, ctx, nextY, 8);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
     doc.setTextColor(...BRAND.slate);
-    doc.text(`Perubahan alert vs periode sebelumnya: ${sign}${delta}`, 14, nextY);
+    doc.text(`Perubahan alert vs periode sebelumnya: ${sign}${delta}`, MARGIN, nextY);
+    nextY += 5;
   }
 
   return nextY + 6;
@@ -310,26 +379,28 @@ function drawExecutiveSummary(doc, report, startY) {
  * yang sebelumnya tersebar di 2 halaman terpisah. Ini data pendukung, bukan sorotan utama,
  * jadi ditaruh di akhir setelah ringkasan & grafik.
  */
-function drawAppendixPage(doc, report) {
+function drawAppendixPage(doc, ctx) {
+  const report = ctx.report;
   const groupLabel = GROUP_LABELS[report.group_by] ?? "Wilayah";
-  let y = 48;
+  let y = CONTENT_TOP;
 
   doc.setTextColor(...BRAND.dark);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
-  doc.text("Lampiran — Data Mentah", 14, y);
+  doc.text("Lampiran — Data Mentah", MARGIN, y);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(...BRAND.slate);
-  doc.text("Rincian pendukung di balik ringkasan & grafik pada halaman sebelumnya.", 14, y + 5);
+  doc.text("Rincian pendukung di balik ringkasan & grafik pada halaman sebelumnya.", MARGIN, y + 5);
   y += 10;
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9.5);
   doc.setTextColor(...BRAND.dark);
-  doc.text(`Status & Uptime per ${groupLabel}`, 14, y);
+  doc.text(`Status & Uptime per ${groupLabel}`, MARGIN, y);
 
   autoTable(doc, {
+    ...tableDefaults(doc, ctx),
     startY: y + 3,
     head: [[groupLabel, "Total", "Sehat", "Peringatan", "Kritis", "Tidak terhubung", "Waktu aktif", "Skor rata-rata"]],
     body: (report.regions ?? []).map((row) => [
@@ -355,17 +426,18 @@ function drawAppendixPage(doc, report) {
       6: { halign: "center" },
       7: { halign: "center", fontStyle: "bold" },
     },
-    margin: { left: 14, right: 14 },
   });
 
   y = doc.lastAutoTable.finalY + 8;
+  y = ensureSpace(doc, ctx, y, 20); // judul + minimal header tabel berikutnya
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9.5);
   doc.setTextColor(...BRAND.dark);
-  doc.text(`Data Sensor Rata-rata per ${groupLabel}`, 14, y);
+  doc.text(`Data Sensor Rata-rata per ${groupLabel}`, MARGIN, y);
 
   autoTable(doc, {
+    ...tableDefaults(doc, ctx),
     startY: y + 3,
     head: [[groupLabel, "N", "P", "K", "Kelembapan", "Suhu tanah", "Alert"]],
     body: (report.regions ?? []).map((row) => [
@@ -380,22 +452,20 @@ function drawAppendixPage(doc, report) {
     theme: "grid",
     headStyles: { fillColor: BRAND.mid, textColor: BRAND.white, fontSize: 7.5, halign: "center" },
     bodyStyles: { fontSize: 7.5 },
-    margin: { left: 14, right: 14 },
+    columnStyles: { 0: { cellWidth: 52 } },
   });
 
   if (report.varietas_duration_stats?.length) {
     y = doc.lastAutoTable.finalY + 8;
-    if (y > doc.internal.pageSize.getHeight() - 40) {
-      doc.addPage();
-      y = 48;
-    }
+    y = ensureSpace(doc, ctx, y, 20);
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9.5);
     doc.setTextColor(...BRAND.dark);
-    doc.text("Durasi Pembibitan (dari Siklus Selesai) vs Target (per Varietas)", 14, y);
+    doc.text("Durasi Pembibitan (dari Siklus Selesai) vs Target (per Varietas)", MARGIN, y);
 
     autoTable(doc, {
+      ...tableDefaults(doc, ctx),
       startY: y + 3,
       head: [["Varietas", "Siklus selesai", "Rata-rata aktual", "Target", "Selisih"]],
       body: report.varietas_duration_stats.map((row) => [
@@ -423,15 +493,15 @@ function drawAppendixPage(doc, report) {
         if (raw > 0) data.cell.styles.textColor = STATUS_COLORS.warning;
         else if (raw < 0) data.cell.styles.textColor = STATUS_COLORS.healthy;
       },
-      margin: { left: 14, right: 14 },
     });
   }
 }
 
 const SEVERITY_ORDER = { critical: 0, offline: 1, warning: 2, healthy: 3 };
 
-function drawProblematicTablePage(doc, report) {
-  const y = 48;
+function drawProblematicTablePage(doc, ctx) {
+  const report = ctx.report;
+  const y = CONTENT_TOP;
   const items = [...(report.problematic_screenhouses ?? [])].sort(
     (a, b) => (SEVERITY_ORDER[a.status] ?? 9) - (SEVERITY_ORDER[b.status] ?? 9)
   );
@@ -439,21 +509,22 @@ function drawProblematicTablePage(doc, report) {
   doc.setTextColor(...BRAND.dark);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
-  doc.text("Screenhouse Perlu Tindak Lanjut", 14, y);
+  doc.text("Screenhouse Perlu Tindak Lanjut", MARGIN, y);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(...BRAND.slate);
-  doc.text("Diurutkan dari paling mendesak — garis warna di kiri menandai tingkat keparahan.", 14, y + 5);
+  doc.text("Diurutkan dari paling mendesak — garis warna di kiri menandai tingkat keparahan.", MARGIN, y + 5);
 
   if (!items.length) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
     doc.setTextColor(...BRAND.slate);
-    doc.text("Tidak ada screenhouse yang memerlukan tindak lanjut prioritas.", 14, y + 14);
+    doc.text("Tidak ada screenhouse yang memerlukan tindak lanjut prioritas.", MARGIN, y + 14);
     return;
   }
 
   autoTable(doc, {
+    ...tableDefaults(doc, ctx),
     startY: y + 9,
     head: [["Screenhouse", "Petani", "Telepon", "Varietas", "Skor", "Estimasi siap", "Status", "Alert"]],
     body: items.map((row) => [
@@ -479,7 +550,6 @@ function drawProblematicTablePage(doc, report) {
       6: { halign: "center", cellWidth: 22 },
       7: { halign: "center", cellWidth: 14 },
     },
-    margin: { left: 14, right: 14 },
     didDrawCell: (data) => {
       if (data.section !== "body" || data.column.index !== 0) return;
       const row = items[data.row.index];
@@ -490,27 +560,26 @@ function drawProblematicTablePage(doc, report) {
   });
 }
 
-function drawHorizontalBarChart(doc, {
+function drawHorizontalBarChart(doc, ctx, {
   startY,
   items,
   valueKey = "count",
   labelKey = "name",
   barColor = [37, 99, 235],
-  maxBarW = null,
   valueSuffix = "",
 }) {
   if (!items.length) return startY;
 
-  const pageW = doc.internal.pageSize.getWidth();
-  const chartX = 14;
-  const chartW = maxBarW ?? pageW - 28;
+  const chartX = MARGIN;
   const rowH = 10;
   const labelW = 52;
-  const barAreaW = chartW - labelW - 16;
+  const barAreaW = contentWidth(doc) - labelW - 16;
   const maxVal = Math.max(...items.map((i) => Number(i[valueKey]) || 0), 1);
   let y = startY;
 
   items.forEach((item) => {
+    // Bar per baris tidak boleh terpotong di batas halaman.
+    y = ensureSpace(doc, ctx, y, rowH);
     const val = Number(item[valueKey]) || 0;
     const label = String(item[labelKey] ?? "");
     const barW = (val / maxVal) * barAreaW;
@@ -548,9 +617,8 @@ function drawVerticalBarChart(doc, {
 }) {
   if (!items.length) return startY;
 
-  const pageW = doc.internal.pageSize.getWidth();
-  const chartX = 14;
-  const chartW = pageW - 28;
+  const chartX = MARGIN;
+  const chartW = contentWidth(doc);
   const chartY = startY;
   const maxVal = Math.max(...items.map((i) => Number(i[valueKey]) || 0), 1);
   const barGap = 3;
@@ -590,14 +658,13 @@ function drawVerticalBarChart(doc, {
   return chartY + chartH + 8;
 }
 
-function drawStackedStatusChart(doc, report, startY) {
+function drawStackedStatusChart(doc, ctx, report, startY) {
   const regions = (report.regions ?? []).slice(0, 8);
   if (!regions.length) return startY;
 
-  const pageW = doc.internal.pageSize.getWidth();
-  const chartX = 14;
+  const chartX = MARGIN;
   const labelW = 48;
-  const barAreaW = pageW - 28 - labelW - 8;
+  const barAreaW = contentWidth(doc) - labelW - 8;
   const rowH = 11;
   let y = startY;
 
@@ -609,6 +676,7 @@ function drawStackedStatusChart(doc, report, startY) {
   ];
 
   regions.forEach((row) => {
+    y = ensureSpace(doc, ctx, y, rowH);
     const total = row.total || 1;
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7.5);
@@ -638,22 +706,30 @@ function drawStackedStatusChart(doc, report, startY) {
   return y + 4;
 }
 
-function drawChartsPage(doc, report) {
-  let y = 48;
+function drawChartsPage(doc, ctx) {
+  const report = ctx.report;
+  let y = CONTENT_TOP;
   const groupLabel = GROUP_LABELS[report.group_by] ?? "Wilayah";
 
   doc.setTextColor(...BRAND.dark);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
-  doc.text("Grafik Ringkasan", 14, y);
+  doc.text("Grafik Ringkasan", MARGIN, y);
   y += 8;
 
-  if (report.varietas_distribution?.length) {
+  // Helper: judul chart + baris pertama tetap bersama (tidak stranded di bawah).
+  const chartTitle = (text, firstBlock) => {
+    y = ensureSpace(doc, ctx, y, 5 + firstBlock);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
-    doc.text("Distribusi Varietas", 14, y);
+    doc.setTextColor(...BRAND.dark);
+    doc.text(text, MARGIN, y);
     y += 5;
-    y = drawHorizontalBarChart(doc, {
+  };
+
+  if (report.varietas_distribution?.length) {
+    chartTitle("Distribusi Varietas", 10);
+    y = drawHorizontalBarChart(doc, ctx, {
       startY: y,
       items: report.varietas_distribution.map((v) => ({ name: v.nama, count: v.count })),
       barColor: BRAND.mid,
@@ -661,11 +737,8 @@ function drawChartsPage(doc, report) {
     y += 4;
   }
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.text(`Status Screenhouse per ${groupLabel}`, 14, y);
-  y += 5;
-  y = drawStackedStatusChart(doc, report, y);
+  chartTitle(`Status Screenhouse per ${groupLabel}`, 11);
+  y = drawStackedStatusChart(doc, ctx, report, y);
   y += 6;
 
   const sensorRows = (report.regions ?? [])
@@ -678,10 +751,7 @@ function drawChartsPage(doc, report) {
     }));
 
   if (sensorRows.length) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.text("Rata-rata Kelembapan Tanah (%)", 14, y);
-    y += 5;
+    chartTitle("Rata-rata Kelembapan Tanah (%)", 63); // kotak chart 55 utuh
     y = drawVerticalBarChart(doc, {
       startY: y,
       items: sensorRows.map((r) => ({ name: r.name, count: r.moisture ?? 0 })),
@@ -690,10 +760,7 @@ function drawChartsPage(doc, report) {
     });
     y += 4;
 
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.text("Rata-rata Suhu Tanah (°C)", 14, y);
-    y += 5;
+    chartTitle("Rata-rata Suhu Tanah (°C)", 63);
     y = drawVerticalBarChart(doc, {
       startY: y,
       items: sensorRows.map((r) => ({ name: r.name, count: r.temp ?? 0 })),
@@ -704,11 +771,8 @@ function drawChartsPage(doc, report) {
   }
 
   if (report.top_alert_params?.length) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.text("Parameter Alert Terbanyak", 14, y);
-    y += 5;
-    drawHorizontalBarChart(doc, {
+    chartTitle("Parameter Alert Terbanyak", 10);
+    drawHorizontalBarChart(doc, ctx, {
       startY: y,
       items: report.top_alert_params.map((p) => ({ name: p.label, count: p.count })),
       barColor: STATUS_COLORS.critical,
@@ -716,7 +780,8 @@ function drawChartsPage(doc, report) {
   }
 }
 
-function drawGrowthNote(doc, report, startY) {
+function drawGrowthNote(doc, ctx, startY) {
+  const report = ctx.report;
   const growth = report.growth;
   if (!growth) return startY;
 
@@ -727,55 +792,57 @@ function drawGrowthNote(doc, report, startY) {
     growth.farmers_rejected > 0;
   if (!hasActivity) return startY;
 
+  let y = ensureSpace(doc, ctx, startY, 16);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.setTextColor(...BRAND.dark);
-  doc.text("Aktivitas Registrasi dalam Periode", 14, startY);
-  let y = startY + 5;
+  doc.text("Aktivitas Registrasi dalam Periode", MARGIN, y);
+  y += 5;
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(51, 65, 85);
-  doc.text(
-    `Unit screenhouse terdaftar: ${growth.new_screenhouses}  ·  Akun petani disetujui: ${growth.farmers_approved}  ·  Menunggu: ${growth.farmers_pending}  ·  Ditolak: ${growth.farmers_rejected ?? 0}`,
-    14,
-    y,
-    { maxWidth: doc.internal.pageSize.getWidth() - 28 }
-  );
-  y += 5;
+  const growthText = `Unit screenhouse terdaftar: ${growth.new_screenhouses}  ·  Akun petani disetujui: ${growth.farmers_approved}  ·  Menunggu: ${growth.farmers_pending}  ·  Ditolak: ${growth.farmers_rejected ?? 0}`;
+  const growthLines = doc.splitTextToSize(growthText, contentWidth(doc));
+  doc.text(growthLines, MARGIN, y);
+  y += growthLines.length * 5;
   if (growth.distinct_petani_owners > 0) {
-    doc.text(`Terhubung ke ${growth.distinct_petani_owners} petani`, 14, y);
+    y = ensureSpace(doc, ctx, y, 6);
+    doc.text(`Terhubung ke ${growth.distinct_petani_owners} petani`, MARGIN, y);
     y += 5;
   }
   if (growth.note) {
     doc.setTextColor(...BRAND.slate);
-    doc.text(growth.note, 14, y, { maxWidth: doc.internal.pageSize.getWidth() - 28 });
-    y += 8;
+    const noteLines = doc.splitTextToSize(growth.note, contentWidth(doc));
+    y = ensureSpace(doc, ctx, y, noteLines.length * 5 + 3);
+    doc.text(noteLines, MARGIN, y);
+    y += noteLines.length * 5 + 3;
   }
   return y + 2;
 }
 
-function drawAlertTrendPage(doc, report) {
+function drawAlertTrendPage(doc, ctx) {
+  const report = ctx.report;
   const trend = report.alert_trend ?? [];
-  const y = 48;
+  const y = CONTENT_TOP;
 
   doc.setTextColor(...BRAND.dark);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
-  doc.text(`Tren Alert Harian (${periodLabel(report.period_days)})`, 14, y);
+  doc.text(`Tren Alert Harian (${periodLabel(report.period_days)})`, MARGIN, y);
 
   if (!trend.length) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
     doc.setTextColor(...BRAND.slate);
-    doc.text("Belum ada alert dalam periode ini.", 14, y + 8);
+    doc.text("Belum ada alert dalam periode ini.", MARGIN, y + 8);
     return;
   }
 
   const maxCount = Math.max(...trend.map((t) => t.count), 1);
-  const chartX = 14;
+  const chartX = MARGIN;
   const chartY = y + 10;
-  const chartW = doc.internal.pageSize.getWidth() - 28;
+  const chartW = contentWidth(doc);
   const chartH = 70;
   const barGap = 2;
   const barW = Math.max(4, (chartW - barGap * (trend.length - 1)) / trend.length);
@@ -802,6 +869,7 @@ function drawAlertTrendPage(doc, report) {
   });
 
   autoTable(doc, {
+    ...tableDefaults(doc, ctx),
     startY: chartY + chartH + 8,
     head: [["Tanggal", "Jumlah Alert"]],
     body: trend.map((row) => [
@@ -816,7 +884,6 @@ function drawAlertTrendPage(doc, report) {
     theme: "striped",
     headStyles: { fillColor: BRAND.dark, textColor: BRAND.white, fontSize: 8 },
     bodyStyles: { fontSize: 8 },
-    margin: { left: 14, right: 14 },
   });
 }
 
@@ -825,25 +892,26 @@ export async function exportOperatorReportPdf(report, meta = {}) {
 
   const logoDataUrl = await loadLogoDataUrl();
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const ctx = { report, meta, logo: logoDataUrl };
 
   doc.setPage(1);
-  drawExecutiveSummary(doc, report, drawPageHeader(doc, report, meta, logoDataUrl));
+  drawExecutiveSummary(doc, ctx, drawPageHeader(doc, report, meta, logoDataUrl));
 
   doc.addPage();
   drawPageHeader(doc, report, meta, logoDataUrl);
-  drawProblematicTablePage(doc, report);
+  drawProblematicTablePage(doc, ctx);
 
   doc.addPage();
   drawPageHeader(doc, report, meta, logoDataUrl);
-  drawChartsPage(doc, report);
+  drawChartsPage(doc, ctx);
 
   doc.addPage();
   drawPageHeader(doc, report, meta, logoDataUrl);
-  drawAlertTrendPage(doc, report);
+  drawAlertTrendPage(doc, ctx);
 
   doc.addPage();
   drawPageHeader(doc, report, meta, logoDataUrl);
-  drawAppendixPage(doc, report);
+  drawAppendixPage(doc, ctx);
 
   // Footer digambar terakhir agar nomor "Halaman X / N" memakai total final.
   const totalPages = doc.internal.getNumberOfPages();
