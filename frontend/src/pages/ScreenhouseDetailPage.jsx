@@ -313,9 +313,15 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
     [alerts, id]
   );
 
+  const actuatorCapabilities = dashboard?.sinkNode?.capabilities ?? null;
+
   const autoLocks = useMemo(
-    () => buildAutoActuatorLocks(screenhouseAutoAlerts, { screenhouseId: Number(id) }),
-    [screenhouseAutoAlerts, id]
+    () =>
+      buildAutoActuatorLocks(screenhouseAutoAlerts, {
+        screenhouseId: Number(id),
+        capabilities: actuatorCapabilities,
+      }),
+    [screenhouseAutoAlerts, id, actuatorCapabilities]
   );
 
   useEffect(() => {
@@ -668,7 +674,7 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
   // jadi status + jumlah pada banner harus memakai gabungan keduanya biar konsisten
   // (dulu: tone "warning" tapi teks "0 hal perlu perhatian").
   const attentionAlerts = screenhouseAutoAlerts.filter(
-    (a) => !isAutoHandledAlert(a)
+    (a) => !isAutoHandledAlert(a, actuatorCapabilities)
   );
   const attentionCount = Math.max(flaggedRollup.length, attentionAlerts.length);
   const rollupStatus =
@@ -1038,6 +1044,7 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
                 fan_status={dashboard.sinkNode.fan_status}
                 irrigation_status={dashboard.sinkNode.irrigation_status}
                 lamp_status={dashboard.sinkNode.lamp_status}
+                capabilities={actuatorCapabilities}
                 autoAlerts={screenhouseAutoAlerts}
                 disabled={!dashboard.sinkNode.is_active}
                 offline={screenhouseOffline}

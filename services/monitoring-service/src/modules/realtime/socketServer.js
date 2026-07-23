@@ -1,4 +1,5 @@
 const { Server } = require("socket.io");
+const { buildClientCapabilities } = require("../../shared/actuatorCapabilities");
 
 // Log broadcast per-pesan dimatikan default (hot path saat throughput tinggi);
 // set SOCKET_DEBUG=true untuk mengaktifkan lagi.
@@ -43,7 +44,13 @@ function attachSocketServer(httpServer, subscriber) {
         console.warn("Alert tanpa user_id — tidak di-broadcast");
         return;
       }
-      io.to(`user:${ownerId}`).emit("alert-update", alert);
+      // Sertakan kapabilitas aktuator seperti endpoint daftar alert (alertController)
+      // supaya frontend bisa menilai "ditangani otomatis" dengan benar untuk alert
+      // realtime juga — mis. gh01 yang aktuator otomatisnya dimatikan.
+      io.to(`user:${ownerId}`).emit("alert-update", {
+        ...alert,
+        capabilities: buildClientCapabilities(alert.screenhouse_id),
+      });
       console.log(`Alert dikirim ke user:${ownerId}`);
     } catch (err) {
       console.error("[socket] alert-created:", err.message);
@@ -55,7 +62,10 @@ function attachSocketServer(httpServer, subscriber) {
       const alert = JSON.parse(message);
       const ownerId = alert.user_id;
       if (!ownerId) return;
-      io.to(`user:${ownerId}`).emit("alert-resolved", alert);
+      io.to(`user:${ownerId}`).emit("alert-resolved", {
+        ...alert,
+        capabilities: buildClientCapabilities(alert.screenhouse_id),
+      });
       console.log(`Alert resolved ke user:${ownerId}`);
     } catch (err) {
       console.error("[socket] alert-resolved:", err.message);

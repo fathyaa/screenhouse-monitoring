@@ -329,8 +329,10 @@ function NotifikasiPage() {
 }
 
 function AlertRow({ alert, blinkId, resolvingAlertId, onOpenResolve, navigate }) {
-    const autoHandled = isAutoHandledAlert(alert);
-    const autoHandledExplanation = autoHandled ? getAutoHandledExplanation(alert) : null;
+    const autoHandled = isAutoHandledAlert(alert, alert.capabilities);
+    const autoHandledExplanation = autoHandled
+      ? getAutoHandledExplanation(alert, alert.capabilities)
+      : null;
     const advice = alert.status === "active" && !autoHandled ? getAdviceForAlert(alert) : null;
     const category = getAlertCategory(alert);
     const categoryLabel = getAlertCategoryLabel(category);

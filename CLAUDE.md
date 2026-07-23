@@ -26,6 +26,18 @@ Backend generate pesan alert dengan pola persis: `"{label} di bawah batas minimu
 
 `services/monitoring-service/src/modules/alerting/worker.js` pakai margin 5% (`HYSTERESIS_RATIO`) antara nilai pelanggaran dan nilai pemulihan supaya alert tidak flapping (create → resolve → create berulang) saat sensor berosilasi di sekitar threshold.
 
+## gh01: slot aktuator `fan` dipinjam untuk katup irigasi tray 2
+
+Perangkat gh01 (screenhouse 700) punya **dua katup irigasi** — `valve1` = tray 1, `valve2` = tray 2 — sementara `sink_nodes` cuma punya tiga kolom status (`fan_status`, `irrigation_status`, `lamp_status`). Supaya tidak perlu kolom/migrasi baru, katup tray 2 memakai slot `fan_status`. Pemetaannya di `deviceBridge.js` (`VALVE_BY_ACTUATOR` / `ACTUATOR_BY_VALVE`).
+
+Konsekuensi yang wajib dijaga kalau menyentuh area ini:
+
+1. **gh01 harus tetap ada di `AUTO_ACTUATOR_EXCLUDE`.** Rule otomatis di `shared/actuatorRules.js` memetakan suhu/kelembapan udara tinggi → `fan: true`; di gh01 itu berarti membuka katup air tray 2 (tray kebanjiran di hari panas). Rule otomatis juga belum tahu tray mana yang kering — alert membawa `sensor_node_id`, tapi `setActuators` masih per-screenhouse — jadi irigasi gh01 sengaja manual dulu.
+2. **Label ke petani di-override lewat env**, bukan hardcode: `ACTUATOR_CAPABILITIES=700:irrigation=Irigasi Tray 1|fan=Irigasi Tray 2`. Frontend (`ActuatorControls.jsx`) memilih ikon & kalimat konfirmasi dari label itu, jadi tombolnya tidak pernah tampil sebagai "Kipas".
+3. **Env `ACTUATOR_CAPABILITIES` harus sama persis di kedua service.** app-service memakainya (`shared/actuatorCapabilities.js`, parser terpisah tanpa label) supaya laporan wilayah & `analytics.actuators[]` tidak menghitung slot pinjaman itu sebagai kipas.
+
+Kalau nanti butuh irigasi otomatis per tray, jalan yang benar adalah kolom kanal (mis. `irrigation_channels JSONB` di `sink_nodes` + `actuator_logs`) dengan `irrigation_status` tetap jadi agregat OR — bukan menambah slot pinjaman baru.
+
 ## Data siklus semai (`semai_cycles.analytics`)
 
 Kolom JSONB, dihasilkan `cycleAnalyticsService.js`, struktur: `{durasi, uptime, stability[], stress, actuators[], grade, computed_at}`. Dipakai di halaman Riwayat Semai & Detail Siklus petani, serta laporan operator (termasuk export PDF).

@@ -7,7 +7,18 @@ export const ACTUATOR_HINTS = {
   light_intensity: { low: "Lampu dinyalakan otomatis", high: "Lampu dimatikan otomatis" },
 };
 
-export function getActuatorHintForAlert(alert) {
+/**
+ * Aktuator untuk hint ini tersedia di perangkat?
+ * capabilities = { fan, irrigation, lamp } (dari API). null/undefined → anggap
+ * tersedia (backward-compatible untuk screenhouse tanpa data kapabilitas).
+ */
+function isActuatorAvailable(hint, capabilities) {
+  if (!capabilities) return true;
+  const key = getActuatorKeyFromHint(hint);
+  return !key || capabilities[key] !== false;
+}
+
+export function getActuatorHintForAlert(alert, capabilities = null) {
   const lower = alert?.message?.toLowerCase() ?? "";
   const direction = lower.includes("maksimum") || lower.includes("melebihi")
     ? "high"
@@ -24,23 +35,30 @@ export function getActuatorHintForAlert(alert) {
     : lower.includes("intensitas cahaya") ? "light_intensity"
     : null;
 
-  return param ? ACTUATOR_HINTS[param]?.[direction] ?? null : null;
+  const hint = param ? ACTUATOR_HINTS[param]?.[direction] ?? null : null;
+  // Auto-aktuator dimatikan global (AUTO_ACTUATOR_ENABLED=false) → tidak ada yang
+  // ditangani otomatis, jadi tak ada lock; tampilkan saran manual saja.
+  if (hint && capabilities && capabilities.autoEnabled === false) return null;
+  // Aktuator tak ada di perangkat (mis. gh01 tanpa kipas/lampu) → bukan
+  // "ditangani otomatis"; biarkan UI menampilkan saran manual.
+  if (hint && !isActuatorAvailable(hint, capabilities)) return null;
+  return hint;
 }
 
 /** True jika alert ini ditangani sistem (kipas/irigasi/lampu), bukan manual petani. */
-export function isAutoHandledAlert(alert) {
-  return getActuatorHintForAlert(alert) != null;
+export function isAutoHandledAlert(alert, capabilities = null) {
+  return getActuatorHintForAlert(alert, capabilities) != null;
 }
 
 /** Teks notifikasi bila kondisi ditangani aktuator otomatis (kipas/irigasi/lampu). */
-export function getAutoHandledNotice(alert) {
-  const hint = getActuatorHintForAlert(alert);
+export function getAutoHandledNotice(alert, capabilities = null) {
+  const hint = getActuatorHintForAlert(alert, capabilities);
   return hint ? `Ditangani otomatis: ${hint}` : null;
 }
 
 /** Penjelasan singkat untuk petani — siapa, apa, kapan. */
-export function getAutoHandledExplanation(alert) {
-  const hint = getActuatorHintForAlert(alert);
+export function getAutoHandledExplanation(alert, capabilities = null) {
+  const hint = getActuatorHintForAlert(alert, capabilities);
   if (!hint) return null;
 
   const at = alert?.created_at
@@ -107,7 +125,7 @@ export function getAutoControlBannerText(alert) {
  * Map aktuator → lock otomatis dari alert aktif screenhouse.
  * @returns {Record<string, { message: string, expectedOn: boolean }>}
  */
-export function buildAutoActuatorLocks(alerts = [], { screenhouseId } = {}) {
+export function buildAutoActuatorLocks(alerts = [], { screenhouseId, capabilities = null } = {}) {
   const locks = {};
 
   for (const alert of alerts) {
@@ -119,7 +137,7 @@ export function buildAutoActuatorLocks(alerts = [], { screenhouseId } = {}) {
       continue;
     }
 
-    const hint = getActuatorHintForAlert(alert);
+    const hint = getActuatorHintForAlert(alert, capabilities);
     const key = getActuatorKeyFromHint(hint);
     if (!key) continue;
 
@@ -137,9 +155,12 @@ export function buildAutoActuatorLocks(alerts = [], { screenhouseId } = {}) {
  * ditangani otomatis — dipakai ParamHealthCards untuk mengganti saran manual
  * jadi info "ditangani otomatis" saat aktuator terkait sudah terkunci aktif.
  */
-export function getParamAutoHandledHint(paramKey, status, autoLocks = {}) {
+export function getParamAutoHandledHint(paramKey, status, autoLocks = {}, capabilities = null) {
   const hint = ACTUATOR_HINTS[paramKey]?.[status];
   if (!hint) return null;
+
+  // Aktuator tak ada di perangkat → tidak "ditangani otomatis" (fallback ke saran manual).
+  if (!isActuatorAvailable(hint, capabilities)) return null;
 
   const actuatorKey = getActuatorKeyFromHint(hint);
   const lock = autoLocks[actuatorKey];

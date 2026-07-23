@@ -1,5 +1,10 @@
 const pool = require("../../config/db");
 const { publishTopic } = require("../../config/mqttClient");
+const { publishValveControl } = require("./deviceBridge");
+const {
+  getActuatorCapabilities,
+  isAutoActuatorEnabled,
+} = require("../../shared/actuatorCapabilities");
 const { publisher } = require("../../config/redis");
 
 const INSERT_ACTUATOR_LOG = `
@@ -54,6 +59,10 @@ const SCREENHOUSE_ONLINE_SQL = `
 `;
 
 async function getActiveAutoActuatorLocks(screenhouseId) {
+  // Auto-aktuator nonaktif (global atau khusus screenhouse ini) → tidak ada yang
+  // mengontrol otomatis, jadi tidak ada toggle yang perlu dikunci.
+  if (!isAutoActuatorEnabled(screenhouseId)) return {};
+
   const onlineResult = await pool.query(
     `SELECT ${SCREENHOUSE_ONLINE_SQL} AS online`,
     [screenhouseId]
@@ -77,6 +86,13 @@ async function getActiveAutoActuatorLocks(screenhouseId) {
     if (actions.fan != null) locks.fan = actions.fan;
     if (actions.irrigation != null) locks.irrigation = actions.irrigation;
     if (actions.lamp != null) locks.lamp = actions.lamp;
+  }
+
+  // Jangan mengunci aktuator yang tidak ada di perangkat (mis. gh01 tanpa
+  // kipas/lampu) — kalau tidak, toggle terkunci padahal tak ada yang mengontrol.
+  const caps = getActuatorCapabilities(screenhouseId);
+  for (const key of ["fan", "irrigation", "lamp"]) {
+    if (!caps[key]) delete locks[key];
   }
 
   return locks;
@@ -119,6 +135,16 @@ async function setActuators({
   const shId = Number(screenhouseId);
   if (!Number.isInteger(shId)) {
     throw Object.assign(new Error("screenhouseId tidak valid"), { status: 400 });
+  }
+
+  // Auto-aktuator hanya mengelola aktuator yang benar-benar ada di perangkat.
+  // gh01 mis. cuma punya irigasi → sistem tidak boleh "menyalakan" kipas/lampu
+  // yang tak ada (mencegah log/status/lock palsu).
+  if (source === "auto") {
+    const caps = getActuatorCapabilities(shId);
+    if (!caps.fan) fan = undefined;
+    if (!caps.irrigation) irrigation = undefined;
+    if (!caps.lamp) lamp = undefined;
   }
 
   if (source !== "auto") {
@@ -165,6 +191,18 @@ async function setActuators({
 
   publishTopic(`screenhouse/${shId}/sink/${sink.node_code}/command`, commandPayload);
   publishTopic(`screenhouse/${shId}/actuator`, commandPayload);
+
+  // Perangkat ber-bridge (jalur DEVICE_BRIDGE, mis. HiveMQ/broker lokal): kirim
+  // perintah katup format plain "0"/"1" — irrigation→valve1 (tray 1), fan→valve2
+  // (tray 2). Hanya kanal yang berubah yang dikirim supaya katup tray lain tidak
+  // ikut disetir. No-op untuk screenhouse non-bridge (mis. simulator).
+  publishValveControl({
+    screenhouseId: shId,
+    sinkCode: sink.node_code,
+    irrigation:
+      Boolean(sink.irrigation_status) === Boolean(nextIrrigation) ? undefined : nextIrrigation,
+    fan: Boolean(sink.fan_status) === Boolean(nextFan) ? undefined : nextFan,
+  });
 
   await pool.query(
     `

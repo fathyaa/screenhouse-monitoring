@@ -6,6 +6,7 @@ const {
   buildOfflineAlertMessage,
   consolidateOfflineAlerts,
 } = require("../../../shared/offlineAlert");
+const { buildClientCapabilities } = require("../../../shared/actuatorCapabilities");
 
 const SENSOR_DATA_JOIN = `
   FROM sensor_data sd
@@ -385,7 +386,12 @@ async function getLatestAllSensorData(req, res) {
       [ownerUserId]
     );
 
-    res.json(result.rows);
+    res.json(
+      result.rows.map((row) => ({
+        ...row,
+        capabilities: buildClientCapabilities(row.screenhouse_id),
+      }))
+    );
   } catch (err) {
     console.log(err);
     res.status(500).json({ message: "Internal server error" });
@@ -436,7 +442,11 @@ async function getSinkNodeByScreenhouse(req, res) {
       `,
       [screenhouseId]
     );
-    res.json(result.rows[0] ?? null);
+    res.json(
+      result.rows[0]
+        ? { ...result.rows[0], capabilities: buildClientCapabilities(screenhouseId) }
+        : null
+    );
   } catch (err) {
     console.log(err);
     res.status(500).json({ message: "Internal server error" });
@@ -826,7 +836,9 @@ async function getScreenhouseDashboardSummary(req, res) {
       latest: latestRow,
       sensorNodes: nodes,
       sensors: nodes,
-      sinkNode: sinkNode.rows[0] ?? null,
+      sinkNode: sinkNode.rows[0]
+        ? { ...sinkNode.rows[0], capabilities: buildClientCapabilities(screenhouseId) }
+        : null,
       hourlyTrend: hourlyTrend.rows,
       threshold: thresholdRow,
       insight,

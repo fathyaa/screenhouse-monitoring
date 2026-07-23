@@ -1,6 +1,7 @@
 const pool = require("../config/db");
 const monitoringPool = require("../config/monitoringDb");
 const { wibDateStr } = require("./estimasiTanam");
+const { getActuatorCapabilities } = require("./actuatorCapabilities");
 
 const PARAM_DEFS = [
   { key: "soil_moisture", label: "Kelembapan Tanah", minCol: "min_soil_moisture", maxCol: "max_soil_moisture", icon: "💧" },
@@ -114,21 +115,25 @@ async function fetchAutoActuatorStats(screenhouseId, startDate, endDate) {
     [screenhouseId, startDate, endDate]
   );
 
+  // Kolom aktuator yang perangkatnya tidak punya jangan dihitung — slot itu bisa
+  // dipinjam untuk fungsi lain (gh01: fan_status = katup irigasi tray 2).
+  const caps = getActuatorCapabilities(screenhouseId);
+
   let fan = 0;
   let irrigation = 0;
   let lamp = 0;
   const details = [];
 
   for (const row of result.rows) {
-    if (row.fan_status) {
+    if (caps.fan && row.fan_status) {
       fan += 1;
       details.push({ actuator: "fan", label: "Kipas", reason: row.reason });
     }
-    if (row.irrigation_status) {
+    if (caps.irrigation && row.irrigation_status) {
       irrigation += 1;
       details.push({ actuator: "irrigation", label: "Irigasi", reason: row.reason });
     }
-    if (row.lamp_status) {
+    if (caps.lamp && row.lamp_status) {
       lamp += 1;
       details.push({ actuator: "lamp", label: "Lampu", reason: row.reason });
     }

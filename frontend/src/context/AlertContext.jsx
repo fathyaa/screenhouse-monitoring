@@ -40,7 +40,8 @@ function alertBelongsToCurrentUser(alert) {
 /** Alert yang belum dibaca — manual selalu unread sampai resolve; otomatis unread sampai halaman peringatan dibuka. */
 export function isUnreadAlert(alert, seenAutoAlertIds) {
   if (alert.status !== "active") return false;
-  if (isAutoHandledAlert(alert) && seenAutoAlertIds.has(String(alert.id))) return false;
+  if (isAutoHandledAlert(alert, alert.capabilities) && seenAutoAlertIds.has(String(alert.id)))
+    return false;
   return true;
 }
 
@@ -177,11 +178,11 @@ export function AlertProvider({ children }) {
       }
 
       if (!notifMutedRef.current) {
-        const autoHandled = isAutoHandledAlert(newAlert);
+        const autoHandled = isAutoHandledAlert(newAlert, newAlert.capabilities);
         playAlertSound({ volume: autoHandled ? 0.35 : 0.7 });
 
         toast.dismiss(TOAST_ID);
-        const autoNotice = getAutoHandledNotice(newAlert);
+        const autoNotice = getAutoHandledNotice(newAlert, newAlert.capabilities);
         toast.custom(
           (t) => (
             <div
@@ -291,7 +292,7 @@ export function AlertProvider({ children }) {
   /** Tandai alert otomatis sudah dilihat — badge berkurang, alert tetap aktif di daftar. */
   const markAutoHandledAlertsSeen = useCallback(() => {
     const ids = alertsRef.current
-      .filter((a) => a.status === "active" && isAutoHandledAlert(a))
+      .filter((a) => a.status === "active" && isAutoHandledAlert(a, a.capabilities))
       .map((a) => String(a.id));
     if (ids.length === 0) return;
 

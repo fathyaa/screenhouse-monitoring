@@ -25,6 +25,37 @@ const CONFIRM_MESSAGES = {
   },
 };
 
+// Perangkat tertentu memakai slot aktuator untuk fungsi lain — gh01 misalnya
+// punya dua katup irigasi (tray 1 & tray 2) dan meminjam slot `fan` untuk katup
+// kedua. Backend mengirim label penggantinya lewat `capabilities.labels`, dan
+// ikon/kalimat konfirmasi ikut label itu supaya petani tidak melihat tombol
+// "Kipas" yang sebenarnya menyiram air.
+const ICON_BY_KEYWORD = [
+  [/irigasi|siram|katup|air/i, Droplets],
+  [/kipas|blower|angin/i, Wind],
+  [/lampu|cahaya|pemanas/i, Lightbulb],
+];
+
+function resolveIcon(label, fallbackIcon) {
+  for (const [pattern, icon] of ICON_BY_KEYWORD) {
+    if (pattern.test(label)) return icon;
+  }
+  return fallbackIcon;
+}
+
+/** Kalimat konfirmasi mengikuti fungsi asli aktuator, bukan nama slot-nya. */
+function resolveConfirmMessages(key, label, isOverridden) {
+  if (!isOverridden) return CONFIRM_MESSAGES[key];
+  const lower = label.toLowerCase();
+  if (/irigasi|siram|katup|air/i.test(label)) {
+    return {
+      on: `Nyalakan ${lower}? Pastikan drainase screenhouse lancar.`,
+      off: `Matikan ${lower}?`,
+    };
+  }
+  return { on: `Nyalakan ${lower}?`, off: `Matikan ${lower}?` };
+}
+
 const AUTO_LOCK_TOAST =
   "Peralatan sedang dikontrol otomatis oleh sistem. Tunggu kondisi normal sebelum mengubah manual.";
 
@@ -129,6 +160,7 @@ export default function ActuatorControls({
   irrigation_status,
   lamp_status,
   autoAlerts = [],
+  capabilities = null,
   disabled = false,
   compact = false,
   wide = false,
@@ -139,6 +171,24 @@ export default function ActuatorControls({
 }) {
   const [loadingKey, setLoadingKey] = useState(null);
   const [pendingConfirm, setPendingConfirm] = useState(null);
+
+  // Aktuator yang benar-benar ada di perangkat (mis. gh01 cuma katup irigasi).
+  // capabilities null → tampilkan semua (backward-compatible). Label/ikon bisa
+  // di-override per perangkat lewat capabilities.labels.
+  const visibleActuators = useMemo(
+    () =>
+      ACTUATORS.filter((a) => !capabilities || capabilities[a.key] !== false).map((a) => {
+        const override = capabilities?.labels?.[a.key];
+        const label = override || a.label;
+        return {
+          ...a,
+          label,
+          icon: override ? resolveIcon(label, a.icon) : a.icon,
+          confirm: resolveConfirmMessages(a.key, label, Boolean(override)),
+        };
+      }),
+    [capabilities]
+  );
 
   // Alert auto-handled lama bisa "nyangkut aktif" selamanya kalau screenhouse-nya
   // offline (tidak ada data baru yang membuktikan kondisi sudah normal). Kalau
@@ -151,8 +201,9 @@ export default function ActuatorControls({
         ? {}
         : buildAutoActuatorLocks(autoAlerts, {
             screenhouseId: screenhouseId ?? undefined,
+            capabilities,
           }),
-    [autoAlerts, screenhouseId, offline]
+    [autoAlerts, screenhouseId, offline, capabilities]
   );
 
   const autoBannerMessages = useMemo(
@@ -210,7 +261,7 @@ export default function ActuatorControls({
         toast.success(`Aktuator diatur otomatis (${actuatorKey})`);
       } else {
         toast.success(
-          `${ACTUATORS.find((a) => a.key === actuatorKey)?.label ?? "Aktuator"} ${nextOn ? "dinyalakan" : "dimatikan"}`
+          `${visibleActuators.find((a) => a.key === actuatorKey)?.label ?? "Aktuator"} ${nextOn ? "dinyalakan" : "dimatikan"}`
         );
       }
 
@@ -230,11 +281,11 @@ export default function ActuatorControls({
       return;
     }
 
-    const actuator = ACTUATORS.find((a) => a.key === actuatorKey);
+    const actuator = visibleActuators.find((a) => a.key === actuatorKey);
     if (!actuator) return;
 
     const msg =
-      CONFIRM_MESSAGES[actuatorKey]?.[nextOn ? "on" : "off"] ??
+      actuator.confirm?.[nextOn ? "on" : "off"] ??
       `${nextOn ? "Nyalakan" : "Matikan"} ${actuator.label.toLowerCase()}?`;
 
     setPendingConfirm({ actuatorKey, nextOn, label: actuator.label, message: msg });
@@ -279,7 +330,7 @@ export default function ActuatorControls({
           compact ? (wide ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-1") : "grid-cols-1 sm:grid-cols-3"
         }`}
       >
-        {ACTUATORS.map(({ key, field, label, icon }) => {
+        {visibleActuators.map(({ key, field, label, icon }) => {
           const lock = autoLocks[key];
           const rawValue = values[field];
           const displayValue =

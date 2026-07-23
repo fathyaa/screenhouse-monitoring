@@ -1,4 +1,5 @@
 const pool = require("../../../config/db");
+const { buildClientCapabilities } = require("../../../shared/actuatorCapabilities");
 
 const DEFAULT_ALERT_LIMIT = 500;
 const MAX_ALERT_LIMIT = 1000;
@@ -99,7 +100,10 @@ async function getAlerts(req, res) {
     const counts = countsResult.rows[0] ?? { active: 0, resolved: 0 };
 
     res.json({
-      items: result.rows,
+      items: result.rows.map((row) => ({
+        ...row,
+        capabilities: buildClientCapabilities(row.screenhouse_id),
+      })),
       counts: {
         active: counts.active ?? 0,
         resolved: counts.resolved ?? 0,
