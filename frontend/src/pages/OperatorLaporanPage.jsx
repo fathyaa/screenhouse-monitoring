@@ -44,6 +44,7 @@ import {
 } from "../constants/chartColors";
 import {
   HorizontalCountLabels,
+  HorizontalTextLabels,
   LinePointLabels,
   StackedSegmentLabels,
 } from "../components/charts/BarValueLabel";
@@ -474,10 +475,22 @@ function OperatorLaporanPage() {
     [report]
   );
 
-  const varietasChartData = useMemo(
-    () => (report?.varietas_distribution ?? []).map((v) => ({ name: v.nama, count: v.count })),
-    [report]
-  );
+  const varietasChartData = useMemo(() => {
+    const scoreByName = new Map(
+      (report?.varietas_resilience ?? []).map((v) => [v.nama, v.avg_score])
+    );
+    return (report?.varietas_distribution ?? []).map((v) => {
+      const rawScore = scoreByName.get(v.nama);
+      const score = rawScore != null ? Math.round(rawScore) : null;
+      return {
+        name: v.nama,
+        count: v.count,
+        score,
+        // Label gabungan di ujung bar: jumlah kebun + skor kestabilan (biar tak tertukar).
+        barLabel: score != null ? `${v.count} · skor ${score}` : String(v.count),
+      };
+    });
+  }, [report]);
 
   const insightText = useMemo(() => buildInsightText(report), [report]);
 
@@ -1109,18 +1122,30 @@ function OperatorLaporanPage() {
               >
                 {varietasChartData.length > 0 && (
                   <div>
-                    <div className="text-xs font-semibold text-gray-700 mb-2">Distribusi & ketahanan varietas</div>
+                    <div className="text-xs font-semibold text-gray-700">Distribusi & ketahanan varietas</div>
+                    <p className="text-[11px] text-gray-500 mb-2">
+                      Panjang bar = jumlah kebun yang menanam · angka <strong>skor</strong> = kestabilan kondisi (0–100)
+                    </p>
                     <ResponsiveContainer width="100%" height={220}>
-                      <BarChart data={varietasChartData} layout="vertical" margin={{ left: 4, right: 28 }}>
+                      <BarChart data={varietasChartData} layout="vertical" margin={{ left: 4, right: 72, bottom: 16 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
-                        <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
+                        <XAxis
+                          type="number"
+                          tick={{ fontSize: 10 }}
+                          allowDecimals={false}
+                          label={{ value: "Jumlah screenhouse", position: "insideBottom", offset: -6, fontSize: 10, fill: "#6b7280" }}
+                        />
                         <YAxis type="category" dataKey="name" width={92} tick={{ fontSize: 10 }} />
-                        <Tooltip />
+                        <Tooltip
+                          formatter={(value, key) =>
+                            key === "score" ? [value ?? "—", "Skor kestabilan"] : [value, "Jumlah kebun"]
+                          }
+                        />
                         <Bar dataKey="count" name="Screenhouse" radius={[0, 4, 4, 0]}>
                           {varietasChartData.map((_, i) => (
                             <Cell key={i} fill={VARIETAS_CHART_COLORS[i % VARIETAS_CHART_COLORS.length]} />
                           ))}
-                          <HorizontalCountLabels dataKey="count" />
+                          <HorizontalTextLabels dataKey="barLabel" />
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>

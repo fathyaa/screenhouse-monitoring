@@ -27,6 +27,18 @@ export function HorizontalCountLabels({ dataKey }) {
   );
 }
 
+/** Label teks bebas di kanan batang horizontal (mis. "12 · skor 98"). */
+export function HorizontalTextLabels({ dataKey }) {
+  return (
+    <LabelList
+      dataKey={dataKey}
+      position="right"
+      formatter={(value) => (value ? String(value) : "")}
+      style={{ fontSize: 10, fill: "#374151", fontWeight: 600 }}
+    />
+  );
+}
+
 /** Label angka di tengah segmen stacked bar (teks putih). */
 export function StackedSegmentLabels({ dataKey }) {
   return (
