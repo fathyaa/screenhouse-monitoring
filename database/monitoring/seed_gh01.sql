@@ -2,7 +2,7 @@
 -- Seed screenhouse "GH01" — sisi DB monitoring (screenhouse_monitoring).
 -- Pasangan wajib: database/app/seed_gh01.sql (screenhouse_id HARUS sama = 700).
 --
--- Sink node = node_code '255' (nodeTarget di frame HiveMQ, katup irigasi valve1).
+-- Sink node = node_code '255' (nodeTarget di frame HiveMQ, tujuan kontrol katup).
 -- Sensor node TIDAK di-seed di sini: hivemqBridge auto-register saat frame
 -- "parameter" pertama dari device masuk (nodeId device belum diketahui pasti).
 -- Idempotent: aman dijalankan berulang.
@@ -31,7 +31,10 @@ INSERT INTO threshold_snapshots (
 )
 ON CONFLICT (screenhouse_id) DO NOTHING;
 
--- Sink node 255 = destinasi kontrol aktuator (valve1 = irigasi tray 1, valve2 = tray 2).
+-- Sink node 255 = destinasi kontrol aktuator. Dua katup dikontrol terpisah dan
+-- dipetakan ke kolom status yang ada: irrigation_status = valve1 (tray 1),
+-- fan_status = valve2 (tray 2) — gh01 tidak punya kipas, slotnya dipinjam.
+-- Label untuk petani diatur lewat env ACTUATOR_CAPABILITIES, lihat deviceBridge.js.
 INSERT INTO sink_nodes (screenhouse_id, node_code, node_name, relay_channels, fan_status, irrigation_status, lamp_status, is_active)
 VALUES (700, '255', 'GH01 Sink (node 255)', 3, false, false, false, true)
 ON CONFLICT (node_code) DO NOTHING;

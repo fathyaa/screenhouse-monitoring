@@ -3,6 +3,7 @@ const monitoringPool = require("../../../config/monitoringDb");
 const { monitoringGet } = require("../../../shared/monitoringClient");
 const { computeStressScore, getCategory } = require("../../../shared/stressScore");
 const { buildEstimasiTanamBatch } = require("../../../shared/estimasiTanamService");
+const { getActuatorCapabilities } = require("../../../shared/actuatorCapabilities");
 
 const PARAM_LABELS = [
   { key: "nitrogen", label: "Nitrogen" },
@@ -770,9 +771,13 @@ function buildRegionRows(screenhouses, mapSummary, groupBy, monitoringStats, inc
       group.screenhouse_ids.forEach((id) => {
         const act = monitoringStats.actuator[id];
         if (!act) return;
-        irrigation_on += act.irrigation_on ?? 0;
-        fan_on += act.fan_on ?? 0;
-        lamp_on += act.lamp_on ?? 0;
+        // Aktuator yang tidak ada di perangkat tidak dihitung — slotnya bisa
+        // dipinjam untuk fungsi lain (gh01: fan_status = katup irigasi tray 2),
+        // jadi menghitungnya akan melaporkan "kipas menyala" yang tidak pernah ada.
+        const caps = getActuatorCapabilities(id);
+        if (caps.irrigation) irrigation_on += act.irrigation_on ?? 0;
+        if (caps.fan) fan_on += act.fan_on ?? 0;
+        if (caps.lamp) lamp_on += act.lamp_on ?? 0;
         total_readings += act.total_readings ?? 0;
       });
 

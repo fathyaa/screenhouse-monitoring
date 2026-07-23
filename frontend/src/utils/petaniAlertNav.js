@@ -15,7 +15,7 @@ export function pickPrimaryAlert(alerts = []) {
   if (!alerts.length) return null;
   // Alert yang masih butuh aksi petani diprioritaskan sebagai "primary" —
   // kalau semuanya sudah ditangani otomatis, baru tampilkan salah satu itu.
-  const needsAction = alerts.filter((a) => !isAutoHandledAlert(a));
+  const needsAction = alerts.filter((a) => !isAutoHandledAlert(a, a.capabilities));
   const pool = needsAction.length ? needsAction : alerts;
   const soilAlerts = pool.filter((a) => getAlertCategory(a) === ALERT_CATEGORY.SOIL);
   const finalPool = soilAlerts.length ? soilAlerts : pool;

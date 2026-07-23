@@ -1,6 +1,6 @@
 const pool = require("../../config/db");
 const { publishTopic } = require("../../config/mqttClient");
-const { publishValveControl } = require("./hivemqBridge");
+const { publishValveControl } = require("./deviceBridge");
 const {
   getActuatorCapabilities,
   isAutoActuatorEnabled,
@@ -59,9 +59,9 @@ const SCREENHOUSE_ONLINE_SQL = `
 `;
 
 async function getActiveAutoActuatorLocks(screenhouseId) {
-  // Auto-aktuator nonaktif → tidak ada yang mengontrol otomatis, jadi tidak ada
-  // toggle yang perlu dikunci.
-  if (!isAutoActuatorEnabled()) return {};
+  // Auto-aktuator nonaktif (global atau khusus screenhouse ini) → tidak ada yang
+  // mengontrol otomatis, jadi tidak ada toggle yang perlu dikunci.
+  if (!isAutoActuatorEnabled(screenhouseId)) return {};
 
   const onlineResult = await pool.query(
     `SELECT ${SCREENHOUSE_ONLINE_SQL} AS online`,
@@ -192,9 +192,17 @@ async function setActuators({
   publishTopic(`screenhouse/${shId}/sink/${sink.node_code}/command`, commandPayload);
   publishTopic(`screenhouse/${shId}/actuator`, commandPayload);
 
-  // Perangkat HiveMQ sungguhan: kirim perintah katup irigasi (valve1) format
-  // plain "0"/"1". No-op untuk screenhouse non-HiveMQ (mis. simulator).
-  publishValveControl({ screenhouseId: shId, sinkCode: sink.node_code, irrigation: nextIrrigation });
+  // Perangkat ber-bridge (jalur DEVICE_BRIDGE, mis. HiveMQ/broker lokal): kirim
+  // perintah katup format plain "0"/"1" — irrigation→valve1 (tray 1), fan→valve2
+  // (tray 2). Hanya kanal yang berubah yang dikirim supaya katup tray lain tidak
+  // ikut disetir. No-op untuk screenhouse non-bridge (mis. simulator).
+  publishValveControl({
+    screenhouseId: shId,
+    sinkCode: sink.node_code,
+    irrigation:
+      Boolean(sink.irrigation_status) === Boolean(nextIrrigation) ? undefined : nextIrrigation,
+    fan: Boolean(sink.fan_status) === Boolean(nextFan) ? undefined : nextFan,
+  });
 
   await pool.query(
     `

@@ -9,7 +9,7 @@ require("./config/db");
 const { connectRedis, subscriber } = require("./config/redis");
 const { isRabbitMqEnabled, connectRabbitMq } = require("./config/rabbitmq");
 const connectMQTT = require("./modules/ingest/mqttService");
-const { connectHiveMq } = require("./modules/ingest/hivemqBridge");
+const { connectDeviceBridge } = require("./modules/ingest/deviceBridge");
 const { startIngestConsumer } = require("./modules/ingest/ingestQueue");
 const { startAlertWorker } = require("./modules/alerting/worker");
 const { attachSocketServer } = require("./modules/realtime/socketServer");
@@ -40,7 +40,7 @@ async function bootstrap() {
     await startIngestConsumer();
   }
   connectMQTT();
-  connectHiveMq();
+  connectDeviceBridge();
   await startAlertWorker();
 
   const server = http.createServer(app);

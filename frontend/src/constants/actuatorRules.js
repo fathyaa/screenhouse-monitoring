@@ -51,14 +51,14 @@ export function isAutoHandledAlert(alert, capabilities = null) {
 }
 
 /** Teks notifikasi bila kondisi ditangani aktuator otomatis (kipas/irigasi/lampu). */
-export function getAutoHandledNotice(alert) {
-  const hint = getActuatorHintForAlert(alert);
+export function getAutoHandledNotice(alert, capabilities = null) {
+  const hint = getActuatorHintForAlert(alert, capabilities);
   return hint ? `Ditangani otomatis: ${hint}` : null;
 }
 
 /** Penjelasan singkat untuk petani — siapa, apa, kapan. */
-export function getAutoHandledExplanation(alert) {
-  const hint = getActuatorHintForAlert(alert);
+export function getAutoHandledExplanation(alert, capabilities = null) {
+  const hint = getActuatorHintForAlert(alert, capabilities);
   if (!hint) return null;
 
   const at = alert?.created_at
