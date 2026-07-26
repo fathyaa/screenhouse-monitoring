@@ -36,8 +36,10 @@ import ActuatorControls from "../components/ActuatorControls";
 import {
   SemaiCycleEndButton,
   SemaiCycleStartButton,
+  SemaiCycleEditButton,
   SemaiCycleEndConfirmModal,
   SemaiCycleStartModal,
+  CycleEditModal,
 } from "../components/siklus/SemaiCycleModals";
 import { useSemaiCycle } from "../components/siklus/useSemaiCycle";
 import { useAlerts } from "../context/AlertContext";
@@ -979,7 +981,10 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
             deviceOffline={screenhouseOffline}
             estimasiFooter={
               isPetani && !semaiCycle.loading && semaiCycle.activeCycle ? (
-                <SemaiCycleEndButton onClick={() => semaiCycle.setShowEndConfirm(true)} />
+                <>
+                  <SemaiCycleEditButton onClick={() => semaiCycle.setShowEditModal(true)} />
+                  <SemaiCycleEndButton onClick={() => semaiCycle.setShowEndConfirm(true)} />
+                </>
               ) : null
             }
             varietasFooter={
@@ -1004,6 +1009,14 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
                 token={token}
                 onStarted={semaiCycle.handleCycleStarted}
               />
+              <CycleEditModal
+                open={semaiCycle.showEditModal}
+                onClose={() => semaiCycle.setShowEditModal(false)}
+                screenhouseId={Number(id)}
+                token={token}
+                cycle={semaiCycle.activeCycle}
+                onSaved={semaiCycle.handleCycleEdited}
+              />
             </>
           )}
 
@@ -1024,9 +1037,12 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
               subtitle={
                 screenhouseOffline
                   ? undefined
-                  : onlineCount > 1
-                  ? "Ambil kondisi paling buruk dari semua rak bibit. Detail per rak ada di bawah."
-                  : "Hijau = pas, oranye = kurang, merah = berlebih"
+                  : latestLastSeen
+                  ? `Terakhir diperbarui pukul ${new Date(latestLastSeen).toLocaleTimeString(
+                      "id-ID",
+                      { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" }
+                    )} WIB`
+                  : "Belum ada data sensor"
               }
               showActions={!screenhouseOffline}
             />

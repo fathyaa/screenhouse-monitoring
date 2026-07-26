@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { Search, Pencil, KeyRound, Users } from "lucide-react";
+import { Search, Pencil, KeyRound, Users, Trash2 } from "lucide-react";
 import AdminPageShell from "../components/AdminPageShell";
 import { TableRowsSkeleton, ListPanelSkeleton } from "../components/LoadingUI";
 import Pagination from "../components/Pagination";
@@ -53,6 +53,10 @@ function formatDate(value) {
 
 export default function KelolaUserPage() {
   const token = localStorage.getItem("token");
+  const currentUserId = useMemo(
+    () => JSON.parse(localStorage.getItem("user") || "null")?.id ?? null,
+    []
+  );
   const authHeaders = useMemo(
     () => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" }),
     [token]
@@ -65,6 +69,8 @@ export default function KelolaUserPage() {
   const [resetUser, setResetUser] = useState(null);
   const [newPassword, setNewPassword] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deleteUser, setDeleteUser] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -143,6 +149,34 @@ export default function KelolaUserPage() {
       toast.error("Gagal reset password");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!deleteUser) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`${API_URL}/admin/users/${deleteUser.id}`, {
+        method: "DELETE",
+        headers: authHeaders,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.message || "Gagal menghapus user");
+        return;
+      }
+      toast.success(
+        data.deleted_screenhouses
+          ? `User & ${data.deleted_screenhouses} screenhouse dihapus`
+          : "User dihapus"
+      );
+      setDeleteUser(null);
+      loadUsers();
+    } catch (err) {
+      console.error(err);
+      toast.error("Gagal menghapus user");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -271,6 +305,15 @@ export default function KelolaUserPage() {
                           >
                             <KeyRound size={15} />
                           </button>
+                          {u.id !== currentUserId && (
+                            <button
+                              onClick={() => setDeleteUser(u)}
+                              className="p-1.5 rounded-lg hover:bg-red-50 text-red-600 transition"
+                              title="Hapus user"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -309,6 +352,15 @@ export default function KelolaUserPage() {
                     >
                       <KeyRound size={15} />
                     </button>
+                    {u.id !== currentUserId && (
+                      <button
+                        onClick={() => setDeleteUser(u)}
+                        className="p-1.5 rounded-lg hover:bg-red-50 text-red-600 transition"
+                        title="Hapus user"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -401,6 +453,45 @@ export default function KelolaUserPage() {
                 className="px-4 py-2 rounded-xl bg-bl-primary text-white text-sm disabled:opacity-50"
               >
                 {saving ? "Menyimpan..." : "Reset"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteUser && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 space-y-4 text-left">
+            <div className="flex items-center gap-2">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-red-50 text-red-600">
+                <Trash2 size={18} />
+              </span>
+              <h3 className="text-base font-semibold text-gray-800">Hapus user permanen?</h3>
+            </div>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              User <span className="font-semibold">{deleteUser.name}</span> akan dihapus permanen.
+              {deleteUser.screenhouse_count > 0 && (
+                <span className="block mt-1.5 text-red-700">
+                  Ikut menghapus {deleteUser.screenhouse_count} screenhouse miliknya beserta seluruh
+                  data sensor, riwayat siklus, dan peringatannya.
+                </span>
+              )}
+              <span className="block mt-1.5 font-medium">Tindakan ini tidak bisa dibatalkan.</span>
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setDeleteUser(null)}
+                disabled={deleting}
+                className="px-4 py-2 rounded-xl border border-gray-200 text-sm text-gray-600 disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                onClick={confirmDeleteUser}
+                disabled={deleting}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm disabled:opacity-50"
+              >
+                {deleting ? "Menghapus..." : "Ya, hapus"}
               </button>
             </div>
           </div>

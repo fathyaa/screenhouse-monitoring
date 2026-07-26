@@ -1,5 +1,9 @@
 const pool = require("../../../config/db");
 const bcrypt = require("bcryptjs");
+const {
+  purgeScreenhouseMonitoring,
+  purgeScreenhouseApp,
+} = require("../../../shared/purgeScreenhouse");
 
 async function listUsers(req, res) {
   try {
@@ -124,4 +128,56 @@ async function resetUserPassword(req, res) {
   }
 }
 
-module.exports = { listUsers, updateUser, resetUserPassword };
+/**
+ * Hapus user beserta SEMUA screenhouse miliknya (purge 2 DB per screenhouse).
+ * push_subscriptions ikut terhapus via ON DELETE CASCADE. Tidak bisa hapus diri sendiri.
+ */
+async function deleteUser(req, res) {
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId)) {
+    return res.status(400).json({ message: "ID tidak valid" });
+  }
+  if (userId === req.user.id) {
+    return res.status(400).json({ message: "Tidak bisa menghapus akun sendiri" });
+  }
+
+  const client = await pool.connect();
+  try {
+    const check = await client.query(`SELECT id, name FROM users WHERE id = $1`, [userId]);
+    if (!check.rows[0]) {
+      return res.status(404).json({ message: "User tidak ditemukan" });
+    }
+
+    const owned = await client.query(
+      `SELECT id FROM screenhouses WHERE owner_user_id = $1`,
+      [userId]
+    );
+
+    // Purge monitoring (DB terpisah) untuk tiap screenhouse dulu.
+    for (const row of owned.rows) {
+      await purgeScreenhouseMonitoring(row.id);
+    }
+
+    await client.query("BEGIN");
+    for (const row of owned.rows) {
+      await purgeScreenhouseApp(client, row.id);
+    }
+    await client.query(`DELETE FROM users WHERE id = $1`, [userId]);
+    await client.query("COMMIT");
+
+    res.json({
+      message: "User berhasil dihapus",
+      id: userId,
+      name: check.rows[0].name,
+      deleted_screenhouses: owned.rows.length,
+    });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("[delete-user]", err);
+    res.status(500).json({ message: "Gagal menghapus user" });
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { listUsers, updateUser, resetUserPassword, deleteUser };

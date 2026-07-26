@@ -1,5 +1,9 @@
 const pool = require("../../../config/db");
 const { monitoringGet } = require("../../../shared/monitoringClient");
+const {
+  purgeScreenhouseMonitoring,
+  purgeScreenhouseApp,
+} = require("../../../shared/purgeScreenhouse");
 
 async function listAdminScreenhouses(req, res) {
   try {
@@ -113,4 +117,38 @@ async function updateScreenhouseStatus(req, res) {
   }
 }
 
-module.exports = { listAdminScreenhouses, updateScreenhouseStatus };
+/**
+ * Hapus permanen satu screenhouse beserta seluruh datanya di kedua DB
+ * (app: thresholds + semai_cycles; monitoring: registry/nodes/sensor_data/alerts).
+ * Monitoring dipurge dulu (DB terpisah, tanpa transaksi lintas-DB), lalu app.
+ */
+async function deleteScreenhouse(req, res) {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ message: "ID tidak valid" });
+  }
+
+  const client = await pool.connect();
+  try {
+    const check = await client.query(`SELECT id, name FROM screenhouses WHERE id = $1`, [id]);
+    if (!check.rows[0]) {
+      return res.status(404).json({ message: "Screenhouse tidak ditemukan" });
+    }
+
+    await purgeScreenhouseMonitoring(id);
+
+    await client.query("BEGIN");
+    await purgeScreenhouseApp(client, id);
+    await client.query("COMMIT");
+
+    res.json({ message: "Screenhouse berhasil dihapus", id, name: check.rows[0].name });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("[delete-screenhouse]", err);
+    res.status(500).json({ message: "Gagal menghapus screenhouse" });
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { listAdminScreenhouses, updateScreenhouseStatus, deleteScreenhouse };

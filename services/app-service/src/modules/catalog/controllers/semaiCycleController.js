@@ -2,7 +2,11 @@ const pool = require("../../../config/db");
 const { resolveVarietasId, upsertThresholdFromVarietas } = require("../../../shared/varietasThreshold");
 const { publishEvent } = require("../../../shared/events/publisher");
 const { buildEstimasiTanam } = require("../../../shared/estimasiTanamService");
-const { addCalendarDays, wibDateStr } = require("../../../shared/estimasiTanam");
+const {
+  addCalendarDays,
+  wibDateStr,
+  TARGET_OPTIMAL_HSS,
+} = require("../../../shared/estimasiTanam");
 const { buildCycleAnalytics } = require("../../../shared/cycleAnalyticsService");
 
 async function assertPetaniOwnsScreenhouse(client, screenhouseId, userId) {
@@ -104,7 +108,8 @@ async function startSemaiCycle(req, res) {
     }
 
     const varietas = await resolveVarietasId(client, varietas_id);
-    const estimasiSiap = addCalendarDays(tanggalMulai, varietas.durasi_pembibitan_hari);
+    // Jendela tanam sama untuk semua varietas: target awal = 18 HSS (target optimal).
+    const estimasiSiap = addCalendarDays(tanggalMulai, TARGET_OPTIMAL_HSS);
 
     const inserted = await client.query(
       `
@@ -121,7 +126,7 @@ async function startSemaiCycle(req, res) {
         varietas.nama,
         tanggalMulai,
         estimasiSiap,
-        varietas.durasi_pembibitan_hari,
+        TARGET_OPTIMAL_HSS,
       ]
     );
 
@@ -342,6 +347,168 @@ async function getMySemaiCycles(req, res) {
   }
 }
 
+/**
+ * Ubah tanggal mulai dan/atau varietas siklus yang SEDANG BERJALAN.
+ * Siklus yang sudah selesai bersifat final. Perubahan varietas ikut menyegarkan
+ * threshold (kecuali manual override) dan estimasi disesuaikan ke jendela tanam baru.
+ */
+async function editSemaiCycle(req, res) {
+  const client = await pool.connect();
+  try {
+    const screenhouseId = Number(req.params.id);
+    const cycleId = Number(req.params.cycleId);
+    const { varietas_id, tanggal_mulai } = req.body ?? {};
+
+    if (varietas_id == null && !tanggal_mulai) {
+      return res.status(400).json({ message: "Tidak ada perubahan yang dikirim" });
+    }
+
+    await client.query("BEGIN");
+
+    const sh = await assertPetaniOwnsScreenhouse(client, screenhouseId, req.user.id);
+    if (!sh) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Screenhouse tidak ditemukan" });
+    }
+
+    const cycleRes = await client.query(
+      `
+      SELECT id, varietas_id, varietas_nama, status,
+             to_char(tanggal_mulai, 'YYYY-MM-DD') AS tanggal_mulai
+      FROM semai_cycles
+      WHERE id = $1 AND screenhouse_id = $2
+      `,
+      [cycleId, screenhouseId]
+    );
+    const cycle = cycleRes.rows[0];
+    if (!cycle) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Siklus tidak ditemukan" });
+    }
+    if (cycle.status !== "active") {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        message: "Hanya siklus yang sedang berjalan yang bisa diubah",
+      });
+    }
+
+    let varietas = null;
+    if (varietas_id != null && Number(varietas_id) !== cycle.varietas_id) {
+      varietas = await resolveVarietasId(client, varietas_id);
+    }
+    const finalVarietasId = varietas ? varietas.id : cycle.varietas_id;
+    const finalVarietasNama = varietas ? varietas.nama : cycle.varietas_nama;
+    const finalTanggal = tanggal_mulai ? String(tanggal_mulai).slice(0, 10) : cycle.tanggal_mulai;
+    const estimasiSiap = addCalendarDays(finalTanggal, TARGET_OPTIMAL_HSS);
+
+    const updated = await client.query(
+      `
+      UPDATE semai_cycles
+      SET varietas_id = $2,
+          varietas_nama = $3,
+          tanggal_mulai = $4::date,
+          estimasi_siap = $5::date,
+          updated_at = NOW()
+      WHERE id = $1
+      RETURNING *
+      `,
+      [cycleId, finalVarietasId, finalVarietasNama, finalTanggal, estimasiSiap]
+    );
+
+    if (varietas) {
+      const tCheck = await client.query(
+        `SELECT manual_override FROM thresholds WHERE screenhouse_id = $1`,
+        [screenhouseId]
+      );
+      if (!tCheck.rows[0]?.manual_override) {
+        const payload = await upsertThresholdFromVarietas(client, screenhouseId, varietas, {
+          manualOverride: false,
+        });
+        await publishEvent("threshold.updated", payload);
+      }
+    }
+
+    await syncScreenhouseFromCycle(client, screenhouseId, updated.rows[0], {
+      estimasi_siap: estimasiSiap,
+      status: "on_track",
+    });
+
+    await client.query("COMMIT");
+
+    let estimasi = null;
+    try {
+      estimasi = await buildEstimasiTanam(screenhouseId, { persist: true });
+      if (estimasi?.estimasi_siap) {
+        await pool.query(
+          `UPDATE semai_cycles SET estimasi_siap = $2::date, updated_at = NOW() WHERE id = $1`,
+          [cycleId, estimasi.estimasi_siap]
+        );
+      }
+    } catch (err) {
+      console.error("[edit-cycle] estimasi:", err.message);
+    }
+
+    res.json({
+      ...updated.rows[0],
+      estimasi_siap: estimasi?.estimasi_siap ?? updated.rows[0].estimasi_siap,
+      estimasi,
+    });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    if (err.status === 400) {
+      return res.status(400).json({ message: err.message });
+    }
+    console.error("[edit-cycle]", err);
+    res.status(500).json({ message: "Internal server error" });
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Hapus satu siklus (riwayat). Jika yang dihapus sedang aktif, bersihkan juga
+ * field siklus di screenhouse agar tidak menyisakan estimasi/varietas gantung.
+ */
+async function deleteSemaiCycle(req, res) {
+  const client = await pool.connect();
+  try {
+    const screenhouseId = Number(req.params.id);
+    const cycleId = Number(req.params.cycleId);
+
+    await client.query("BEGIN");
+
+    const sh = await assertPetaniOwnsScreenhouse(client, screenhouseId, req.user.id);
+    if (!sh) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Screenhouse tidak ditemukan" });
+    }
+
+    const cycleRes = await client.query(
+      `SELECT id, status FROM semai_cycles WHERE id = $1 AND screenhouse_id = $2`,
+      [cycleId, screenhouseId]
+    );
+    const cycle = cycleRes.rows[0];
+    if (!cycle) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Siklus tidak ditemukan" });
+    }
+
+    await client.query(`DELETE FROM semai_cycles WHERE id = $1`, [cycleId]);
+    if (cycle.status === "active") {
+      await clearScreenhouseCycleFields(client, screenhouseId);
+    }
+
+    await client.query("COMMIT");
+    res.json({ message: "Siklus berhasil dihapus", id: cycleId });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("[delete-cycle]", err);
+    res.status(500).json({ message: "Internal server error" });
+  } finally {
+    client.release();
+  }
+}
+
 async function getActiveSemaiCycle(req, res) {
   try {
     const screenhouseId = Number(req.params.id);
@@ -371,6 +538,8 @@ async function getActiveSemaiCycle(req, res) {
 module.exports = {
   startSemaiCycle,
   endSemaiCycle,
+  editSemaiCycle,
+  deleteSemaiCycle,
   listScreenhouseCycles,
   getSemaiCycleById,
   getMySemaiCycles,

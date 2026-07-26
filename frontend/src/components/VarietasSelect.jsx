@@ -42,7 +42,6 @@ export default function VarietasSelect({
           {list.map((v) => (
             <option key={v.id} value={v.id}>
               {v.nama}
-              {v.durasi_pembibitan_hari ? ` · ~${v.durasi_pembibitan_hari} hari` : ""}
             </option>
           ))}
         </select>

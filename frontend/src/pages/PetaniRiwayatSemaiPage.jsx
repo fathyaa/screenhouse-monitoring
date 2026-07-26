@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronRight, FileBarChart, Menu, Sprout } from "lucide-react";
+import { ChevronRight, FileBarChart, Sprout, Trash2 } from "lucide-react";
+import toast from "react-hot-toast";
 import Sidebar from "../layouts/Sidebar";
 import PetaniTopbar from "../layouts/PetaniTopbar";
 import PetaniBottomNav from "../layouts/PetaniBottomNav";
@@ -50,6 +51,8 @@ export default function PetaniRiwayatSemaiPage() {
   const [cycles, setCycles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("completed");
+  const [deleteCycle, setDeleteCycle] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadData = useCallback(() => {
     if (!token) return Promise.resolve();
@@ -84,6 +87,26 @@ export default function PetaniRiwayatSemaiPage() {
   );
 
   const displayCycles = filter === "active" ? activeCycles : completedCycles;
+
+  const confirmDeleteCycle = async () => {
+    if (!deleteCycle) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(
+        `${API_URL}/screenhouses/${deleteCycle.screenhouse_id}/cycles/${deleteCycle.id}`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Gagal menghapus siklus");
+      toast.success("Siklus dihapus");
+      setDeleteCycle(null);
+      loadData();
+    } catch (err) {
+      toast.error(err.message || "Gagal menghapus siklus");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const {
     page,
@@ -155,18 +178,21 @@ export default function PetaniRiwayatSemaiPage() {
             ) : (
               <div className="space-y-2">
                 {pagedCycles.map((cycle) => (
-                  <button
+                  <div
                     key={cycle.id}
-                    type="button"
-                    onClick={() =>
-                      cycle.status === "completed" &&
-                      navigate(`/petani/riwayat-semai/${cycle.screenhouse_id}/${cycle.id}`)
-                    }
-                    className={`w-full text-left bg-white rounded-2xl border border-gray-200 p-4 flex items-center gap-3 transition ${
+                    className={`w-full bg-white rounded-2xl border border-gray-200 p-4 flex items-center gap-3 transition ${
                       cycle.status === "completed" ? "hover:border-bl-accent/40 hover:shadow-sm" : ""
                     }`}
                   >
-                    <div className="flex-1 min-w-0">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        cycle.status === "completed" &&
+                        navigate(`/petani/riwayat-semai/${cycle.screenhouse_id}/${cycle.id}`)
+                      }
+                      disabled={cycle.status !== "completed"}
+                      className="flex-1 min-w-0 text-left disabled:cursor-default"
+                    >
                       <div className="text-sm font-semibold text-gray-800 truncate">
                         {cycleTitle(cycle)}
                       </div>
@@ -174,7 +200,7 @@ export default function PetaniRiwayatSemaiPage() {
                         {cycle.screenhouse_name} · {formatIdDate(cycle.tanggal_mulai)}
                         {cycle.tanggal_selesai && ` — ${formatIdDate(cycle.tanggal_selesai)}`}
                       </div>
-                    </div>
+                    </button>
                     {cycle.grade && (
                       <div className="shrink-0 flex flex-col items-end gap-0.5">
                         <span
@@ -189,15 +215,23 @@ export default function PetaniRiwayatSemaiPage() {
                         )}
                       </div>
                     )}
-                    {cycle.status === "completed" && (
-                      <ChevronRight size={18} className="shrink-0 text-gray-400" />
-                    )}
                     {cycle.status === "active" && (
                       <span className="shrink-0 px-2 py-0.5 rounded-full bg-bl-surface-muted text-bl-primary text-[10px] font-semibold">
                         Aktif
                       </span>
                     )}
-                  </button>
+                    {cycle.status === "completed" && (
+                      <ChevronRight size={18} className="shrink-0 text-gray-400" />
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setDeleteCycle(cycle)}
+                      className="shrink-0 p-1.5 rounded-lg hover:bg-red-50 text-red-600 transition"
+                      title="Hapus siklus"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 ))}
                 <Pagination
                   page={page}
@@ -214,6 +248,42 @@ export default function PetaniRiwayatSemaiPage() {
         </PullToRefresh>
         <PetaniBottomNav />
       </div>
+
+      {deleteCycle && (
+        <div className="fixed inset-0 z-[2000] flex items-end sm:items-center justify-center p-4 bg-black/40">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-xl w-full max-w-sm p-5 text-left">
+            <div className="flex items-center gap-2">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-red-50 text-red-600">
+                <Trash2 size={18} />
+              </span>
+              <div className="text-sm font-semibold text-gray-800">Hapus siklus ini?</div>
+            </div>
+            <p className="text-sm text-gray-600 mt-3 leading-relaxed">
+              {cycleTitle(deleteCycle)} akan dihapus permanen dari riwayat
+              {deleteCycle.status === "active" && " dan siklus yang sedang berjalan akan dihentikan"}.
+              Tindakan ini tidak bisa dibatalkan.
+            </p>
+            <div className="flex gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => setDeleteCycle(null)}
+                disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteCycle}
+                disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-medium disabled:opacity-50"
+              >
+                {deleting ? "Menghapus..." : "Ya, hapus"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

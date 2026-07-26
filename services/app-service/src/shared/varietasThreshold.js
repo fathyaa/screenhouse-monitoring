@@ -1,27 +1,15 @@
 const { DEFAULT_THRESHOLD, THRESHOLD_COLS } = require("./thresholdDefaults");
 
-/** Map kolom varietas_bibit → kolom thresholds. */
-const VARIETAS_TO_THRESHOLD = [
-  ["nitrogen_min", "nitrogen_max", "min_nitrogen", "max_nitrogen"],
-  ["phosphorus_min", "phosphorus_max", "min_phosphorus", "max_phosphorus"],
-  ["potassium_min", "potassium_max", "min_potassium", "max_potassium"],
-  ["moisture_min", "moisture_max", "min_soil_moisture", "max_soil_moisture"],
-  ["soil_ph_min", "soil_ph_max", "min_soil_ph", "max_soil_ph"],
-];
-
+// Threshold disamakan untuk SEMUA varietas — selalu mengacu ke DEFAULT_THRESHOLD.
+// Nilai per-varietas (kolom *_min/*_max di varietas_bibit) sengaja TIDAK dipakai
+// lagi. Parameter `varietas` tetap diterima hanya untuk mencatat varietas_id di
+// baris thresholds (lihat upsertThresholdFromVarietas), bukan mengubah angkanya.
 function buildThresholdPayloadFromVarietas(varietas, screenhouseId) {
   const payload = { screenhouse_id: Number(screenhouseId) };
 
   THRESHOLD_COLS.forEach((col, i) => {
     payload[col] = DEFAULT_THRESHOLD[i];
   });
-
-  if (varietas) {
-    for (const [vMin, vMax, tMin, tMax] of VARIETAS_TO_THRESHOLD) {
-      if (varietas[vMin] != null) payload[tMin] = Number(varietas[vMin]);
-      if (varietas[vMax] != null) payload[tMax] = Number(varietas[vMax]);
-    }
-  }
 
   return payload;
 }
@@ -95,7 +83,6 @@ async function upsertThresholdFromVarietas(client, screenhouseId, varietas, { ma
 }
 
 module.exports = {
-  VARIETAS_TO_THRESHOLD,
   buildThresholdPayloadFromVarietas,
   buildThresholdValuesArray,
   fetchVarietasById,

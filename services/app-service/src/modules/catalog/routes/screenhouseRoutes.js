@@ -21,6 +21,8 @@ const {
 const {
   startSemaiCycle,
   endSemaiCycle,
+  editSemaiCycle,
+  deleteSemaiCycle,
   listScreenhouseCycles,
   getSemaiCycleById,
   getMySemaiCycles,
@@ -135,6 +137,20 @@ router.post(
   authMiddleware,
   roleMiddleware(["petani"]),
   endSemaiCycle
+);
+
+router.patch(
+  "/:id/cycles/:cycleId",
+  authMiddleware,
+  roleMiddleware(["petani"]),
+  editSemaiCycle
+);
+
+router.delete(
+  "/:id/cycles/:cycleId",
+  authMiddleware,
+  roleMiddleware(["petani"]),
+  deleteSemaiCycle
 );
 
 router.get(

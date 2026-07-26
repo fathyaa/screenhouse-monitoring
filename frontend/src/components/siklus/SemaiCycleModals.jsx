@@ -1,5 +1,19 @@
-import { Flag, PlayCircle } from "lucide-react";
+import { Flag, PlayCircle, Pencil } from "lucide-react";
 import CycleStartModal from "./CycleStartModal";
+export { default as CycleEditModal } from "./CycleEditModal";
+
+export function SemaiCycleEditButton({ onClick, className = "" }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`mt-2.5 w-full flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg border border-gray-200 bg-white text-gray-600 text-[11px] font-medium hover:bg-gray-50 transition ${className}`}
+    >
+      <Pencil size={13} />
+      Edit siklus (tanggal / varietas)
+    </button>
+  );
+}
 
 export function SemaiCycleEndButton({ onClick, className = "" }) {
   return (

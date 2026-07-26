@@ -1,5 +1,16 @@
 const { computeScreenhouseStressScore } = require("./stressScore");
 
+// Jendela transplantasi bibit padi — SAMA untuk semua varietas (bukan per-varietas).
+// Bibit padi dipindah-tanam pada 15–21 HSS (hari setelah sebar) terlepas dari varietas;
+// angka durasi_pembibitan_hari per-varietas (22–28) mengacaukan durasi tanaman utuh
+// dengan durasi persemaian, jadi tidak lagi dipakai untuk estimasi.
+//   - MULAI_SIAP  (15 HSS): bibit sudah boleh ditanam (panduan PTT, bibit muda 10–15 hari).
+//   - TARGET      (18 HSS): titik tengah rentang 14–21, target praktis-konservatif.
+//   - BATAS_AKHIR (21 HSS): lewat ini bibit terlalu tua (rekomendasi umum padi sawah).
+const MULAI_SIAP_HSS = 15;
+const TARGET_OPTIMAL_HSS = 18;
+const BATAS_AKHIR_HSS = 21;
+
 function wibDateStr(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(date);
 }
@@ -111,9 +122,22 @@ function average(nums) {
   return nums.reduce((sum, n) => sum + n, 0) / nums.length;
 }
 
+// Jendela tetap 15/18/21 HSS untuk semua varietas. Bukan lagi turunan
+// durasi_pembibitan_hari per-varietas (parameter itu diterima demi kompatibilitas
+// pemanggil lama, tapi tidak dipakai untuk menghitung tanggal).
+function buildWindow(tanggalSemai) {
+  return {
+    mulai_siap: addCalendarDays(tanggalSemai, MULAI_SIAP_HSS),
+    mulai_siap_hss: MULAI_SIAP_HSS,
+    target_optimal: addCalendarDays(tanggalSemai, TARGET_OPTIMAL_HSS),
+    target_optimal_hss: TARGET_OPTIMAL_HSS,
+    batas_akhir: addCalendarDays(tanggalSemai, BATAS_AKHIR_HSS),
+    batas_akhir_hss: BATAS_AKHIR_HSS,
+  };
+}
+
 function computeEstimasiTanam({
   tanggalSemai,
-  durasiPembibitanHari,
   avgStressScore7d,
   offlineDays7d,
   todayStr = wibDateStr(),
@@ -125,48 +149,45 @@ function computeEstimasiTanam({
       sisa_hari: null,
       progress_pct: null,
       status: null,
+      fase: null,
+      hss_hari_ini: null,
       adjustment_hari: 0,
       alasan_adjustment: ["Tanggal semai belum diisi"],
-      durasi_pembibitan_hari: durasiPembibitanHari ?? null,
+      durasi_pembibitan_hari: BATAS_AKHIR_HSS,
+      window: null,
     };
   }
 
-  const durasi = Number(durasiPembibitanHari);
-  if (!durasi || durasi < 1) {
-    return {
-      tanggal_semai: tanggalSemai,
-      estimasi_siap: null,
-      sisa_hari: null,
-      progress_pct: null,
-      status: null,
-      adjustment_hari: 0,
-      alasan_adjustment: ["Durasi pembibitan varietas belum tersedia"],
-      durasi_pembibitan_hari: durasiPembibitanHari ?? null,
-    };
-  }
-
-  const baseSiap = addCalendarDays(tanggalSemai, durasi);
   const stressAdj = stressAdjustment(avgStressScore7d);
   const offAdj = offlineAdjustment(offlineDays7d ?? 0);
   const adjustmentHari = stressAdj.days + offAdj.days;
   const alasan = [...stressAdj.alasan, ...offAdj.alasan];
 
-  let status = stressAdj.status;
-  if (status !== "perlu_evaluasi" && adjustmentHari > 0) {
-    status = "terlambat";
-  }
-  if (status === "on_track" && adjustmentHari === 0) {
-    status = "on_track";
-  }
-
-  const estimasiSiap = addCalendarDays(baseSiap, adjustmentHari);
+  // Kondisi kurang baik menggeser target dari 18 HSS ke belakang, tapi tidak pernah
+  // melewati batas akhir 21 HSS (batas biologis "bibit terlalu tua").
+  const targetHssEfektif = Math.min(TARGET_OPTIMAL_HSS + adjustmentHari, BATAS_AKHIR_HSS);
+  const estimasiSiap = addCalendarDays(tanggalSemai, targetHssEfektif);
   const sisaHari = diffCalendarDays(todayStr, estimasiSiap);
-  const totalHari = durasi + adjustmentHari;
   const elapsed = diffCalendarDays(tanggalSemai, todayStr);
   const progressPct =
-    totalHari > 0 && elapsed != null
-      ? Math.min(100, Math.max(0, Math.round((elapsed / totalHari) * 100)))
+    elapsed != null
+      ? Math.min(100, Math.max(0, Math.round((elapsed / BATAS_AKHIR_HSS) * 100)))
       : null;
+
+  // Fase jendela tanam untuk verdict di UI (terpisah dari `status` yang dipakai laporan).
+  let fase;
+  if (elapsed == null) fase = null;
+  else if (elapsed < MULAI_SIAP_HSS) fase = "pembibitan";
+  else if (elapsed < targetHssEfektif) fase = "siap";
+  else if (elapsed <= BATAS_AKHIR_HSS) fase = "optimal";
+  else fase = "terlalu_tua";
+
+  // `status` mempertahankan kosakata lama (on_track/terlambat/perlu_evaluasi) yang
+  // dikonsumsi laporan operator. Bibit yang lewat batas akhir dihitung "terlambat".
+  let status = stressAdj.status;
+  if (status !== "perlu_evaluasi" && (adjustmentHari > 0 || fase === "terlalu_tua")) {
+    status = "terlambat";
+  }
 
   return {
     tanggal_semai: tanggalSemai,
@@ -174,22 +195,22 @@ function computeEstimasiTanam({
     sisa_hari: sisaHari,
     progress_pct: progressPct,
     status,
+    fase,
+    hss_hari_ini: elapsed,
     adjustment_hari: adjustmentHari,
     alasan_adjustment: alasan,
-    durasi_pembibitan_hari: durasi,
+    target_efektif_hss: targetHssEfektif,
+    durasi_pembibitan_hari: BATAS_AKHIR_HSS,
+    window: buildWindow(tanggalSemai),
     avg_stress_score_7d: avgStressScore7d != null ? Math.round(avgStressScore7d) : null,
     offline_days_7d: offlineDays7d ?? 0,
   };
 }
 
-function addCalendarDays(dateStr, days) {
-  const d = parseDateOnly(dateStr);
-  if (!d) return null;
-  d.setUTCDate(d.getUTCDate() + Number(days));
-  return wibDateStr(d);
-}
-
 module.exports = {
+  MULAI_SIAP_HSS,
+  TARGET_OPTIMAL_HSS,
+  BATAS_AKHIR_HSS,
   wibDateStr,
   lastNDaysWib,
   computeDailyStressScores,

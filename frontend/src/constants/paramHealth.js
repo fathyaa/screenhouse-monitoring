@@ -7,14 +7,15 @@ import { ALERT_PARAM_MAP } from "./sensorMetrics";
 // Metadata parameter: label ringkas + fungsi singkat agar petani paham konteksnya.
 export const PARAM_META = {
   nitrogen: { label: "Nitrogen (N)", unit: "mg/kg", purpose: "Daun & pertumbuhan", minCol: "min_nitrogen", maxCol: "max_nitrogen" },
-  phosphorus: { label: "Fosfor (P)", unit: "mg/kg", purpose: "Akar & bunga", minCol: "min_phosphorus", maxCol: "max_phosphorus" },
-  potassium: { label: "Kalium (K)", unit: "mg/kg", purpose: "Buah & ketahanan", minCol: "min_potassium", maxCol: "max_potassium" },
+  phosphorus: { label: "Fosfor (P)", unit: "mg/kg", purpose: "Perkembangan akar", minCol: "min_phosphorus", maxCol: "max_phosphorus" },
+  potassium: { label: "Kalium (K)", unit: "mg/kg", purpose: "Kekuatan batang & ketahanan bibit", minCol: "min_potassium", maxCol: "max_potassium" },
   soil_moisture: { label: "Kelembapan tanah", unit: "%", purpose: "Kebutuhan air", minCol: "min_soil_moisture", maxCol: "max_soil_moisture" },
   soil_temperature: { label: "Suhu tanah", unit: "°C", purpose: "Kesehatan akar", minCol: "min_soil_temperature", maxCol: "max_soil_temperature" },
   soil_ph: { label: "pH tanah", unit: "", purpose: "Penyerapan hara", minCol: "min_soil_ph", maxCol: "max_soil_ph" },
   air_temperature: { label: "Suhu udara", unit: "°C", purpose: "Lingkungan", minCol: "min_air_temperature", maxCol: "max_air_temperature" },
   air_humidity: { label: "Kelembapan udara", unit: "%", purpose: "Penguapan", minCol: "min_air_humidity", maxCol: "max_air_humidity" },
   conductivity: { label: "Konduktivitas (EC)", unit: "µS/cm", purpose: "Kepekatan larutan hara", minCol: "min_conductivity", maxCol: "max_conductivity" },
+  light_intensity: { label: "Intensitas cahaya", unit: "lux", purpose: "Cahaya untuk fotosintesis", minCol: "min_light_intensity", maxCol: "max_light_intensity" },
 };
 
 // Parameter inti yang ditampilkan sebagai kartu verdict (urut prioritas tani).
@@ -28,6 +29,7 @@ export const HEALTH_PARAM_KEYS = [
   "soil_temperature",
   "air_temperature",
   "air_humidity",
+  "light_intensity",
 ];
 
 export const STATUS_STYLE = {
@@ -48,6 +50,7 @@ const ADVICE = {
   air_temperature: { low: "Tutup ventilasi, jaga kehangatan (terutama malam).", high: "Buka ventilasi atau nyalakan kipas." },
   air_humidity: { low: "Naikkan kelembapan (pengabutan / siram lantai).", high: "Tingkatkan sirkulasi udara untuk cegah jamur." },
   conductivity: { low: "Larutan nutrisi terlalu encer, tambah pupuk cair/AB mix.", high: "Larutan terlalu pekat, siram air bersih untuk mengencerkan." },
+  light_intensity: { low: "Cahaya kurang, nyalakan lampu tambahan atau kurangi naungan.", high: "Cahaya berlebih, tambah naungan / paranet." },
 };
 
 export function evaluateParam(key, value, threshold) {

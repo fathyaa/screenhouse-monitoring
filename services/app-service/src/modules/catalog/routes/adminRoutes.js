@@ -4,6 +4,7 @@ const roleMiddleware = require("../../../shared/middlewares/roleMiddleware");
 const {
   listAdminScreenhouses,
   updateScreenhouseStatus,
+  deleteScreenhouse,
 } = require("../controllers/adminScreenhouseController");
 
 const router = express.Router();
@@ -13,5 +14,6 @@ router.use(authMiddleware, roleMiddleware(adminRoles));
 
 router.get("/screenhouses", listAdminScreenhouses);
 router.patch("/screenhouses/:id/status", updateScreenhouseStatus);
+router.delete("/screenhouses/:id", deleteScreenhouse);
 
 module.exports = router;

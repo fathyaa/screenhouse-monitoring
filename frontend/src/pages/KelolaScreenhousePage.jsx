@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { Search, Leaf, ExternalLink } from "lucide-react";
+import { Search, Leaf, ExternalLink, Trash2 } from "lucide-react";
 import AdminPageShell from "../components/AdminPageShell";
 import WilayahFilter, { buildWilayahQuery } from "../components/WilayahFilter";
 import { TableRowsSkeleton, ListPanelSkeleton } from "../components/LoadingUI";
@@ -84,6 +84,53 @@ function StatusConfirmDialog({ change, busy, onCancel, onConfirm }) {
   );
 }
 
+function DeleteConfirmDialog({ target, busy, onCancel, onConfirm }) {
+  if (!target) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[2000] flex items-end sm:items-center justify-center p-4 bg-black/40"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="delete-confirm-title"
+    >
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-xl w-full max-w-sm p-5 text-left">
+        <div className="flex items-center gap-2">
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-red-50 text-red-600">
+            <Trash2 size={18} />
+          </span>
+          <div id="delete-confirm-title" className="text-sm font-semibold text-gray-800">
+            Hapus screenhouse permanen?
+          </div>
+        </div>
+        <p className="text-sm text-gray-600 mt-3 leading-relaxed">
+          Screenhouse <span className="font-semibold">"{target.name}"</span> beserta{" "}
+          <span className="font-semibold">seluruh data sensor, riwayat siklus, dan peringatannya</span>{" "}
+          akan dihapus permanen dari sistem. Tindakan ini <span className="font-semibold">tidak bisa dibatalkan</span>.
+        </p>
+        <div className="flex gap-2 mt-4">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
+          >
+            {busy ? "Menghapus..." : "Ya, hapus permanen"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function KelolaScreenhousePage() {
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
@@ -99,6 +146,8 @@ export default function KelolaScreenhousePage() {
   const [search, setSearch] = useState("");
   const [updatingId, setUpdatingId] = useState(null);
   const [pendingChange, setPendingChange] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -153,6 +202,30 @@ export default function KelolaScreenhousePage() {
       toast.error("Gagal mengubah status");
     } finally {
       setUpdatingId(null);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`${API_URL}/admin/screenhouses/${deleteTarget.id}`, {
+        method: "DELETE",
+        headers: authHeaders,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.message || "Gagal menghapus screenhouse");
+        return;
+      }
+      toast.success("Screenhouse dihapus");
+      setDeleteTarget(null);
+      loadData();
+    } catch (err) {
+      console.error(err);
+      toast.error("Gagal menghapus screenhouse");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -278,6 +351,13 @@ export default function KelolaScreenhousePage() {
                               <ExternalLink size={15} />
                             </button>
                           )}
+                          <button
+                            onClick={() => setDeleteTarget(row)}
+                            className="p-1.5 rounded-lg hover:bg-red-50 text-red-600 transition"
+                            title="Hapus screenhouse"
+                          >
+                            <Trash2 size={15} />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -297,15 +377,24 @@ export default function KelolaScreenhousePage() {
                       <div className="text-[11px] text-gray-500 mt-1">{formatWilayah(row)}</div>
                       <div className="text-[11px] text-gray-500 mt-1">{row.node_count ?? 0} alat pengukur</div>
                     </div>
-                    {row.status === "active" && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      {row.status === "active" && (
+                        <button
+                          onClick={() => navigate(`/operator/screenhouse/${row.id}`)}
+                          className="p-1.5 rounded-lg hover:bg-bl-surface-muted text-bl-primary transition"
+                          title="Lihat detail"
+                        >
+                          <ExternalLink size={15} />
+                        </button>
+                      )}
                       <button
-                        onClick={() => navigate(`/operator/screenhouse/${row.id}`)}
-                        className="p-1.5 rounded-lg hover:bg-bl-surface-muted text-bl-primary transition shrink-0"
-                        title="Lihat detail"
+                        onClick={() => setDeleteTarget(row)}
+                        className="p-1.5 rounded-lg hover:bg-red-50 text-red-600 transition"
+                        title="Hapus screenhouse"
                       >
-                        <ExternalLink size={15} />
+                        <Trash2 size={15} />
                       </button>
-                    )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2 mt-2.5">
                     {statusBadge(row.status)}
@@ -342,6 +431,13 @@ export default function KelolaScreenhousePage() {
         busy={updatingId != null}
         onCancel={() => setPendingChange(null)}
         onConfirm={confirmStatusChange}
+      />
+
+      <DeleteConfirmDialog
+        target={deleteTarget}
+        busy={deleting}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
       />
     </AdminPageShell>
   );

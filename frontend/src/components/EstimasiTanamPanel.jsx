@@ -1,16 +1,163 @@
-import { Sprout, Calendar, Clock } from "lucide-react";
+import { useState } from "react";
+import { Sprout, Calendar, Clock, CheckCircle2, AlertTriangle } from "lucide-react";
 import { StressScoreDetailCard, StressScoreCardBadge } from "./StressScoreDisplay";
 import {
   formatSemaiDate,
   buildTimelineTracker,
-  countdownTimelineText,
+  buildWindowVerdict,
   mergeEstimasiDisplay,
+  MULAI_SIAP_HSS,
+  TARGET_OPTIMAL_HSS,
+  BATAS_AKHIR_HSS,
 } from "../utils/estimasiTanam";
+
+const FASE_STYLE = {
+  pembibitan: {
+    Icon: Sprout,
+    tone: "text-slate-600",
+    badgeBg: "bg-slate-100 text-slate-700",
+    bar: "bg-slate-400",
+    label: "Belum siap",
+  },
+  siap: {
+    Icon: CheckCircle2,
+    tone: "text-emerald-700",
+    badgeBg: "bg-emerald-100 text-emerald-800",
+    bar: "bg-emerald-500",
+    label: "Siap tanam",
+  },
+  optimal: {
+    Icon: CheckCircle2,
+    tone: "text-emerald-700",
+    badgeBg: "bg-emerald-600 text-white",
+    bar: "bg-emerald-600",
+    label: "Waktu ideal",
+  },
+  terlalu_tua: {
+    Icon: AlertTriangle,
+    tone: "text-red-700",
+    badgeBg: "bg-red-100 text-red-800",
+    bar: "bg-red-500",
+    label: "Terlalu tua",
+  },
+};
+
+/**
+ * Verdict awam + garis waktu sederhana. Tiga titik (bibit umur 15/18/21 hari)
+ * disembunyikan; ketuk salah satu titik pada garis untuk memunculkan tanggalnya.
+ */
+function WindowTimeline({ verdict, timeline, compact = false, footer = null }) {
+  const [aktif, setAktif] = useState(null);
+
+  if (!verdict) {
+    return (
+      <>
+        <p className="text-xs text-gray-500 leading-relaxed">
+          Mulai siklus semai untuk melihat perkiraan waktu tanam.
+        </p>
+        {footer}
+      </>
+    );
+  }
+
+  const { window, fase } = verdict;
+  const style = FASE_STYLE[fase] ?? FASE_STYLE.pembibitan;
+  const { Icon } = style;
+  const progressPct = timeline?.progressPct ?? 0;
+
+  const titik = [
+    {
+      key: "mulaiSiap",
+      pos: (MULAI_SIAP_HSS / BATAS_AKHIR_HSS) * 100,
+      judul: "Sudah bisa ditanam",
+      data: window.mulaiSiap,
+      reached: fase !== "pembibitan",
+    },
+    {
+      key: "targetOptimal",
+      pos: (TARGET_OPTIMAL_HSS / BATAS_AKHIR_HSS) * 100,
+      judul: "Paling bagus ditanam",
+      data: window.targetOptimal,
+      reached: fase === "optimal" || fase === "terlalu_tua",
+    },
+    {
+      key: "batasAkhir",
+      pos: 100,
+      judul: "Jangan sampai lewat ini",
+      data: window.batasAkhir,
+      reached: fase === "terlalu_tua",
+    },
+  ];
+  const aktifTitik = titik.find((t) => t.key === aktif) ?? null;
+
+  return (
+    <>
+      <div className={`flex items-start gap-1.5 ${style.tone}`}>
+        <Icon size={compact ? 14 : 16} className="shrink-0 mt-0.5" />
+        <p className={`font-medium leading-snug ${compact ? "text-xs" : "text-sm"}`}>
+          {verdict.verdict}
+        </p>
+      </div>
+
+      <div className="mt-3 mx-2.5 relative">
+        {aktifTitik && (
+          <div
+            className="absolute bottom-full mb-2 z-10 w-max max-w-[160px]"
+            style={{
+              left: `${aktifTitik.pos}%`,
+              transform: aktifTitik.pos >= 60 ? "translateX(-100%)" : "translateX(-50%)",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setAktif(null)}
+              className="block text-left rounded-lg bg-gray-900 text-white px-2.5 py-1.5 shadow-lg"
+            >
+              <span className="block text-[11px] font-semibold leading-tight">{aktifTitik.judul}</span>
+              <span className="block text-[11px] text-gray-200 leading-tight mt-0.5">
+                Umur {aktifTitik.data.hss} hari · {aktifTitik.data.label}
+              </span>
+            </button>
+          </div>
+        )}
+
+        <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${style.bar}`}
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+
+        {titik.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setAktif(aktif === t.key ? null : t.key)}
+            aria-label={`${t.judul}, saat bibit umur ${t.data.hss} hari, ${t.data.label}`}
+            className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-4 w-4 rounded-full border-2 border-white shadow-sm flex items-center justify-center ${
+              aktif === t.key ? "ring-2 ring-gray-800/40" : ""
+            }`}
+            style={{ left: `${t.pos}%`, backgroundColor: "#e5e7eb" }}
+          >
+            <span
+              className={`h-2 w-2 rounded-full ${t.reached ? style.bar : "bg-gray-300"}`}
+            />
+          </button>
+        ))}
+      </div>
+
+      <p className="text-[10px] text-gray-400 mt-2 leading-snug">
+        Ketuk titik pada garis untuk melihat tanggalnya.
+      </p>
+      {footer}
+    </>
+  );
+}
 
 export function EstimasiTanamDisclaimer({ className = "" }) {
   return (
     <p className={`text-[11px] text-gray-600 leading-relaxed ${className}`}>
-      Estimasi berdasarkan data sensor dan standar varietas.
+      Bibit padi paling bagus ditanam saat berumur 15–21 hari (idealnya 18 hari).
     </p>
   );
 }
@@ -71,8 +218,9 @@ export default function EstimasiTanamPanel({
   // seperti "100 Sangat baik" menyesatkan karena belum ada bibit yang dinilai.
   const noCycle = !semaiRaw;
 
-  const displayEstimasi = mergeEstimasiDisplay(estimasi, semaiRaw, durasiPembibitanHari);
+  const displayEstimasi = mergeEstimasiDisplay(estimasi, semaiRaw);
   const timeline = buildTimelineTracker(semaiRaw, durasiPembibitanHari, displayEstimasi);
+  const verdict = buildWindowVerdict(semaiRaw, displayEstimasi);
 
   if (!displayEstimasi && !varietas && !semaiRaw) {
     return (
@@ -82,33 +230,13 @@ export default function EstimasiTanamPanel({
     );
   }
 
-  const timelineBlock = timeline ? (
-    <>
-      <p className={`font-semibold text-gray-800 leading-tight ${compact ? "text-xs" : "text-sm"}`}>
-        Hari ke-{timeline.hariKe} dari {timeline.totalDays} Hari
-      </p>
-      <div className="mt-1.5">
-        <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-          <div
-            className="h-full rounded-full bg-emerald-600 transition-all duration-500"
-            style={{ width: `${timeline.progressPct}%` }}
-          />
-        </div>
-      </div>
-      {countdownTimelineText(timeline.sisaHari, timeline.targetLabel) && (
-        <p className={`text-gray-700 leading-snug mt-1.5 break-words ${compact ? "text-[11px]" : "text-xs"}`}>
-          {countdownTimelineText(timeline.sisaHari, timeline.targetLabel)}
-        </p>
-      )}
-      {estimasiFooter}
-    </>
-  ) : (
-    <>
-      <p className="text-xs text-gray-500 leading-relaxed">
-        Mulai siklus semai untuk melihat timeline.
-      </p>
-      {estimasiFooter}
-    </>
+  const timelineBlock = (
+    <WindowTimeline
+      verdict={verdict}
+      timeline={timeline}
+      compact={compact}
+      footer={estimasiFooter}
+    />
   );
 
   if (layout === "dashboard") {
@@ -144,38 +272,17 @@ export default function EstimasiTanamPanel({
           )}
         </div>
 
-        {timeline ? (
+        {verdict ? (
           <div className="rounded-xl bg-gradient-to-br from-emerald-50/90 via-white to-white border border-emerald-100 p-3">
             <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800/80 mb-2">
               <Calendar size={11} className="shrink-0" />
-              Estimasi siap tanam
+              Kapan bisa tanam
             </div>
-
-            <div className="h-2 rounded-full bg-white border border-emerald-100 overflow-hidden">
-              <div
-                className="h-full rounded-full bg-emerald-500 transition-all duration-500"
-                style={{ width: `${timeline.progressPct}%` }}
-              />
-            </div>
-
-            <div className="flex items-end justify-between gap-3 mt-2.5">
-              <div>
-                <p className="text-lg font-bold text-gray-900 leading-none tabular-nums">
-                  Hari {timeline.hariKe}
-                  <span className="text-sm font-medium text-gray-500"> / {timeline.totalDays}</span>
-                </p>
-              </div>
-              {countdownTimelineText(timeline.sisaHari, timeline.targetLabel) && (
-                <p className="text-xs text-gray-600 text-right leading-snug max-w-[55%]">
-                  {countdownTimelineText(timeline.sisaHari, timeline.targetLabel)}
-                </p>
-              )}
-            </div>
-            {estimasiFooter}
+            <WindowTimeline verdict={verdict} timeline={timeline} footer={estimasiFooter} />
           </div>
         ) : (
           <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/80 px-3 py-2.5 text-xs text-gray-600">
-            Mulai siklus semai untuk melihat timeline pembibitan.
+            Mulai siklus semai untuk melihat perkiraan waktu tanam.
             {estimasiFooter}
           </div>
         )}
@@ -204,7 +311,7 @@ export default function EstimasiTanamPanel({
             {varietasFooter}
           </InlineSegment>
 
-          <InlineSegment icon={Calendar} title="Estimasi siap tanam" compact={compact}>
+          <InlineSegment icon={Calendar} title="Kapan bisa tanam" compact={compact}>
             {timelineBlock}
             <EstimasiTanamDisclaimer className="mt-2 pt-2 border-t border-gray-200/60" />
           </InlineSegment>
@@ -239,17 +346,8 @@ export default function EstimasiTanamPanel({
           {varietasFooter}
         </InfoCard>
 
-        <InfoCard icon={Calendar} title="Estimasi siap tanam" compact={compact}>
-          {timeline ? (
-            timelineBlock
-          ) : (
-            <>
-              <p className="text-xs text-gray-500 leading-relaxed">
-                Mulai siklus semai untuk melihat timeline pembibitan.
-              </p>
-              {estimasiFooter}
-            </>
-          )}
+        <InfoCard icon={Calendar} title="Kapan bisa tanam" compact={compact}>
+          {timelineBlock}
           <EstimasiTanamDisclaimer className="mt-2 pt-2 border-t border-gray-200/60" />
         </InfoCard>
 

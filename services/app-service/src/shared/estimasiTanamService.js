@@ -156,7 +156,6 @@ function computeEstimasiFromContext(ctx, threshold, sensorStats) {
 
   const estimasi = computeEstimasiTanam({
     tanggalSemai: tanggalSemaiStr,
-    durasiPembibitanHari: ctx.durasi_pembibitan_hari,
     avgStressScore7d: avgStress,
     offlineDays7d: offlineDays,
     todayStr: wibDateStr(),

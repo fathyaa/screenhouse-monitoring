@@ -8,6 +8,7 @@ export function useSemaiCycle(screenhouseId, token, onCycleChanged) {
   const [ending, setEnding] = useState(false);
   const [showStartModal, setShowStartModal] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const loadActiveCycle = useCallback(() => {
     if (!screenhouseId || !token) {
@@ -58,6 +59,11 @@ export function useSemaiCycle(screenhouseId, token, onCycleChanged) {
     onCycleChanged?.(data);
   };
 
+  const handleCycleEdited = (data) => {
+    setActiveCycle((prev) => (prev ? { ...prev, ...data } : data));
+    onCycleChanged?.(data);
+  };
+
   return {
     activeCycle,
     loading,
@@ -66,8 +72,11 @@ export function useSemaiCycle(screenhouseId, token, onCycleChanged) {
     setShowStartModal,
     showEndConfirm,
     setShowEndConfirm,
+    showEditModal,
+    setShowEditModal,
     handleEndCycle,
     handleCycleStarted,
+    handleCycleEdited,
     loadActiveCycle,
   };
 }

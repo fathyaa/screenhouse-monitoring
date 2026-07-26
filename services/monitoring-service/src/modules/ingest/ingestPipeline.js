@@ -188,9 +188,10 @@ async function saveSensorReading({ sensorNode, sinkNode, data }) {
       sensor_node_id, sink_node_id,
       nitrogen, phosphorus, potassium,
       soil_temperature, soil_moisture, soil_ph, conductivity,
-      air_temperature, air_humidity, light_intensity
+      air_temperature, air_humidity, light_intensity,
+      created_at
     )
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, COALESCE($13, NOW()))
     RETURNING *
     `,
     [
@@ -206,6 +207,9 @@ async function saveSensorReading({ sensorNode, sinkNode, data }) {
       pick(data, "air_temperature"),
       pick(data, "air_humidity"),
       pick(data, "light_intensity"),
+      // Waktu ukur dari payload (Date) bila ada & valid → jadi created_at.
+      // null (simulator / timestamp ngawur) → COALESCE pakai NOW() waktu terima.
+      pick(data, "measured_at", null),
     ]
   );
 

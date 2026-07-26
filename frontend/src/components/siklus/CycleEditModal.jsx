@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { Calendar, Sprout } from "lucide-react";
+import { Calendar, Pencil } from "lucide-react";
 import VarietasSelect from "../VarietasSelect";
 import { API_URL } from "../../config/api";
 import {
@@ -28,16 +28,17 @@ function formatIdDate(dateStr) {
   });
 }
 
-export default function CycleStartModal({ open, onClose, onStarted, screenhouseId, token }) {
+/** Ubah varietas & tanggal mulai siklus yang sedang berjalan. */
+export default function CycleEditModal({ open, onClose, onSaved, screenhouseId, token, cycle }) {
   const [varietasId, setVarietasId] = useState("");
   const [tanggalMulai, setTanggalMulai] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
-    setVarietasId("");
-    setTanggalMulai(new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" }));
-  }, [open]);
+    if (!open || !cycle) return;
+    setVarietasId(cycle.varietas_id != null ? String(cycle.varietas_id) : "");
+    setTanggalMulai(cycle.tanggal_mulai ? String(cycle.tanggal_mulai).slice(0, 10) : "");
+  }, [open, cycle]);
 
   const jendela = useMemo(() => {
     if (!tanggalMulai) return null;
@@ -61,8 +62,8 @@ export default function CycleStartModal({ open, onClose, onStarted, screenhouseI
 
     setSubmitting(true);
     try {
-      const res = await fetch(`${API_URL}/screenhouses/${screenhouseId}/cycles/start`, {
-        method: "POST",
+      const res = await fetch(`${API_URL}/screenhouses/${screenhouseId}/cycles/${cycle.id}`, {
+        method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -73,12 +74,12 @@ export default function CycleStartModal({ open, onClose, onStarted, screenhouseI
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Gagal memulai siklus");
-      toast.success("Siklus semai baru dimulai");
-      onStarted?.(data);
+      if (!res.ok) throw new Error(data.message || "Gagal menyimpan perubahan");
+      toast.success("Siklus semai diperbarui");
+      onSaved?.(data);
       onClose?.();
     } catch (err) {
-      toast.error(err.message || "Gagal memulai siklus");
+      toast.error(err.message || "Gagal menyimpan perubahan");
     } finally {
       setSubmitting(false);
     }
@@ -94,26 +95,18 @@ export default function CycleStartModal({ open, onClose, onStarted, screenhouseI
     >
       <div className="bg-white rounded-2xl border border-gray-200 shadow-xl w-full max-w-md p-5 text-left">
         <div className="flex items-center gap-2 mb-1">
-          <Sprout size={18} className="text-bl-primary" />
-          <h2 className="text-base font-semibold text-gray-800">Mulai Siklus Baru</h2>
+          <Pencil size={18} className="text-bl-primary" />
+          <h2 className="text-base font-semibold text-gray-800">Edit Siklus Semai</h2>
         </div>
         <p className="text-sm text-gray-600 mb-4 leading-relaxed">
-          Pilih varietas dan tanggal mulai semai. Sistem otomatis memperkirakan kapan bibit
-          bisa ditanam.
+          Perbaiki varietas atau tanggal mulai semai. Perkiraan waktu tanam dihitung ulang otomatis.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <VarietasSelect
-            value={varietasId}
-            onChange={setVarietasId}
-            token={token}
-            required
-          />
+          <VarietasSelect value={varietasId} onChange={setVarietasId} token={token} required />
 
           <label className="block">
-            <span className="text-xs font-medium text-gray-600 mb-1 block">
-              Tanggal mulai semai
-            </span>
+            <span className="text-xs font-medium text-gray-600 mb-1 block">Tanggal mulai semai</span>
             <input
               type="date"
               value={tanggalMulai}
@@ -130,8 +123,7 @@ export default function CycleStartModal({ open, onClose, onStarted, screenhouseI
                 <span className="font-medium">Bibit bisa ditanam:</span>{" "}
                 {formatIdDate(jendela.mulaiSiap)} – {formatIdDate(jendela.batasAkhir)}
                 <span className="block text-xs text-gray-600 mt-0.5">
-                  Paling bagus sekitar {formatIdDate(jendela.targetOptimal)}. Perkiraan bisa berubah
-                  mengikuti kondisi bibit dari sensor.
+                  Paling bagus sekitar {formatIdDate(jendela.targetOptimal)}.
                 </span>
               </div>
             </div>
@@ -150,7 +142,7 @@ export default function CycleStartModal({ open, onClose, onStarted, screenhouseI
               disabled={submitting}
               className="flex-1 py-2.5 rounded-xl bg-bl-primary hover:bg-bl-primary-hover text-white text-sm font-medium disabled:opacity-50"
             >
-              {submitting ? "Memproses..." : "Mulai siklus"}
+              {submitting ? "Menyimpan..." : "Simpan perubahan"}
             </button>
           </div>
         </form>

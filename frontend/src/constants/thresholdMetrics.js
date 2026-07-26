@@ -14,7 +14,7 @@ export const THRESHOLD_METRICS = [
 export const DEFAULT_THRESHOLD = {
   min_nitrogen: 20, max_nitrogen: 45,
   min_phosphorus: 10, max_phosphorus: 30,
-  min_potassium: 15, max_potassium: 50,
+  min_potassium: 40, max_potassium: 120,
   min_soil_moisture: 50, max_soil_moisture: 80,
   min_soil_temperature: 20, max_soil_temperature: 35,
   min_soil_ph: 5.5, max_soil_ph: 7.0,

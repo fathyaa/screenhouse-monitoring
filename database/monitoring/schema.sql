@@ -88,6 +88,8 @@ CREATE TABLE sensor_data (
     air_temperature  NUMERIC(5,2),
     air_humidity     NUMERIC(5,2),
     light_intensity  NUMERIC(10,2),
+    -- Diisi dari timestamp payload perangkat bila valid, jika tidak fallback ke
+    -- waktu terima server (CURRENT_TIMESTAMP). Lihat saveSensorReading.
     created_at       TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
