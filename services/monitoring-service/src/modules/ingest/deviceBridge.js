@@ -94,43 +94,6 @@ function toNumberOrNull(raw) {
   return Number.isFinite(n) ? n : null;
 }
 
-// Batas kewajaran waktu ukur: 2020-01-01 s.d. 2100-01-01. Di luar itu dianggap
-// jam perangkat belum diset / counter uptime → tak dipakai (created_at fallback
-// ke NOW() waktu terima), bukan menyimpan tanggal ngawur.
-const MIN_TS_MS = Date.UTC(2020, 0, 1);
-const MAX_TS_MS = Date.UTC(2100, 0, 1);
-
-/**
- * Timestamp dari kolom 0 payload → Date, atau null bila tidak valid/di luar
- * rentang wajar. Format firmware belum dipastikan, jadi parser ini toleran:
- *  - epoch detik / milidetik (dibedakan dari besarannya)
- *  - string tanggal (mis. ISO) — bila tanpa zona, diparse sesuai runtime.
- */
-function parseDeviceTimestamp(raw) {
-  if (raw == null) return null;
-  const s = String(raw).trim();
-  if (s === "") return null;
-
-  if (/^\d+$/.test(s)) {
-    // Nilai < 1e11 diperlakukan sebagai epoch DETIK (epoch milidetik jaman ini
-    // ~1.7e12), jadi dikali 1000. Counter uptime kecil akan jatuh sebelum 2020
-    // dan tersaring oleh cek rentang di bawah.
-    let ms = Number(s);
-    if (ms < 1e11) ms *= 1000;
-    return ms >= MIN_TS_MS && ms < MAX_TS_MS ? new Date(ms) : null;
-  }
-
-  // Format firmware gh01: "YYYY-MM-DD HH:MM:SS" — waktu LOKAL WIB tanpa zona.
-  // Tempelkan offset +07:00 eksplisit supaya hasilnya benar di server zona mana
-  // pun (tanpa ini, di server UTC `new Date` menafsirkannya UTC → meleset 7 jam).
-  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
-  const d = m
-    ? new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}+07:00`)
-    : new Date(s); // fallback: string ISO yang sudah ber-zona, dll.
-  const t = d.getTime();
-  return Number.isFinite(t) && t >= MIN_TS_MS && t < MAX_TS_MS ? d : null;
-}
-
 /** CSV "parameter" → objek data kontrak internal (+ node_id / destination_id). */
 function parseParameterCsv(payload) {
   // Firmware perangkat gh01 memakai pemisah kolom ";" (bukan ",").
@@ -147,9 +110,6 @@ function parseParameterCsv(payload) {
   const data = {
     node_id: nodeId,
     destination_id: nodeTarget || null,
-    // Kolom 0 = waktu ukur di perangkat → dipakai sebagai created_at sensor_data.
-    // null bila tak terkirim/ngawur → saveSensorReading fallback ke NOW() (waktu terima).
-    measured_at: parseDeviceTimestamp(cols[0]),
   };
   for (const [index, key, divisor, min, max] of CSV_SENSOR_COLUMNS) {
     let value = toNumberOrNull(cols[index]);
@@ -206,15 +166,7 @@ async function onParameter(bridge, topicParts, payload) {
   if (!ok) return;
 
   await handleMqttPayload(data, topicParts, String(bridge.screenhouseId));
-
-  // Log hasil parse + keputusan waktu: measured_at valid → itu yang jadi created_at,
-  // null → created_at fallback ke NOW() (waktu terima server).
-  const waktu = data.measured_at
-    ? `created_at←payload ${data.measured_at.toISOString()}`
-    : "created_at←NOW (timestamp payload kosong/ngawur)";
-  console.log(
-    `[device-bridge] parameter node=${data.node_id} → sh ${bridge.screenhouseId} | ${waktu}`
-  );
+  if (DEBUG) console.log(`[device-bridge] parameter node=${data.node_id} → sh ${bridge.screenhouseId}`);
 }
 
 async function onStatus(bridge, topicParts, payload) {
@@ -354,5 +306,5 @@ module.exports = {
   publishValveControl,
   isDeviceBridgeScreenhouse,
   // Diekspos untuk unit test parsing (bukan API publik).
-  __test: { parseDeviceTimestamp, parseParameterCsv },
+  __test: { parseParameterCsv },
 };
