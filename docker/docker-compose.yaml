@@ -12,6 +12,11 @@ services:
       - "5434:5432"
     volumes:
       - postgres_app_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d screenhouse_app"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   postgres-monitoring:
     image: postgres:16
@@ -25,6 +30,11 @@ services:
       - "5433:5432"
     volumes:
       - postgres_monitoring_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d screenhouse_monitoring"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   redis:
     image: redis:7
@@ -55,18 +65,102 @@ services:
       RABBITMQ_DEFAULT_USER: screenhouse
       RABBITMQ_DEFAULT_PASS: screenhouse
 
-  # Final project: LB HTTP untuk 2× monitoring-service (uji S2/S4)
-  # MQTT load test tetap ke :1883 — tidak lewat Nginx
-  nginx-lb:
-    image: nginx:alpine
-    container_name: screenhouse-nginx-lb
+  monitoring-service:
+    build:
+      context: ../services/monitoring-service
+    container_name: screenhouse-monitoring-service
     restart: unless-stopped
     ports:
-      - "3080:80"
-    volumes:
-      - ./nginx/stress-lb.conf:/etc/nginx/nginx.conf:ro
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      DB_HOST: postgres-monitoring
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: screenhouse_monitoring
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MQTT_BROKER_URL: mqtt://mosquitto:1883
+      JWT_SECRET: supersecret
+      USE_RABBITMQ: "false"
+      RABBITMQ_URL: amqp://screenhouse:screenhouse@rabbitmq:5672
+      # --- Jembatan perangkat sensor sungguhan (gh01) ---
+      # Broker MQTT di luar stack ini, jadi pakai IP publik (bukan nama service Docker).
+      # Skema WAJIB mqtt:// — .env host TIDAK terbaca di container (.dockerignore),
+      # jadi semua env device-bridge harus dideklarasikan di sini.
+      DEVICE_BRIDGE_URL: mqtt://168.110.214.70:1883
+      DEVICE_BRIDGE_MAP: gh01:700
+      DEVICE_BRIDGE_DEBUG: "true"
+      # Slot `fan` gh01 = katup irigasi tray 2 (lihat CLAUDE.md). Nilai
+      # ACTUATOR_CAPABILITIES harus sama persis dengan app-service.
+      ACTUATOR_CAPABILITIES: 700:irrigation=Irigasi Tray 1|fan=Irigasi Tray 2
+      AUTO_ACTUATOR_ENABLED: "false"
+      # gh01 dikecualikan permanen: rule otomatis memetakan suhu udara tinggi → fan ON,
+      # yang di gh01 berarti membuka katup air tray 2 (tray kebanjiran di hari panas).
+      AUTO_ACTUATOR_EXCLUDE: "700"
+    depends_on:
+      postgres-monitoring:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      mosquitto:
+        condition: service_started
+
+  app-service:
+    build:
+      context: ../services/app-service
+    container_name: screenhouse-app-service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: 8000
+      DB_HOST: postgres-app
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: screenhouse_app
+      # Stats read-only ke DB monitoring (host terpisah di jaringan Docker)
+      DB_MON_HOST: postgres-monitoring
+      DB_MON_PORT: 5432
+      DB_MON_NAME: screenhouse_monitoring
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: supersecret
+      MONITORING_SERVICE_URL: http://monitoring-service:3001
+      # Harus sama persis dengan monitoring-service, supaya laporan wilayah &
+      # analytics siklus tidak menghitung slot `fan` pinjaman gh01 sebagai kipas.
+      ACTUATOR_CAPABILITIES: 700:irrigation=Irigasi Tray 1|fan=Irigasi Tray 2
+    depends_on:
+      postgres-app:
+        condition: service_healthy
+      postgres-monitoring:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      monitoring-service:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ../frontend
+      # Default same-origin — REST /api & Socket.IO /socket.io diproksi nginx
+      # ke backend. Override di sini bila deploy dengan domain eksplisit.
+      args:
+        VITE_DEV_PROXY: "false"
+        VITE_API_URL: /api
+        VITE_MONITORING_URL: ""
+    container_name: screenhouse-frontend
+    restart: unless-stopped
+    ports:
+      # 8080 dipakai container lain (spark-master) — pakai 8082 di host.
+      - "8082:80"
+    depends_on:
+      app-service:
+        condition: service_started
+      monitoring-service:
+        condition: service_started
 
 volumes:
   postgres_app_data:

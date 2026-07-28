@@ -3,7 +3,9 @@ const { Pool } = require("pg");
 const monitoringPool =
   process.env.DB_MON_NAME || process.env.MONITORING_DB_NAME
     ? new Pool({
-        host: process.env.DB_HOST || "localhost",
+        // DB_MON_HOST default ke DB_HOST agar mode host (dua DB di localhost,
+        // beda port) tetap sama; di Docker kedua Postgres jadi host terpisah.
+        host: process.env.DB_MON_HOST || process.env.DB_HOST || "localhost",
         port: Number(process.env.DB_MON_PORT || 5433),
         user: process.env.DB_USER || "postgres",
         password: process.env.DB_PASSWORD || "postgres",

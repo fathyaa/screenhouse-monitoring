@@ -14,4 +14,6 @@ export const API_URL = isDevProxy()
  */
 export const MONITORING_URL = isDevProxy()
   ? ""
-  : import.meta.env.VITE_MONITORING_URL || "http://localhost:3001";
+  : // `??` (bukan `||`) supaya VITE_MONITORING_URL="" berarti same-origin
+    // (Socket.IO lewat reverse-proxy nginx /socket.io), bukan jatuh ke localhost.
+    import.meta.env.VITE_MONITORING_URL ?? "http://localhost:3001";

@@ -803,7 +803,11 @@ async function getScreenhouseStressScore(req, res) {
       }
     }
 
-    const data = await monitoringGet(`/sensor-data/screenhouse/${id}/stress-score`);
+    const data = await monitoringGet(
+      `/sensor-data/screenhouse/${id}/stress-score`,
+      null,
+      req.headers.authorization
+    );
     if (!data) {
       return res.status(503).json({ message: "Layanan monitoring tidak tersedia" });
     }

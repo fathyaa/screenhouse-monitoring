@@ -3,6 +3,7 @@ const monitoringPool = require("../../../config/monitoringDb");
 const { monitoringGet } = require("../../../shared/monitoringClient");
 const { computeStressScore, getCategory } = require("../../../shared/stressScore");
 const { buildEstimasiTanamBatch } = require("../../../shared/estimasiTanamService");
+const { BATAS_AKHIR_HSS } = require("../../../shared/estimasiTanam");
 const { getActuatorCapabilities } = require("../../../shared/actuatorCapabilities");
 
 const PARAM_LABELS = [
@@ -151,26 +152,25 @@ function buildVarietasDurationStats(completedCycles) {
     const entry = groups.get(name) ?? {
       nama: name,
       actual_days: [],
-      standard_days: [],
     };
     entry.actual_days.push(actual);
-    if (cyc.durasi_target_hari != null) {
-      entry.standard_days.push(Number(cyc.durasi_target_hari));
-    }
     groups.set(name, entry);
   }
 
+  // Target durasi pembibitan = batas akhir jendela tanam (21 HSS), seragam untuk
+  // SEMUA varietas. `durasi_target_hari` per siklus (warisan durasi per-varietas)
+  // tidak dipakai lagi agar konsisten dengan kebijakan jendela tetap 15/18/21 HSS.
+  const avgStandard = BATAS_AKHIR_HSS;
   return [...groups.values()]
     .map((g) => {
       const avgActual = avgNumeric(g.actual_days);
-      const avgStandard = avgNumeric(g.standard_days);
       return {
         nama: g.nama,
         cycle_count: g.actual_days.length,
         avg_actual_days: avgActual,
         avg_standard_days: avgStandard,
         delay_index_days:
-          avgActual != null && avgStandard != null
+          avgActual != null
             ? Math.round((avgActual - avgStandard) * 10) / 10
             : null,
       };
@@ -440,8 +440,8 @@ async function fetchScreenhouses(filters) {
   return result.rows;
 }
 
-async function fetchMapSummary() {
-  const data = await monitoringGet("/sensor-data/map-summary", []);
+async function fetchMapSummary(authorization) {
+  const data = await monitoringGet("/sensor-data/map-summary", [], authorization);
   return Object.fromEntries(
     (Array.isArray(data) ? data : []).map((item) => [item.screenhouse_id, item])
   );
@@ -903,7 +903,7 @@ async function getOperatorReports(req, res) {
 
     const [screenhouses, mapSummary, growth] = await Promise.all([
       fetchScreenhouses(filters),
-      fetchMapSummary(),
+      fetchMapSummary(req.headers.authorization),
       fetchGrowthStats(days),
     ]);
 

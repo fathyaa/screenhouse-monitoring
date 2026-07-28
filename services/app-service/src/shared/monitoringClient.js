@@ -5,9 +5,13 @@ const REQUEST_TIMEOUT_MS = Number(process.env.MONITORING_REQUEST_TIMEOUT_MS) || 
 
 // Fetches JSON from monitoring-service. Returns `fallback` (instead of throwing)
 // when monitoring is unreachable, so app dashboards degrade gracefully.
-async function monitoringGet(path, fallback = null) {
+async function monitoringGet(path, fallback = null, authorization = null) {
   try {
+    const headers = {};
+    if (authorization) headers.Authorization = authorization;
+
     const response = await fetch(`${MONITORING_SERVICE_URL}${path}`, {
+      headers,
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) {
@@ -20,11 +24,14 @@ async function monitoringGet(path, fallback = null) {
   }
 }
 
-async function monitoringPost(path, body, fallback = null) {
+async function monitoringPost(path, body, fallback = null, authorization = null) {
   try {
+    const headers = { "Content-Type": "application/json" };
+    if (authorization) headers.Authorization = authorization;
+
     const response = await fetch(`${MONITORING_SERVICE_URL}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });

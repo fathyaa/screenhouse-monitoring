@@ -24,7 +24,9 @@ async function setScreenhouseActuators(req, res) {
         ...req.body,
         source: "manual",
         user_id: req.user.id,
-      }
+      },
+      null,
+      req.headers.authorization
     );
 
     if (!result) {

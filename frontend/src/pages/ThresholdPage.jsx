@@ -12,8 +12,8 @@ import { API_URL } from "../config/api";
 /** Penjelasan singkat per parameter — form ini sebelumnya cuma kolom angka kosong. */
 const METRIC_HINTS = {
   nitrogen: "Nutrisi utama untuk pertumbuhan daun.",
-  phosphorus: "Mendukung perkembangan akar & bunga.",
-  potassium: "Mendukung pembentukan buah & ketahanan tanaman.",
+  phosphorus: "Mendukung perkembangan akar.",
+  potassium: "Mendukung kekuatan batang & ketahanan bibit.",
   soil_moisture: "Kadar air dalam tanah — menentukan kebutuhan penyiraman.",
   soil_temperature: "Suhu di sekitar akar — memengaruhi penyerapan hara.",
   soil_ph: "Tingkat keasaman tanah — memengaruhi penyerapan nutrisi.",

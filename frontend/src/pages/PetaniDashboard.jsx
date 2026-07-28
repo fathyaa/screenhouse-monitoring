@@ -12,6 +12,8 @@ import PendingOnboardingPanel from "../components/PendingOnboardingPanel";
 import ScreenhouseDetailPage from "./ScreenhouseDetailPage";
 import { isAutoHandledAlert } from "../constants/actuatorRules";
 import { staleThresholdMs } from "../utils/nodeOnline";
+import { formatRackName } from "../utils/rackNames";
+import { isDeviceOfflineAlert } from "../utils/alertDisplay";
 
 import { API_URL } from "../config/api";
 import { getSocket } from "../lib/socket";
@@ -594,6 +596,13 @@ function PetaniDashboard() {
               const primaryAutoHandled =
                 primaryAlert && isAutoHandledAlert(primaryAlert, sensor?.capabilities);
 
+              // Sebutkan rak asal alert kalau tahu node-nya. Alert offline
+              // dikecualikan — pesannya sudah menyebut rak sendiri.
+              const primaryAlertRack =
+                primaryAlert?.sensor_node_name && !isDeviceOfflineAlert(primaryAlert)
+                  ? formatRackName(primaryAlert.sensor_node_name)
+                  : null;
+
               return (
                 <div
                   key={sh.id}
@@ -642,7 +651,15 @@ function PetaniDashboard() {
                         ) : (
                           <TriangleAlert size={13} className="shrink-0" aria-hidden />
                         )}
-                        <span className="truncate min-w-0">{primaryAlert.message}</span>
+                        <span className="truncate min-w-0">
+                          {primaryAlert.message}
+                          {primaryAlertRack && (
+                            <span className="font-normal opacity-70">
+                              {" · "}
+                              {primaryAlertRack}
+                            </span>
+                          )}
+                        </span>
                       </button>
                     )}
 
