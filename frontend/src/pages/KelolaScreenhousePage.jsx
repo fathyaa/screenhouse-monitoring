@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { Search, Leaf, ExternalLink, Trash2 } from "lucide-react";
+import { Search, Leaf, ExternalLink, Trash2, Layers } from "lucide-react";
 import AdminPageShell from "../components/AdminPageShell";
+import TrayManagerModal from "../components/TrayManagerModal";
 import WilayahFilter, { buildWilayahQuery } from "../components/WilayahFilter";
 import { TableRowsSkeleton, ListPanelSkeleton } from "../components/LoadingUI";
 import Pagination from "../components/Pagination";
@@ -148,6 +149,7 @@ export default function KelolaScreenhousePage() {
   const [pendingChange, setPendingChange] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [trayTarget, setTrayTarget] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -342,6 +344,13 @@ export default function KelolaScreenhousePage() {
                             <option value="pending">Pending</option>
                             <option value="inactive">Nonaktif</option>
                           </select>
+                          <button
+                            onClick={() => setTrayTarget(row)}
+                            className="p-1.5 rounded-lg hover:bg-bl-surface-muted text-bl-primary transition"
+                            title="Kelola rak bibit"
+                          >
+                            <Layers size={15} />
+                          </button>
                           {row.status === "active" && (
                             <button
                               onClick={() => navigate(`/operator/screenhouse/${row.id}`)}
@@ -378,6 +387,13 @@ export default function KelolaScreenhousePage() {
                       <div className="text-[11px] text-gray-500 mt-1">{row.node_count ?? 0} alat pengukur</div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => setTrayTarget(row)}
+                        className="p-1.5 rounded-lg hover:bg-bl-surface-muted text-bl-primary transition"
+                        title="Kelola rak bibit"
+                      >
+                        <Layers size={15} />
+                      </button>
                       {row.status === "active" && (
                         <button
                           onClick={() => navigate(`/operator/screenhouse/${row.id}`)}
@@ -439,6 +455,14 @@ export default function KelolaScreenhousePage() {
         onCancel={() => setDeleteTarget(null)}
         onConfirm={confirmDelete}
       />
+
+      {trayTarget && (
+        <TrayManagerModal
+          screenhouse={trayTarget}
+          onClose={() => setTrayTarget(null)}
+          onChanged={loadData}
+        />
+      )}
     </AdminPageShell>
   );
 }

@@ -9,6 +9,7 @@ const {
   consolidateOfflineAlerts,
   consolidateAllOfflineDuplicates,
 } = require("../../shared/offlineAlert");
+const { staleThresholdMs } = require("../../shared/nodeLiveness");
 // Kontrol aktuator otomatis dari alert. Set AUTO_ACTUATOR_ENABLED=false untuk
 // menonaktifkan global (mis. saat uji koneksi device supaya app tidak menyetir
 // valve), atau AUTO_ACTUATOR_EXCLUDE untuk mengecualikan screenhouse tertentu
@@ -43,12 +44,6 @@ async function getThresholdSnapshot(screenhouseId) {
   const value = result.rows[0] ?? null;
   thresholdCache.set(key, { value, t: Date.now() });
   return value;
-}
-
-/** Cocokkan pesan alert offline (per node). */
-function staleThresholdMs(sendIntervalSeconds) {
-  const intervalSec = Math.max(Number(sendIntervalSeconds) || 60, 60);
-  return Math.max(intervalSec * 3, 900) * 1000;
 }
 
 async function resolveOfflineAlertsForNode(screenhouseId, sensorNodeId) {

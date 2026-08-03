@@ -92,6 +92,12 @@ services:
       DEVICE_BRIDGE_URL: mqtt://168.110.214.70:1883
       DEVICE_BRIDGE_MAP: gh01:700
       DEVICE_BRIDGE_DEBUG: "true"
+      # Perangkat publish QoS 0 → frame yang lewat saat bridge disconnect hilang.
+      # Keepalive pendek = koneksi mati diam-diam cepat ketahuan (~1,5x nilai ini).
+      DEVICE_BRIDGE_KEEPALIVE_SEC: "30"
+      # Batas selisih jam perangkat vs server sebelum stempel waktu payload
+      # diabaikan (created_at balik ke waktu terima). RTC gh01 pernah keset ~22 jam.
+      DEVICE_MAX_CLOCK_SKEW_SEC: "900"
       # Slot `fan` gh01 = katup irigasi tray 2 (lihat CLAUDE.md). Nilai
       # ACTUATOR_CAPABILITIES harus sama persis dengan app-service.
       ACTUATOR_CAPABILITIES: 700:irrigation=Irigasi Tray 1|fan=Irigasi Tray 2

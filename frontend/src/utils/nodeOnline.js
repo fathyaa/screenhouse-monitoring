@@ -1,7 +1,17 @@
-/** Sama dengan map-summary & alert worker: interval × 3, minimal 15 menit. */
+/**
+ * Lantai ambang "tidak mengirim data", dalam detik.
+ *
+ * WAJIB SAMA dengan MIN_STALE_SECONDS di
+ * `services/monitoring-service/src/shared/nodeLiveness.js`. Kalau beda, kartu
+ * screenhouse di UI bisa bilang "tidak terhubung" sementara backend belum
+ * membuat alert offline — atau sebaliknya.
+ */
+export const MIN_STALE_SECONDS = 1800;
+
+/** Sama dengan map-summary & alert worker: interval × 3, minimal 30 menit. */
 export function staleThresholdMs(sendIntervalSeconds) {
   const intervalSec = Math.max(Number(sendIntervalSeconds) || 60, 60);
-  return Math.max(intervalSec * 3, 900) * 1000;
+  return Math.max(intervalSec * 3, MIN_STALE_SECONDS) * 1000;
 }
 
 export function isNodeOnline(node, now = Date.now()) {

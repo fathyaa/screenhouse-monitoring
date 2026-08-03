@@ -7,6 +7,7 @@ const {
   consolidateOfflineAlerts,
 } = require("../../../shared/offlineAlert");
 const { buildClientCapabilities } = require("../../../shared/actuatorCapabilities");
+const { staleThresholdMs } = require("../../../shared/nodeLiveness");
 
 const SENSOR_DATA_JOIN = `
   FROM sensor_data sd
@@ -101,8 +102,7 @@ function isScreenhouseOfflineFromNodes(nodeRows, now = Date.now()) {
   return activeNodes.every((node) => {
     const lastSeen = node.last_reading_at ?? node.created_at;
     if (!lastSeen) return true;
-    const intervalSec = Math.max(Number(node.send_interval_seconds) || 60, 60);
-    const staleMs = Math.max(intervalSec * 3, 900) * 1000;
+    const staleMs = staleThresholdMs(node.send_interval_seconds);
     const ageMs = now - new Date(lastSeen).getTime();
     return Number.isNaN(ageMs) || ageMs > staleMs;
   });
@@ -191,11 +191,13 @@ async function getMapSummary(req, res) {
       const activeAlerts = activeAlertRows.length;
 
       const lastSeen = latest?.created_at ?? null;
+      // Ambil interval terlonggar antar node — screenhouse baru dianggap diam
+      // kalau node yang paling jarang kirim pun sudah lewat ambangnya.
       const intervalSec = Math.max(
         ...nodeRows.map((n) => Number(n.send_interval_seconds) || 60),
         60
       );
-      const staleMs = Math.max(intervalSec * 3, 900) * 1000;
+      const staleMs = staleThresholdMs(intervalSec);
       const ageMs = lastSeen ? now - new Date(lastSeen).getTime() : Infinity;
       const isOffline = !lastSeen || ageMs > staleMs;
 
@@ -653,8 +655,7 @@ function nodeIsOffline(node, now = Date.now()) {
   if (node.is_active === false) return true;
   const lastSeen = node.last_reading_at ?? node.created_at;
   if (!lastSeen) return true;
-  const intervalSec = Math.max(Number(node.send_interval_seconds) || 60, 60);
-  const staleMs = Math.max(intervalSec * 3, 900) * 1000;
+  const staleMs = staleThresholdMs(node.send_interval_seconds);
   const ageMs = now - new Date(lastSeen).getTime();
   return Number.isNaN(ageMs) || ageMs > staleMs;
 }

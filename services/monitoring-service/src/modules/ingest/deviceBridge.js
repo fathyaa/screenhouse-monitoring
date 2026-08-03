@@ -26,6 +26,7 @@
  *   10 airTemperature(÷10), 11 airHumidity(÷10), 12 lightIntensity (boleh tidak dikirim)
  */
 
+const os = require("os");
 const mqtt = require("mqtt");
 const pool = require("../../config/db");
 const { handleMqttPayload } = require("./ingestPipeline");
@@ -100,9 +101,37 @@ function toNumberOrNull(raw) {
 const MIN_TS_MS = Date.UTC(2020, 0, 1);
 const MAX_TS_MS = Date.UTC(2100, 0, 1);
 
+// Cek rentang 2020-2100 saja tidak cukup: RTC gh01 pernah keset ~22 jam di
+// belakang jam sebenarnya — tanggalnya "wajar" tapi salah hari. Akibatnya
+// created_at mundur sehari, sehingga "terakhir alat ukur aktif" di dashboard
+// bilang kemarin walau data baru masuk, node selalu dinilai offline oleh
+// checkOfflineNodes (yang membandingkan MAX(created_at) dengan jam server), dan
+// grafik/stress score mendarat di tanggal yang salah.
+// Jadi waktu perangkat cuma dipercaya bila selisihnya dengan jam server masih
+// wajar (sekadar latensi kirim/antrean); lebih dari itu → dianggap jam perangkat
+// belum sinkron, created_at balik ke NOW() waktu terima.
+const MAX_CLOCK_SKEW_MS =
+  Math.max(Number(process.env.DEVICE_MAX_CLOCK_SKEW_SEC) || 900, 60) * 1000;
+
+// Jam perangkat yang keset akan meleset di SETIAP frame; jangan banjiri log.
+let lastSkewWarnAt = 0;
+const SKEW_WARN_INTERVAL_MS = 5 * 60 * 1000;
+
+function warnClockSkew(deviceDate, now) {
+  if (now - lastSkewWarnAt < SKEW_WARN_INTERVAL_MS) return;
+  lastSkewWarnAt = now;
+  const skewMin = Math.round((now - deviceDate.getTime()) / 60000);
+  console.warn(
+    `[device-bridge] jam perangkat meleset ${skewMin} menit dari server ` +
+      `(payload ${deviceDate.toISOString()}) — created_at pakai waktu terima. ` +
+      `Setel ulang RTC/NTP perangkat, atau naikkan DEVICE_MAX_CLOCK_SKEW_SEC bila memang disengaja.`
+  );
+}
+
 /**
- * Timestamp dari kolom 0 payload → Date, atau null bila tidak valid/di luar
- * rentang wajar. Format firmware belum dipastikan, jadi parser ini toleran:
+ * Timestamp dari kolom 0 payload → Date, atau null bila tidak valid, di luar
+ * rentang wajar, atau terlalu jauh dari jam server. Format firmware belum
+ * dipastikan, jadi parser ini toleran:
  *  - epoch detik / milidetik (dibedakan dari besarannya)
  *  - string tanggal (mis. ISO) — bila tanpa zona, diparse sesuai runtime.
  */
@@ -111,24 +140,35 @@ function parseDeviceTimestamp(raw) {
   const s = String(raw).trim();
   if (s === "") return null;
 
+  let d = null;
+
   if (/^\d+$/.test(s)) {
     // Nilai < 1e11 diperlakukan sebagai epoch DETIK (epoch milidetik jaman ini
     // ~1.7e12), jadi dikali 1000. Counter uptime kecil akan jatuh sebelum 2020
     // dan tersaring oleh cek rentang di bawah.
     let ms = Number(s);
     if (ms < 1e11) ms *= 1000;
-    return ms >= MIN_TS_MS && ms < MAX_TS_MS ? new Date(ms) : null;
+    d = new Date(ms);
+  } else {
+    // Format firmware gh01: "YYYY-MM-DD HH:MM:SS" — waktu LOKAL WIB tanpa zona.
+    // Tempelkan offset +07:00 eksplisit supaya hasilnya benar di server zona mana
+    // pun (tanpa ini, di server UTC `new Date` menafsirkannya UTC → meleset 7 jam).
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+    d = m
+      ? new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}+07:00`)
+      : new Date(s); // fallback: string ISO yang sudah ber-zona, dll.
   }
 
-  // Format firmware gh01: "YYYY-MM-DD HH:MM:SS" — waktu LOKAL WIB tanpa zona.
-  // Tempelkan offset +07:00 eksplisit supaya hasilnya benar di server zona mana
-  // pun (tanpa ini, di server UTC `new Date` menafsirkannya UTC → meleset 7 jam).
-  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
-  const d = m
-    ? new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}+07:00`)
-    : new Date(s); // fallback: string ISO yang sudah ber-zona, dll.
   const t = d.getTime();
-  return Number.isFinite(t) && t >= MIN_TS_MS && t < MAX_TS_MS ? d : null;
+  if (!Number.isFinite(t) || t < MIN_TS_MS || t >= MAX_TS_MS) return null;
+
+  const now = Date.now();
+  if (Math.abs(now - t) > MAX_CLOCK_SKEW_MS) {
+    warnClockSkew(d, now);
+    return null;
+  }
+
+  return d;
 }
 
 /** CSV "parameter" → objek data kontrak internal (+ node_id / destination_id). */
@@ -291,14 +331,29 @@ function connectDeviceBridge() {
     return;
   }
 
+  // Perangkat publish QoS 0, jadi pesan yang lewat saat kita disconnect HILANG
+  // permanen (broker tidak mengantrekannya, sesi persisten pun tak menolong).
+  // Keepalive default mqtt.js 60s berarti koneksi yang mati diam-diam (tanpa FIN,
+  // mis. NAT/jalur putus) baru ketahuan setelah ~90s + 5s reconnect — cukup lama
+  // untuk menelan beberapa frame. Keepalive lebih pendek mempersempit jendela itu.
+  const keepalive = Math.max(Number(process.env.DEVICE_BRIDGE_KEEPALIVE_SEC) || 30, 5);
+
   client = mqtt.connect(url, {
     username: process.env.DEVICE_BRIDGE_USERNAME,
     password: process.env.DEVICE_BRIDGE_PASSWORD,
     reconnectPeriod: 5000,
+    keepalive,
+    // Sengaja unik per proses (bukan clientId tetap): kalau bridge kebetulan
+    // jalan dua kali — mis. container + `npm run dev` di host — clientId sama
+    // membuat broker saling menendang keduanya berulang kali.
+    clientId: `bibitlive-bridge-${os.hostname()}-${process.pid}`,
   });
 
+  let connectedSince = null;
+
   client.on("connect", () => {
-    console.log("[device-bridge] terhubung ke", url);
+    connectedSince = Date.now();
+    console.log(`[device-bridge] terhubung ke ${url} (keepalive ${keepalive}s)`);
     for (const { prefix } of bridgesByPrefix.values()) {
       for (const topic of [`${prefix}/node/+/parameter`, `${prefix}/node/+/status/+`]) {
         client.subscribe(topic, { qos: 1 }, (err) => {
@@ -312,6 +367,17 @@ function connectDeviceBridge() {
   client.on("message", handleMessage);
   client.on("error", (err) => console.error("[device-bridge]", err.message));
   client.on("reconnect", () => DEBUG && console.log("[device-bridge] reconnecting…"));
+
+  // Putusnya koneksi = jendela kehilangan data (QoS 0), jadi selalu dicatat —
+  // bukan cuma saat DEBUG — supaya lubang data di grafik bisa ditelusuri.
+  client.on("close", () => {
+    const uptime = connectedSince ? Math.round((Date.now() - connectedSince) / 1000) : null;
+    connectedSince = null;
+    console.warn(
+      `[device-bridge] koneksi terputus${uptime != null ? ` setelah ${uptime}s tersambung` : ""}` +
+        " — frame yang dikirim perangkat selama terputus tidak tersimpan (QoS 0)."
+    );
+  });
 }
 
 /**

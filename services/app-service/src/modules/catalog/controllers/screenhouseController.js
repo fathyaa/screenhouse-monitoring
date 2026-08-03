@@ -14,6 +14,7 @@ const {
 } = require("../../../shared/varietasThreshold");
 const { publishEvent } = require("../../../shared/events/publisher");
 const { buildEstimasiTanam } = require("../../../shared/estimasiTanamService");
+const { MIN_STALE_SECONDS } = require("../../../shared/nodeLiveness");
 
 async function activateScreenhouse(client, screenhouseId, trayCountOverride = null) {
   return activateScreenhouseRecord(client, screenhouseId, trayCountOverride);
@@ -27,7 +28,7 @@ const ONLINE_SINK_EXISTS = `
     WHERE sn.screenhouse_id = sk.screenhouse_id
       AND sn.is_active = true
       AND sd.created_at >= NOW() - (
-        GREATEST(GREATEST(COALESCE(sn.send_interval_seconds, 60), 60) * 3, 900)
+        GREATEST(GREATEST(COALESCE(sn.send_interval_seconds, 60), 60) * 3, ${MIN_STALE_SECONDS})
         || ' seconds'
       )::interval
   )

@@ -184,7 +184,10 @@ function NotifikasiPage() {
                         if (window.history.state?.idx > 0) {
                             navigate(-1);
                         } else {
-                            navigate("/petani/dashboard");
+                            // "/petani", bukan "/petani/dashboard" — rute itu tidak
+                            // terdaftar, jadi dulu jatuh ke catch-all "*" dan petani
+                            // malah terlempar ke halaman login.
+                            navigate("/petani");
                         }
                     }}
                 />

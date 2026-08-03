@@ -46,6 +46,39 @@ function PrivateRoute({ children, allowedRole, allowedRoles }) {
 const SUPER_ADMIN = ["super_admin"];
 const OPERATOR = ["operator", "super_admin"];
 
+const HOME_BY_ROLE = {
+  petani: "/petani",
+  operator: "/operator",
+  super_admin: "/admin",
+};
+
+/** Dashboard milik sesi yang masih sah; null bila belum login / token kadaluarsa. */
+function activeSessionHome() {
+  const token = localStorage.getItem("token");
+  if (!token || !isTokenValid(token)) return null;
+  return HOME_BY_ROLE[localStorage.getItem("role")] ?? null;
+}
+
+/**
+ * Halaman login: user yang sesinya masih sah dipulangkan ke dashboard-nya.
+ * Tanpa ini, entri "/login" yang masih tertinggal di riwayat browser (mis. dari
+ * sesi sebelum refresh) membuat tombol back menampilkan form login lagi —
+ * terlihat seperti "tiba-tiba ter-logout" padahal sesinya utuh.
+ */
+function PublicOnlyRoute({ children }) {
+  const home = activeSessionHome();
+  return home ? <Navigate to={home} replace /> : children;
+}
+
+/**
+ * URL tak dikenal. Dulu selalu dilempar ke "/login" — jadi satu salah ketik rute
+ * di dalam aplikasi pun terasa seperti dipaksa logout. Sesi yang masih sah
+ * dipulangkan ke dashboard-nya; hanya yang benar-benar belum login yang ke login.
+ */
+function NotFoundRedirect() {
+  return <Navigate to={activeSessionHome() ?? "/login"} replace />;
+}
+
 function RedirectLegacyFarmerPath() {
   const { userId } = useParams();
   return <Navigate to={`/operator/petani/${userId}`} replace />;
@@ -56,8 +89,8 @@ function AppRoutes() {
     <>
       <Routes>
       {/* PUBLIC */}
-      <Route path="/" element={<LoginPage />} />
-      <Route path="/login" element={<LoginPage />} />
+      <Route path="/" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
+      <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/register/screenhouse" element={<RegisterScreenhousePage />} />
 
@@ -92,7 +125,7 @@ function AppRoutes() {
       <Route path="/admin/pengaturan" element={<PrivateRoute allowedRoles={SUPER_ADMIN}><PengaturanAkunPage /></PrivateRoute>} />
 
       {/* FALLBACK */}
-      <Route path="*" element={<Navigate to="/login" replace />} />
+      <Route path="*" element={<NotFoundRedirect />} />
       </Routes>
     </>
   );

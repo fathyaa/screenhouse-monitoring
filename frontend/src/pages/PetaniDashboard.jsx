@@ -59,7 +59,7 @@ function shortenScreenhouseName(name) {
 
 /** Data terakhir kadaluarsa → node dianggap offline, sama dengan halaman detail
  *  (isScreenhouseMonitorOffline). Payload /sensor-data/latest tidak membawa
- *  send_interval, jadi pakai ambang default 15 menit. */
+ *  send_interval, jadi pakai ambang default 30 menit. */
 function isSensorStale(sensor) {
   const ts = sensor?.created_at;
   if (!ts) return true;

@@ -38,7 +38,7 @@ const METRIC_UNIT = Object.fromEntries(
   THRESHOLD_METRICS.map((m) => [m.key, m.unit])
 );
 
-/** Cadangan polling — offline baru terdeteksi setelah ~15 menit. */
+/** Cadangan polling — offline baru terdeteksi setelah ~30 menit. */
 const MAP_SUMMARY_POLL_MS = 5 * 60 * 1000;
 /** Debounce refetch saat ada event realtime. */
 const MAP_SUMMARY_DEBOUNCE_MS = 10 * 1000;

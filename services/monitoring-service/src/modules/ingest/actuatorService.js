@@ -6,6 +6,7 @@ const {
   isAutoActuatorEnabled,
 } = require("../../shared/actuatorCapabilities");
 const { publisher } = require("../../config/redis");
+const { MIN_STALE_SECONDS } = require("../../shared/nodeLiveness");
 
 const INSERT_ACTUATOR_LOG = `
   INSERT INTO actuator_logs (
@@ -43,7 +44,9 @@ async function getOwnerUserId(screenhouseId) {
 // online — begitu alat berhenti kirim data, alert lama tidak pernah ter-resolve
 // otomatis (butuh data baru untuk konfirmasi kondisi normal) sehingga bisa
 // "nyangkut aktif" selamanya dan mengunci toggle padahal tidak ada sistem yang
-// sedang mengontrol. Ambang sama dengan map-summary/statsController (interval x3, min 15 menit).
+// sedang mengontrol. Ambangnya sama dengan map-summary/statsController — angka
+// menitnya diambil dari shared/nodeLiveness supaya versi SQL dan versi JS tidak
+// bisa lagi hanyut sendiri-sendiri.
 const SCREENHOUSE_ONLINE_SQL = `
   EXISTS (
     SELECT 1
@@ -52,7 +55,7 @@ const SCREENHOUSE_ONLINE_SQL = `
     WHERE sn.screenhouse_id = $1
       AND sn.is_active = true
       AND sd.created_at >= NOW() - (
-        GREATEST(GREATEST(COALESCE(sn.send_interval_seconds, 60), 60) * 3, 900)
+        GREATEST(GREATEST(COALESCE(sn.send_interval_seconds, 60), 60) * 3, ${MIN_STALE_SECONDS})
         || ' seconds'
       )::interval
   )

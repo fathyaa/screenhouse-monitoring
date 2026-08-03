@@ -243,6 +243,7 @@ module.exports = {
   DEFAULT_THRESHOLD,
   THRESHOLD_COLS,
   parseTrayCount,
+  formatTrayCode,
   insertDefaultThreshold,
   activateScreenhouseRecord,
   postActivationProvisioning,

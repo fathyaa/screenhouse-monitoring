@@ -40,16 +40,29 @@ export function getAlertGroupKey(alert) {
   return (alert?.message ?? "").trim().toLowerCase();
 }
 
+/**
+ * Urutan daftar peringatan: waktu terbaru dulu. Dulu kategori (tanah > alat) +
+ * kritis yang menang, tapi di layar hasilnya membingungkan — alert kemarin bisa
+ * nangkring di atas alert beberapa jam lalu, dan grup tanggal ("Hari ini" /
+ * "Kemarin") jadi tidak berurutan karena grup dibentuk mengikuti urutan list.
+ * Kategori & kritis tinggal jadi tie-break untuk alert berwaktu sama.
+ */
 export function compareAlertsForDisplay(a, b) {
+  const timeA = new Date(a.created_at).getTime();
+  const timeB = new Date(b.created_at).getTime();
+  const validA = Number.isNaN(timeA);
+  const validB = Number.isNaN(timeB);
+  // Alert tanpa waktu valid ditaruh paling bawah, bukan ikut mengacak urutan.
+  if (validA !== validB) return validA ? 1 : -1;
+  if (!validA && timeA !== timeB) return timeB - timeA;
+
   const catA = getAlertCategory(a);
   const catB = getAlertCategory(b);
   if (catA !== catB) return catA === ALERT_CATEGORY.SOIL ? -1 : 1;
 
   const critA = isAlertCritical(a) ? 0 : 1;
   const critB = isAlertCritical(b) ? 0 : 1;
-  if (critA !== critB) return critA - critB;
-
-  return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  return critA - critB;
 }
 
 export function sortAlertsForDisplay(alerts) {

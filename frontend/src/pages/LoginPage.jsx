@@ -63,7 +63,10 @@ function LoginPage() {
 
             const path = routes[data.user.role];
             if (path) {
-                navigate(path);
+                // replace: halaman login TIDAK boleh tertinggal di riwayat browser.
+                // Kalau tertinggal, tombol back dari dashboard/detail bisa mendarat
+                // balik di form login padahal sesi masih aktif.
+                navigate(path, { replace: true });
             } else {
                 console.warn("[login] Role tidak dikenali:", data.user.role);
                 toast.error(`Role "${data.user.role}" belum memiliki halaman dashboard`);
