@@ -1,11 +1,11 @@
 const pool = require("../../config/db");
-const { publishTopic } = require("../../config/mqttClient");
-const { publishValveControl } = require("./deviceBridge");
 const {
   getActuatorCapabilities,
   isAutoActuatorEnabled,
 } = require("../../shared/actuatorCapabilities");
-const { publisher } = require("../../config/redis");
+const { publishEvent, sendToQueue } = require("../../shared/events/eventBus");
+const { RK } = require("../../shared/events/routingKeys");
+const { COMMAND_QUEUE } = require("../../config/rabbitmq");
 const { MIN_STALE_SECONDS } = require("../../shared/nodeLiveness");
 
 const INSERT_ACTUATOR_LOG = `
@@ -192,19 +192,27 @@ async function setActuators({
     reason,
   };
 
-  publishTopic(`screenhouse/${shId}/sink/${sink.node_code}/command`, commandPayload);
-  publishTopic(`screenhouse/${shId}/actuator`, commandPayload);
-
-  // Perangkat ber-bridge (jalur DEVICE_BRIDGE, mis. HiveMQ/broker lokal): kirim
-  // perintah katup format plain "0"/"1" — irrigation→valve1 (tray 1), fan→valve2
-  // (tray 2). Hanya kanal yang berubah yang dikirim supaya katup tray lain tidak
-  // ikut disetir. No-op untuk screenhouse non-bridge (mis. simulator).
-  publishValveControl({
+  // Perintah tidak dikirim langsung ke MQTT dari sini. Hanya role `collector`
+  // yang memegang koneksi ke broker (termasuk jembatan perangkat), jadi service
+  // manapun yang ingin menggerakkan aktuator menitipkannya lewat antrean.
+  // Efeknya: perintah tidak hilang kalau collector kebetulan sedang restart —
+  // ia menunggu di q.device.command sampai ada yang mengambilnya.
+  //
+  // `valve` hanya memuat kanal yang BERUBAH, supaya katup tray lain tidak ikut
+  // disetir. Pemetaan irrigation→valve1 / fan→valve2 dikerjakan collector.
+  await sendToQueue(COMMAND_QUEUE, {
     screenhouseId: shId,
     sinkCode: sink.node_code,
-    irrigation:
-      Boolean(sink.irrigation_status) === Boolean(nextIrrigation) ? undefined : nextIrrigation,
-    fan: Boolean(sink.fan_status) === Boolean(nextFan) ? undefined : nextFan,
+    topics: [
+      `screenhouse/${shId}/sink/${sink.node_code}/command`,
+      `screenhouse/${shId}/actuator`,
+    ],
+    payload: commandPayload,
+    valve: {
+      irrigation:
+        Boolean(sink.irrigation_status) === Boolean(nextIrrigation) ? undefined : nextIrrigation,
+      fan: Boolean(sink.fan_status) === Boolean(nextFan) ? undefined : nextFan,
+    },
   });
 
   await pool.query(
@@ -240,7 +248,7 @@ async function setActuators({
     created_at: saved.rows[0].created_at,
   };
 
-  await publisher.publish("actuator-updated", JSON.stringify(payload));
+  await publishEvent(RK.ACTUATOR_UPDATED, payload);
 
   return { ...payload, unchanged: false };
 }

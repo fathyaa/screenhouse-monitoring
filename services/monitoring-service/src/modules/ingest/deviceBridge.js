@@ -8,8 +8,9 @@
  *  - Topik berpola `gh01/...`, bukan `screenhouse/...`.
  *
  * Persistensi TIDAK diduplikasi: setelah CSV di-parse & di-normalisasi ke
- * kontrak internal, payload diteruskan ke handleMqttPayload() yang sama dipakai
- * jalur simulator (insert sensor_data, event Redis, trigger alert, dst).
+ * kontrak internal, payload dititipkan ke antrean lewat callback yang sama
+ * dipakai jalur simulator (q.ingest → processing → persistence → alert).
+ * Modul ini hidup di role `collector` dan tidak punya koneksi database.
  *
  * Kontrak topik (dari spec firmware):
  *   SUB  gh01/node/+/parameter              → CSV telemetri sensor
@@ -28,10 +29,13 @@
 
 const os = require("os");
 const mqtt = require("mqtt");
-const pool = require("../../config/db");
-const { handleMqttPayload } = require("./ingestPipeline");
 
 const DEBUG = process.env.DEVICE_BRIDGE_DEBUG === "true";
+
+// Diisi connectDeviceBridge(). Jembatan ini hidup di role `collector`, yang
+// tidak punya koneksi database sama sekali — tiap frame cuma dititipkan ke
+// antrean lewat callback ini.
+let emitJob = async () => {};
 
 // Katup irigasi dikontrol per tray. Perangkat punya dua katup, sedangkan
 // sink_nodes hanya menyediakan tiga slot status boolean (fan/irrigation/lamp) —
@@ -204,37 +208,6 @@ function parseParameterCsv(payload) {
   return data;
 }
 
-/**
- * Pastikan sensor node dengan node_code ini terdaftar di screenhouse bridge.
- * @returns {Promise<boolean>} false bila node_code sudah dipakai screenhouse lain
- *          (jangan salah-rutekan data ke screenhouse yang keliru).
- */
-async function ensureSensorNode(screenhouseId, nodeCode) {
-  const existing = await pool.query(
-    `SELECT screenhouse_id FROM sensor_nodes WHERE node_code = $1`,
-    [nodeCode]
-  );
-  if (existing.rows[0]) {
-    if (Number(existing.rows[0].screenhouse_id) !== Number(screenhouseId)) {
-      console.warn(
-        `[device-bridge] node_code ${nodeCode} sudah dipakai screenhouse ${existing.rows[0].screenhouse_id} ` +
-          `(diharapkan ${screenhouseId}) — frame diabaikan agar tidak salah rute.`
-      );
-      return false;
-    }
-    return true;
-  }
-
-  await pool.query(
-    `INSERT INTO sensor_nodes (screenhouse_id, node_code, node_name, send_interval_seconds, is_active)
-     VALUES ($1, $2, $3, 60, true)
-     ON CONFLICT (node_code) DO NOTHING`,
-    [screenhouseId, nodeCode, `GH node ${nodeCode}`]
-  );
-  console.log(`[device-bridge] sensor node baru didaftarkan: node_code=${nodeCode} → screenhouse ${screenhouseId}`);
-  return true;
-}
-
 async function onParameter(bridge, topicParts, payload) {
   const data = parseParameterCsv(payload);
   if (!data) {
@@ -242,10 +215,17 @@ async function onParameter(bridge, topicParts, payload) {
     return;
   }
 
-  const ok = await ensureSensorNode(bridge.screenhouseId, data.node_id);
-  if (!ok) return;
-
-  await handleMqttPayload(data, topicParts, String(bridge.screenhouseId));
+  // Pendaftaran node dititipkan ke processing lewat `ensureNode` — collector
+  // tidak menyentuh database. Kalau node_code ternyata milik screenhouse lain,
+  // processing yang menolak framenya.
+  await emitJob({
+    source: "device-bridge",
+    data,
+    topicParts,
+    screenhouseIdFromTopic: String(bridge.screenhouseId),
+    ensureNode: { screenhouseId: bridge.screenhouseId, nodeCode: data.node_id },
+    receivedAt: new Date().toISOString(),
+  });
 
   // Log hasil parse + keputusan waktu: measured_at valid → itu yang jadi created_at,
   // null → created_at fallback ke NOW() (waktu terima server).
@@ -270,15 +250,21 @@ async function onStatus(bridge, topicParts, payload) {
   const raw = String(payload).trim().toLowerCase();
   const on = raw === "on" || raw === "1" || raw === "true";
 
-  // Hanya kirim kolom katup yang dilaporkan — ingestPipeline mempertahankan
-  // status kanal lain apa adanya, jadi kedua katup tidak saling menimpa.
+  // Hanya kirim kolom katup yang dilaporkan — processing mempertahankan status
+  // kanal lain apa adanya, jadi kedua katup tidak saling menimpa.
   const data = {
     node_id: sinkCode,
     destination_id: sinkCode,
     [statusField]: on,
   };
   // screenhouseIdFromTopic = null → resolusi sink lewat node_code (jalur aktuator).
-  await handleMqttPayload(data, topicParts, null);
+  await emitJob({
+    source: "device-bridge",
+    data,
+    topicParts,
+    screenhouseIdFromTopic: null,
+    receivedAt: new Date().toISOString(),
+  });
   if (DEBUG)
     console.log(`[device-bridge] status ${valve}=${on ? 1 : 0} sink=${sinkCode} → ${statusField}`);
 }
@@ -318,7 +304,9 @@ function handleMessage(topic, message) {
   );
 }
 
-function connectDeviceBridge() {
+function connectDeviceBridge(onJob) {
+  if (typeof onJob === "function") emitJob = onJob;
+
   const url = process.env.DEVICE_BRIDGE_URL;
   if (!url) {
     console.log("[device-bridge] DEVICE_BRIDGE_URL tidak diset — jembatan perangkat nonaktif.");

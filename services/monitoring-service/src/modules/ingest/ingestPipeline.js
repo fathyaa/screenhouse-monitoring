@@ -1,11 +1,8 @@
 const pool = require("../../config/db");
-const { publisher } = require("../../config/redis");
-const { isRabbitMqEnabled } = require("../../config/rabbitmq");
+const { publishEvent } = require("../../shared/events/eventBus");
+const { RK } = require("../../shared/events/routingKeys");
 const { buildClientCapabilities } = require("../../shared/actuatorCapabilities");
-const {
-  recordMqttProcessed,
-  recordMqttEnqueued,
-} = require("./ingestMetrics");
+const { recordMqttProcessed } = require("./ingestMetrics");
 
 // Log per-pesan dimatikan default (blocking stdout I/O jadi bottleneck saat
 // throughput tinggi). Set INGEST_DEBUG=true untuk mengaktifkannya lagi.
@@ -16,6 +13,11 @@ const DEBUG = process.env.INGEST_DEBUG === "true";
 // sebelumnya di-SELECT ulang untuk SETIAP pesan. Cache ber-TTL memangkas
 // mayoritas round-trip DB pada hot path ingest. Status aktuator sink_node bisa
 // berubah, jadi jalur tulis aktuator (saveActuatorState) tetap baca fresh.
+//
+// Cache ini sekarang hidup di dalam proses masing-masing role. Menambah replica
+// berarti menambah salinan cache, bukan membaginya — itu disengaja: isinya
+// hanya identitas node yang praktis tidak berubah, dan cache bersama akan
+// menambah satu hop jaringan di jalur terpanas.
 const LOOKUP_TTL_MS = Number(process.env.INGEST_LOOKUP_TTL_MS || 60000);
 const sensorNodeCache = new Map();
 const sinkNodeCache = new Map();
@@ -108,6 +110,10 @@ function hasActuatorReadings(data) {
   );
 }
 
+function readingsOf(data) {
+  return Object.fromEntries(SENSOR_READING_KEYS.map((key) => [key, pick(data, key)]));
+}
+
 async function resolveSensorNodeByCode(nodeCode) {
   if (!nodeCode) return null;
   const result = await pool.query(
@@ -181,6 +187,43 @@ async function getOwnerUserId(screenhouseId) {
   return result.rows[0]?.owner_user_id ?? null;
 }
 
+/**
+ * Pastikan sensor node dengan node_code ini terdaftar di screenhouse bridge.
+ * Dulu tinggal di deviceBridge.js; pindah ke sini karena collector tidak lagi
+ * punya koneksi database — ia hanya menitipkan niatnya lewat `ensureNode`.
+ *
+ * @returns {Promise<boolean>} false bila node_code sudah dipakai screenhouse
+ *          lain (jangan salah-rutekan data ke screenhouse yang keliru).
+ */
+async function ensureSensorNode(screenhouseId, nodeCode) {
+  const existing = await pool.query(
+    `SELECT screenhouse_id FROM sensor_nodes WHERE node_code = $1`,
+    [nodeCode]
+  );
+  if (existing.rows[0]) {
+    if (Number(existing.rows[0].screenhouse_id) !== Number(screenhouseId)) {
+      console.warn(
+        `[processing] node_code ${nodeCode} sudah dipakai screenhouse ${existing.rows[0].screenhouse_id} ` +
+          `(diharapkan ${screenhouseId}) — frame diabaikan agar tidak salah rute.`
+      );
+      return false;
+    }
+    return true;
+  }
+
+  await pool.query(
+    `INSERT INTO sensor_nodes (screenhouse_id, node_code, node_name, send_interval_seconds, is_active)
+     VALUES ($1, $2, $3, 60, true)
+     ON CONFLICT (node_code) DO NOTHING`,
+    [screenhouseId, nodeCode, `GH node ${nodeCode}`]
+  );
+  console.log(`[processing] sensor node baru didaftarkan: node_code=${nodeCode} → screenhouse ${screenhouseId}`);
+  return true;
+}
+
+// === PERSISTENCE ============================================================
+// Dijalankan role `persistence`. Satu-satunya tempat yang menulis sensor_data.
+
 async function saveSensorReading({ sensorNode, sinkNode, data }) {
   const saved = await pool.query(
     `
@@ -207,44 +250,45 @@ async function saveSensorReading({ sensorNode, sinkNode, data }) {
       pick(data, "air_temperature"),
       pick(data, "air_humidity"),
       pick(data, "light_intensity"),
-      // Waktu ukur dari payload (Date) bila ada & valid → jadi created_at.
+      // Waktu ukur dari payload bila ada & valid → jadi created_at.
       // null (simulator / timestamp ngawur) → COALESCE pakai NOW() waktu terima.
       pick(data, "measured_at", null),
     ]
   );
 
   const row = saved.rows[0];
-  const sensorDataId = row.id;
-  const screenhouseId = String(sensorNode.screenhouse_id);
 
-  await publisher.publish(
-    "sensor-data-created",
-    JSON.stringify({
-      sensorDataId,
-      screenhouseId,
-      sensorNodeId: sensorNode.id,
-      nodeCode: sensorNode.node_code,
-      sinkNodeId: sinkNode?.id ?? null,
-      data: {
-        nitrogen: pick(data, "nitrogen"),
-        phosphorus: pick(data, "phosphorus"),
-        potassium: pick(data, "potassium"),
-        soil_temperature: pick(data, "soil_temperature"),
-        soil_moisture: pick(data, "soil_moisture"),
-        soil_ph: pick(data, "soil_ph"),
-        conductivity: pick(data, "conductivity"),
-        air_temperature: pick(data, "air_temperature"),
-        air_humidity: pick(data, "air_humidity"),
-        light_intensity: pick(data, "light_intensity"),
-      },
-    })
-  );
+  // Baris sudah commit — sejak titik ini pesan TIDAK BOLEH gagal ke pemanggil.
+  // Consumer mengembalikan pesan yang error ke queue, jadi melempar di sini
+  // (mis. RabbitMQ mati) akan menyisipkan baris yang sama dua kali. Event yang
+  // hilang cuma bikin dashboard telat satu tick dan satu alert terlewat;
+  // duplikat data sensor merusak laporan.
+  recordMqttProcessed(data);
 
+  try {
+    await publishEvent(RK.SENSOR_PERSISTED, await buildPersistedEvent({ row, sensorNode, sinkNode, data }));
+  } catch (err) {
+    console.error("[persistence] baris tersimpan, publish event gagal:", err.message);
+  }
+
+  if (DEBUG) console.log("Sensor data saved & event published:", sensorNode.node_code);
+  return row;
+}
+
+/**
+ * Satu peristiwa, dua pemakai:
+ *   `data`     → listener alert (evaluasi ambang, butuh sensorDataId untuk FK)
+ *   `realtime` → gateway Socket.IO (payload siap kirim ke browser)
+ *
+ * Disatukan supaya urutan alert-vs-tampilan tidak pernah berbeda: keduanya
+ * membaca peristiwa yang sama persis.
+ */
+async function buildPersistedEvent({ row, sensorNode, sinkNode, data }) {
   // Payload realtime disusun dari data yang sudah ada di memori (row hasil
   // INSERT + node terselesaikan), menggantikan SELECT 3-JOIN per pesan.
   // owner_user_id di-cache; status aktuator sink display-only (dijaga fresh
-  // lewat event "actuator-updated").
-  const enrichedRow = {
+  // lewat event actuator.updated).
+  const realtime = {
     ...row,
     screenhouse_id: sensorNode.screenhouse_id,
     node_code: sensorNode.node_code,
@@ -255,11 +299,21 @@ async function saveSensorReading({ sensorNode, sinkNode, data }) {
     capabilities: buildClientCapabilities(sensorNode.screenhouse_id),
     user_id: await cachedOwnerUserId(sensorNode.screenhouse_id),
   };
-  await publisher.publish("sensor-update", JSON.stringify(enrichedRow));
 
-  recordMqttProcessed(data);
-  if (DEBUG) console.log("Sensor data saved & event published:", sensorNode.node_code);
+  return {
+    sensorDataId: row.id,
+    screenhouseId: String(sensorNode.screenhouse_id),
+    sensorNodeId: sensorNode.id,
+    nodeCode: sensorNode.node_code,
+    sinkNodeId: sinkNode?.id ?? null,
+    data: readingsOf(data),
+    realtime,
+  };
 }
+
+// === AKTUATOR DARI TELEMETRI ================================================
+// Perangkat melaporkan posisi katup/relay-nya sendiri. Ditangani processing
+// karena ia yang sudah memegang hasil resolusi node.
 
 async function saveActuatorState({ sinkNode, data, source = "telemetry", reason = null }) {
   // sinkNode bisa berasal dari cache (status aktuator mungkin basi), jadi baca
@@ -306,36 +360,43 @@ async function saveActuatorState({ sinkNode, data, source = "telemetry", reason 
   ]);
 
   const ownerUserId = await getOwnerUserId(sinkNode.screenhouse_id);
-  await publisher.publish(
-    "actuator-updated",
-    JSON.stringify({
-      screenhouse_id: sinkNode.screenhouse_id,
-      sink_node_id: sinkNode.id,
-      node_code: sinkNode.node_code,
-      fan_status: saved.rows[0].fan_status,
-      irrigation_status: saved.rows[0].irrigation_status,
-      lamp_status: saved.rows[0].lamp_status,
-      source,
-      reason,
-      user_id: ownerUserId,
-      created_at: saved.rows[0].created_at,
-    })
-  );
+  await publishEvent(RK.ACTUATOR_UPDATED, {
+    screenhouse_id: sinkNode.screenhouse_id,
+    sink_node_id: sinkNode.id,
+    node_code: sinkNode.node_code,
+    fan_status: saved.rows[0].fan_status,
+    irrigation_status: saved.rows[0].irrigation_status,
+    lamp_status: saved.rows[0].lamp_status,
+    source,
+    reason,
+    user_id: ownerUserId,
+    created_at: saved.rows[0].created_at,
+  });
 
   if (DEBUG) console.log("Actuator state saved:", sinkNode.node_code);
 }
 
-async function persistSensorReading({ sensorNode, sinkNode, data }) {
-  if (isRabbitMqEnabled()) {
-    const { enqueueSensorReading } = require("./ingestQueue");
-    await enqueueSensorReading({ sensorNode, sinkNode, data });
-    recordMqttEnqueued();
-    return;
-  }
-  await saveSensorReading({ sensorNode, sinkNode, data });
-}
+// === PROCESSING =============================================================
+// Dijalankan role `processing`: satu tugas dari q.ingest → satu peristiwa.
 
-async function handleMqttPayload(data, topicParts, screenhouseIdFromTopic) {
+/**
+ * @param {object} job payload dari q.ingest (lihat roles/collector.js)
+ * @returns {Promise<boolean>} false bila payload tidak bisa dipetakan ke node
+ */
+async function processIngestJob(job) {
+  const {
+    data,
+    topicParts = [],
+    screenhouseIdFromTopic = null,
+    ensureNode = null,
+  } = job;
+
+  // Perangkat ber-bridge mendaftarkan node-nya sendiri saat frame pertama.
+  if (ensureNode) {
+    const registered = await ensureSensorNode(ensureNode.screenhouseId, ensureNode.nodeCode);
+    if (!registered) return false;
+  }
+
   const nodeIdRaw =
     pick(data, "node_id") ??
     pick(data, "nodeId") ??
@@ -390,7 +451,10 @@ async function handleMqttPayload(data, topicParts, screenhouseIdFromTopic) {
       console.log("Sensor node dan sink node beda screenhouse — dibuang");
       return false;
     }
-    await persistSensorReading({ sensorNode, sinkNode, data });
+
+    // Node sudah terselesaikan, payload sudah bersih — tapi belum masuk DB.
+    // Yang menulis adalah listener persistence.
+    await publishEvent(RK.SENSOR_RAW, { sensorNode, sinkNode, data });
     return true;
   }
 
@@ -417,7 +481,9 @@ async function handleMqttPayload(data, topicParts, screenhouseIdFromTopic) {
 }
 
 module.exports = {
-  handleMqttPayload,
+  processIngestJob,
   saveSensorReading,
-  persistSensorReading,
+  saveActuatorState,
+  ensureSensorNode,
+  getOwnerUserId,
 };

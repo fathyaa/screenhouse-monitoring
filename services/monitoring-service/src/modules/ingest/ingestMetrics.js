@@ -7,7 +7,13 @@ const state = {
   mqttProcessed: 0,
   mqttEnqueued: 0,
   mqttFailed: 0,
-  mqttNacked: 0,
+  // Pesan yang dipindah ke dead-letter queue (gagal permanen). Dulu bernama
+  // "nacked" waktu pesan memang dibuang; sekarang tersimpan dan bisa di-replay,
+  // tapi tetap dihitung sebagai kegagalan karena belum masuk sensor_data.
+  mqttDeadLettered: 0,
+  // Pesan yang dikembalikan ke queue karena infrastruktur down. Bukan kegagalan
+  // dan bukan kehilangan — satu pesan bisa menyumbang beberapa kali.
+  mqttRequeued: 0,
   latencyMs: [],
   timeSeries: [],
 };
@@ -57,8 +63,12 @@ function recordMqttFailed() {
   state.mqttFailed += 1;
 }
 
-function recordMqttNacked() {
-  state.mqttNacked += 1;
+function recordMqttDeadLettered() {
+  state.mqttDeadLettered += 1;
+}
+
+function recordMqttRequeued() {
+  state.mqttRequeued += 1;
 }
 
 function appendTimeSeriesSample({ queueDepth }) {
@@ -71,7 +81,9 @@ function appendTimeSeriesSample({ queueDepth }) {
     mqttProcessed: state.mqttProcessed,
     mqttEnqueued: state.mqttEnqueued,
     mqttFailed: state.mqttFailed,
-    mqttNacked: state.mqttNacked,
+    mqttNacked: state.mqttDeadLettered,
+    mqttDeadLettered: state.mqttDeadLettered,
+    mqttRequeued: state.mqttRequeued,
     queueDepth: queueDepth ?? null,
     rssMb: Math.round((mem.rss / 1024 / 1024) * 10) / 10,
     heapUsedMb: Math.round((mem.heapUsed / 1024 / 1024) * 10) / 10,
@@ -85,7 +97,9 @@ function getIngestMetricsSnapshot() {
   const lat = latencyStats();
   const elapsedSec = Math.max((Date.now() - state.startedAt) / 1000, 0.001);
   const successCount = state.mqttProcessed;
-  const errorCount = state.mqttFailed + state.mqttNacked;
+  // Requeue tidak dihitung sebagai error: pesannya masih di queue dan akan
+  // diproses lagi begitu infrastruktur pulih.
+  const errorCount = state.mqttFailed + state.mqttDeadLettered;
   const totalHandled = successCount + errorCount;
 
   return {
@@ -95,7 +109,10 @@ function getIngestMetricsSnapshot() {
     mqttProcessed: successCount,
     mqttEnqueued: state.mqttEnqueued,
     mqttFailed: state.mqttFailed,
-    mqttNacked: state.mqttNacked,
+    // Dipertahankan namanya supaya collector uji beban yang sudah ada tetap jalan.
+    mqttNacked: state.mqttDeadLettered,
+    mqttDeadLettered: state.mqttDeadLettered,
+    mqttRequeued: state.mqttRequeued,
     successRatePct: totalHandled ? (successCount / totalHandled) * 100 : null,
     errorRatePct: totalHandled ? (errorCount / totalHandled) * 100 : null,
     receiveRatePerSec: state.mqttReceived / elapsedSec,
@@ -116,7 +133,8 @@ function resetIngestMetrics(runId = null) {
   state.mqttProcessed = 0;
   state.mqttEnqueued = 0;
   state.mqttFailed = 0;
-  state.mqttNacked = 0;
+  state.mqttDeadLettered = 0;
+  state.mqttRequeued = 0;
   state.latencyMs = [];
   state.timeSeries = [];
 }
@@ -126,7 +144,8 @@ module.exports = {
   recordMqttProcessed,
   recordMqttEnqueued,
   recordMqttFailed,
-  recordMqttNacked,
+  recordMqttDeadLettered,
+  recordMqttRequeued,
   appendTimeSeriesSample,
   getIngestMetricsSnapshot,
   resetIngestMetrics,

@@ -1,6 +1,7 @@
 const pool = require("../../config/db");
 const { THRESHOLD_METRICS } = require("./thresholdMetrics");
-const { subscriber, publisher } = require("../../config/redis");
+const { publishEvent } = require("../../shared/events/eventBus");
+const { RK } = require("../../shared/events/routingKeys");
 const { setActuators } = require("../ingest/actuatorService");
 const { resolveActuatorActions, resolveActuatorRecoveryActions } = require("../../shared/actuatorRules");
 const {
@@ -29,7 +30,11 @@ const DEBUG = process.env.ALERT_DEBUG === "true";
 
 // Threshold snapshot per screenhouse jarang berubah tapi sebelumnya di-SELECT
 // untuk SETIAP pesan sensor. Cache ber-TTL + invalidasi saat snapshot di-upsert
-// (channel "threshold.updated") memangkas satu round-trip DB per pesan.
+// (routing key config.threshold) memangkas satu round-trip DB per pesan.
+//
+// Cache ini adalah salah satu alasan listener alert dijalankan satu instance:
+// invalidasinya lokal, jadi replica kedua tidak akan tahu ambangnya sudah basi
+// sampai TTL habis.
 const THRESHOLD_TTL_MS = Number(process.env.THRESHOLD_CACHE_TTL_MS || 60000);
 const thresholdCache = new Map();
 
@@ -64,7 +69,7 @@ async function resolveOfflineAlertsForNode(screenhouseId, sensorNodeId) {
     console.log("OFFLINE ALERT auto-resolved for node", sensorNodeId);
     const enriched = await enrichAlert(row.id);
     if (enriched) {
-      await publisher.publish("alert-resolved", JSON.stringify(enriched));
+      await publishEvent(RK.ALERT_RESOLVED, enriched);
     }
   }
 
@@ -243,10 +248,6 @@ async function touchActiveAlert(alertId, sensorDataId) {
   ]);
 }
 
-async function createAlert({ sensorDataId, screenhouseId, sensorNodeId, message }) {
-  return ensureAlert({ sensorDataId, screenhouseId, sensorNodeId, message });
-}
-
 /** Buat alert hanya jika belum ada yang active untuk kombinasi screenhouse + node + pesan. */
 async function ensureAlert({ sensorDataId, screenhouseId, sensorNodeId, message }) {
   try {
@@ -258,7 +259,7 @@ async function ensureAlert({ sensorDataId, screenhouseId, sensorNodeId, message 
     console.log("ALERT CREATED:", message);
     const row = await enrichAlert(result.rows[0].id);
     if (row) {
-      await publisher.publish("alert-created", JSON.stringify(row));
+      await publishEvent(RK.ALERT_CREATED, row);
     }
     return true;
   } catch (err) {
@@ -292,13 +293,21 @@ async function resolveActiveAlertIfAny({ screenhouseId, sensorNodeId, message })
   console.log("ALERT auto-resolved:", message);
   const row = await enrichAlert(result.rows[0].id);
   if (row) {
-    await publisher.publish("alert-resolved", JSON.stringify(row));
+    await publishEvent(RK.ALERT_RESOLVED, row);
   }
   return true;
 }
 
-async function handleSensorDataCreated(message) {
-  const { sensorDataId, screenhouseId, sensorNodeId, data: sensorData } = JSON.parse(message);
+/**
+ * Handler untuk routing key `sensor.persisted`.
+ *
+ * Sengaja TIDAK berlangganan `sensor.raw`: alerts.sensor_data_id adalah foreign
+ * key ke sensor_data(id), jadi evaluasi ambang baru boleh jalan setelah barisnya
+ * benar-benar commit. Itulah alasan listener ini berada di hilir persistence,
+ * bukan sejajar dengannya.
+ */
+async function handleSensorPersisted(event) {
+  const { sensorDataId, screenhouseId, sensorNodeId, data: sensorData } = event;
 
   await resolveOfflineAlertsForNode(screenhouseId, sensorNodeId);
 
@@ -336,12 +345,7 @@ async function handleSensorDataCreated(message) {
 
     if (isLow) {
       violations.push({ key: m.key, direction: "low", label: m.label });
-      await ensureAlert({
-        sensorDataId,
-        screenhouseId,
-        sensorNodeId,
-        message: lowMsg,
-      });
+      await ensureAlert({ sensorDataId, screenhouseId, sensorNodeId, message: lowMsg });
     } else if (lowRecovered) {
       const resolved = await resolveActiveAlertIfAny({
         screenhouseId,
@@ -353,12 +357,7 @@ async function handleSensorDataCreated(message) {
 
     if (isHigh) {
       violations.push({ key: m.key, direction: "high", label: m.label });
-      await ensureAlert({
-        sensorDataId,
-        screenhouseId,
-        sensorNodeId,
-        message: highMsg,
-      });
+      await ensureAlert({ sensorDataId, screenhouseId, sensorNodeId, message: highMsg });
     } else if (highRecovered) {
       const resolved = await resolveActiveAlertIfAny({
         screenhouseId,
@@ -396,51 +395,12 @@ async function handleSensorDataCreated(message) {
   }
 }
 
-async function startAlertWorker() {
-  await subscriber.subscribe("sensor-data-created", async (message) => {
-    try {
-      await handleSensorDataCreated(message);
-    } catch (err) {
-      console.error(err);
-    }
-  });
-
-  await subscriber.subscribe("threshold.updated", async (message) => {
-    try {
-      await upsertThresholdSnapshot(JSON.parse(message));
-    } catch (err) {
-      console.error("[threshold.updated]", err);
-    }
-  });
-
-  await subscriber.subscribe("screenhouse.registry", async (message) => {
-    try {
-      await upsertScreenhouseRegistry(JSON.parse(message));
-    } catch (err) {
-      console.error("[screenhouse.registry]", err);
-    }
-  });
-
-  console.log("Alert worker listening on Redis channels");
-
-  consolidateAllOfflineDuplicates(pool)
-    .then((resolvedCount) => {
-      if (resolvedCount > 0) {
-        console.log(`[offline-check] cleaned ${resolvedCount} duplicate offline alert(s) on startup`);
-      }
-    })
-    .catch((err) => console.error("[offline-check] startup cleanup failed", err.message));
-
-  const offlineCheckMs =
-    Math.max(Number(process.env.OFFLINE_CHECK_INTERVAL_SEC) || 300, 60) * 1000;
-
-  const runOfflineCheck = () => {
-    checkOfflineNodes().catch((err) => console.error("[offline-check]", err.message));
-  };
-
-  setTimeout(runOfflineCheck, 15_000);
-  setInterval(runOfflineCheck, offlineCheckMs);
-  console.log(`Offline node check every ${offlineCheckMs / 1000}s`);
-}
-
-module.exports = { startAlertWorker, upsertThresholdSnapshot, upsertScreenhouseRegistry };
+module.exports = {
+  handleSensorPersisted,
+  upsertThresholdSnapshot,
+  upsertScreenhouseRegistry,
+  checkOfflineNodes,
+  consolidateAllOfflineDuplicates,
+  ensureAlert,
+  enrichAlert,
+};

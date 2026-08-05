@@ -1,59 +1,49 @@
 require("dotenv").config();
 
-const express = require("express");
-const http = require("http");
-const cors = require("cors");
+/**
+ * Satu artefak, banyak peran.
+ *
+ * Setiap role di bawah adalah proses terpisah yang bisa dijalankan, di-restart,
+ * dan ditambah replica-nya sendiri — persis seperti service terpisah. Yang
+ * dibagi hanyalah repositori dan image, bukan proses. Pilihan ini disengaja:
+ * seluruh role memakai resolusi node, aturan aktuator, dan skema database yang
+ * sama, dan menyalinnya ke tujuh repositori hanya akan menciptakan tujuh salinan
+ * yang perlahan menyimpang.
+ *
+ * Pilih dengan variabel lingkungan ROLE. Lihat docker/docker-compose.yaml.
+ */
+const ROLES = {
+  collector: "./roles/collector",
+  processing: "./roles/processing",
+  persistence: "./roles/persistence",
+  alert: "./roles/alert",
+  realtime: "./roles/realtime",
+  scheduler: "./roles/scheduler",
+  api: "./roles/api",
+};
 
-require("./config/db");
+const role = process.env.ROLE || "api";
+const modulePath = ROLES[role];
 
-const { connectRedis, subscriber } = require("./config/redis");
-const { isRabbitMqEnabled, connectRabbitMq } = require("./config/rabbitmq");
-const connectMQTT = require("./modules/ingest/mqttService");
-const { connectDeviceBridge } = require("./modules/ingest/deviceBridge");
-const { startIngestConsumer } = require("./modules/ingest/ingestQueue");
-const { startAlertWorker } = require("./modules/alerting/worker");
-const { attachSocketServer } = require("./modules/realtime/socketServer");
-const sensorRoutes = require("./modules/ingest/routes/sensorRoutes");
-const alertRoutes = require("./modules/alerting/routes/alertRoutes");
-const statsRoutes = require("./modules/stats/routes/statsRoutes");
-
-const app = express();
-
-app.use(cors());
-app.use(express.json());
-
-app.get("/", (req, res) => {
-  res.json({
-    service: "monitoring-service",
-    ingestMode: isRabbitMqEnabled() ? "rabbitmq" : "direct",
-  });
-});
-
-app.use("/sensor-data", sensorRoutes);
-app.use("/alerts", alertRoutes);
-app.use("/stats", statsRoutes);
-
-async function bootstrap() {
-  await connectRedis();
-  if (isRabbitMqEnabled()) {
-    await connectRabbitMq();
-    await startIngestConsumer();
-  }
-  connectMQTT();
-  connectDeviceBridge();
-  await startAlertWorker();
-
-  const server = http.createServer(app);
-  attachSocketServer(server, subscriber);
-
-  const PORT = process.env.PORT || 3001;
-  server.listen(PORT, () => {
-    const ingest = isRabbitMqEnabled() ? "MQTT → RabbitMQ → DB" : "MQTT → DB";
-    console.log(`Monitoring Service running on port ${PORT} (HTTP + Socket.IO, ingest: ${ingest})`);
-  });
+if (!modulePath) {
+  console.error(
+    `ROLE "${role}" tidak dikenal. Pilihan: ${Object.keys(ROLES).join(", ")}`
+  );
+  process.exit(1);
 }
 
-bootstrap().catch((err) => {
-  console.error("Monitoring Service failed to start:", err);
-  process.exit(1);
+console.log(`=== monitoring-service | ROLE=${role} | pid ${process.pid} ===`);
+
+require(modulePath)
+  .start()
+  .catch((err) => {
+    console.error(`[${role}] gagal start:`, err);
+    process.exit(1);
+  });
+
+// Tanpa handler ini, satu promise yang ditolak tanpa catch akan menjatuhkan
+// proses diam-diam di Node 18+. Untuk role consumer itu berarti berhenti
+// mengonsumsi antrean tanpa jejak di log.
+process.on("unhandledRejection", (err) => {
+  console.error(`[${role}] unhandled rejection:`, err);
 });

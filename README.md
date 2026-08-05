@@ -16,15 +16,16 @@ Sistem monitoring realtime screenhouse pembibitan padi.
 * Node.js
 * Express.js
 * PostgreSQL
-* Redis
+* RabbitMQ
 * MQTT
 * Socket.IO
 
 ### Infrastructure
 
 * PostgreSQL
-* Redis
+* RabbitMQ (message broker antar service)
 * Mosquitto MQTT Broker
+* NGINX (load balancer)
 * Docker Compose
 
 ---
@@ -36,19 +37,32 @@ Microservices dengan **bounded context** dan **2 database terpisah**:
 - **App Service** — identity (users) + catalog (screenhouses, wilayah, thresholds). DB: `screenhouse_app`.
 - **Monitoring Service** — ingest sensor (MQTT), alerting, realtime (WebSocket), stats. DB: `screenhouse_monitoring`.
 
-App Service membaca data monitoring lewat HTTP (`MONITORING_SERVICE_URL`); Monitoring Service punya read-model tersinkron (`screenhouse_registry`, `threshold_snapshots`) yang di-sync dari App DB.
+App Service membaca data monitoring lewat HTTP (`MONITORING_SERVICE_URL`); Monitoring Service punya read-model tersinkron (`screenhouse_registry`, `threshold_snapshots`) yang di-sync dari App DB lewat event `config.*`.
+
+Monitoring Service dipecah jadi **processing layer + service listener** yang berkomunikasi lewat RabbitMQ. Satu image, tujuh proses, dipilih lewat env `ROLE`:
 
 ```txt
 Sensor Node (tray) ──radio WSN──► Sink Node (gateway)
                                       ↓ MQTT publish
                                  Mosquitto Broker
                                       ↓ subscribe
-Monitoring Service ──→ screenhouse_monitoring  (default: MQTT → DB)
-                    └→ RabbitMQ (sensor-ingest) ──→  (opsional: USE_RABBITMQ=true)
-  (sink_nodes, sensor_nodes, sensor_data, actuator_logs, alerts)
-    ↓ Redis event bus + WebSocket
-Frontend Dashboard ←── App Service ──→ screenhouse_app (users, screenhouses, thresholds)
+                            ROLE=collector          (tepat 1 — subscriber MQTT)
+                                      ↓ q.ingest
+                            ROLE=processing         (×N — resolusi node, validasi)
+                                      ↓ sensor.raw
+                            ROLE=persistence        (×N — INSERT sensor_data)
+                                      ↓ sensor.persisted
+              ┌───────────────────────┴───────────────────────┐
+      ROLE=alert (1)                                  ROLE=realtime (×N)
+        ↓ alert.created                                 ↓ Socket.IO
+      ROLE=notifikasi (app-service, Web Push)     Frontend Dashboard
+                                                        ↑
+                              NGINX load balancer ──────┘
+                                      ↓ /api
+                            app-service ROLE=api (×N) ──→ screenhouse_app
 ```
+
+Semua panah antar service melewati RabbitMQ (topic exchange `shms.events`). **Redis sudah dihapus** — sebelumnya ia murni message bus tanpa cache.
 
 ---
 
@@ -117,8 +131,11 @@ DB_NAME=screenhouse_app
 
 JWT_SECRET=supersecret
 
-REDIS_HOST=localhost
-REDIS_PORT=6379
+# api = REST + proxy; notifikasi = listener Web Push (proses terpisah).
+ROLE=api
+
+RABBITMQ_URL=amqp://screenhouse:screenhouse@localhost:5672
+RABBITMQ_EXCHANGE=shms.events
 
 # Web Push (PWA notifikasi saat app tertutup) — generate dengan:
 #   cd services/app-service && npx web-push generate-vapid-keys
@@ -161,13 +178,13 @@ DB_NAME=screenhouse_monitoring
 
 JWT_SECRET=supersecret
 
-REDIS_HOST=localhost
-REDIS_PORT=6379
+# Peran proses ini. Pilihan: collector, processing, persistence, alert,
+# realtime, scheduler, api. Lihat "Satu artefak, banyak role" di CLAUDE.md.
+ROLE=api
 
-# Ingest buffer — default off (MQTT → DB). Set true untuk MQTT → RabbitMQ → DB (load test).
-USE_RABBITMQ=false
+# RabbitMQ wajib — ia satu-satunya jalur komunikasi antar service.
 RABBITMQ_URL=amqp://screenhouse:screenhouse@localhost:5672
-RABBITMQ_INGEST_QUEUE=sensor-ingest
+RABBITMQ_EXCHANGE=shms.events
 RABBITMQ_PREFETCH=20
 ```
 
@@ -193,11 +210,25 @@ cd docker && docker compose up -d && cd ..
 
 Container yang akan berjalan:
 
+Infrastruktur:
+
 * `screenhouse-postgres-app` — PostgreSQL App DB (host port 5434)
 * `screenhouse-postgres-monitoring` — PostgreSQL Monitoring DB (host port 5433)
-* `screenhouse-redis` — Redis (6379)
 * `screenhouse-mqtt` — Mosquitto MQTT Broker (1883 / 9001)
-* `screenhouse-rabbitmq` — RabbitMQ ingest buffer (5672 / management 15672)
+* `screenhouse-rabbitmq` — RabbitMQ, bus antar service (5672 / management 15672)
+
+Service:
+
+* `screenhouse-collector` — subscriber MQTT → `q.ingest` (tepat 1)
+* `processing`, `persistence` — consumer yang boleh ditambah replica
+* `screenhouse-alert` — evaluasi ambang (tepat 1)
+* `screenhouse-scheduler` — deteksi node offline (tepat 1)
+* `realtime` — gateway Socket.IO (boleh ×N)
+* `monitoring-api`, `app-service` — HTTP (boleh ×N)
+* `screenhouse-notifikasi` — listener Web Push
+* `screenhouse-lb` — NGINX load balancer + SPA (host port 8082)
+
+Buka UI manajemen RabbitMQ di [localhost:15672](http://localhost:15672) (`screenhouse` / `screenhouse`) untuk melihat queue depth dan laju pesan — ini sumber angka agregat yang benar setelah arsitektur dipecah, karena counter di tiap proses hanya menghitung dirinya sendiri.
 
 ---
 
@@ -234,12 +265,28 @@ node src/index.js
 
 ## Monitoring Service
 
+Tiap role adalah proses sendiri. Untuk jalan lengkap di lokal, buka tujuh terminal (atau pakai Docker Compose, jauh lebih praktis):
+
 ```bash
 cd services/monitoring-service
-node src/index.js
+ROLE=collector   node src/index.js
+ROLE=processing  node src/index.js
+ROLE=persistence node src/index.js
+ROLE=alert       node src/index.js
+ROLE=realtime    node src/index.js
+ROLE=scheduler   node src/index.js
+ROLE=api         node src/index.js
 ```
 
-Pipeline ingest default: **MQTT → DB** (`USE_RABBITMQ=false`). Untuk uji beban dengan buffer antrian, set `USE_RABBITMQ=true` dan jalankan container `rabbitmq`.
+Lewat Docker, sekaligus menaikkan replica consumer:
+
+```bash
+cd docker
+docker compose up -d
+docker compose up -d --scale persistence=4 --scale processing=3
+```
+
+**Jangan menaikkan replica `collector`, `alert`, atau `scheduler`** — alasannya ada di CLAUDE.md dan di komentar masing-masing service di `docker-compose.yaml`.
 
 ---
 
@@ -413,7 +460,6 @@ Password: 123456
 | App Service                   | 8000 |
 | PostgreSQL App (host)         | 5434 |
 | PostgreSQL Monitoring (host)  | 5433 |
-| Redis                         | 6379 |
 | MQTT                          | 1883 |
 | RabbitMQ                      | 5672 |
 | RabbitMQ Management           | 15672 |
@@ -442,7 +488,7 @@ Password: 123456
 ## System
 
 * MQTT realtime ingestion
-* Redis event bus
+* RabbitMQ event bus (exchange `shms.events`)
 * WebSocket realtime frontend
 * Alert automation + aktuator otomatis
 * Realtime map dashboard
@@ -474,7 +520,7 @@ Salin public/private key ke:
 
 Tabel `push_subscriptions` sudah ada di `database/app/schema.sql` (fresh install tidak perlu migrasi terpisah).
 
-Restart **app-service** (push worker subscribe channel Redis `alert-created`).
+Restart container **notifikasi** (listener Web Push berlangganan `alert.created` di RabbitMQ).
 
 ## Cara kerja
 

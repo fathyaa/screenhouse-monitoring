@@ -1,9 +1,23 @@
 const { sendPushToUser } = require("./pushService");
+const { consume } = require("../../shared/events/publisher");
 
-async function startPushWorker(subscriber) {
-  await subscriber.subscribe("alert-created", async (message) => {
-    try {
-      const alert = JSON.parse(message);
+/**
+ * LISTENER NOTIFIKASI — Web Push ke perangkat petani.
+ *
+ * Tinggal di app-service, bukan monitoring-service, karena langganan push milik
+ * domain identitas: tabelnya ada di database app, bersama pengguna yang
+ * memilikinya. Memindahkannya ke monitoring hanya akan menukar satu batas yang
+ * rapi dengan koneksi lintas-database.
+ *
+ * Aman dijalankan banyak replica: satu peristiwa alert hanya sampai ke satu
+ * consumer, dan pengirimannya idempoten per id alert (dipakai sebagai tag
+ * notifikasi, jadi kiriman ganda menimpa yang lama alih-alih menumpuk).
+ */
+function startPushWorker() {
+  consume({
+    queue: process.env.QUEUE_NOTIF || "q.notif",
+    bindings: ["alert.created"],
+    handler: async (alert) => {
       const userId = alert.user_id ?? alert.owner_user_id;
       if (!userId) return;
 
@@ -15,12 +29,8 @@ async function startPushWorker(subscriber) {
         tag: `alert-${alert.id}`,
         alertId: alert.id,
       });
-    } catch (err) {
-      console.error("[push-worker]", err.message);
-    }
+    },
   });
-
-  console.log("Push worker listening on Redis channel alert-created");
 }
 
 module.exports = { startPushWorker };

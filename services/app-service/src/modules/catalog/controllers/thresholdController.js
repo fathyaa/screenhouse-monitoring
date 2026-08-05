@@ -1,5 +1,5 @@
 const pool = require("../../../config/db");
-const { publishEvent } = require("../../../shared/events/publisher");
+const { publishEvent, RK } = require("../../../shared/events/publisher");
 
 const THRESHOLD_FIELDS = [
   "min_nitrogen", "max_nitrogen",
@@ -138,7 +138,7 @@ async function upsertThresholdForScreenhouse(screenhouseId, body, client = pool)
     );
   }
 
-  await publishEvent("threshold.updated", {
+  await publishEvent(RK.CONFIG_THRESHOLD, {
     screenhouse_id: Number(screenhouseId),
     ...result.rows[0],
   });

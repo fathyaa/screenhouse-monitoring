@@ -1,14 +1,25 @@
 const { getMqttClient } = require("../../config/mqttClient");
-const { isRabbitMqEnabled } = require("../../config/rabbitmq");
-const { handleMqttPayload } = require("./ingestPipeline");
 const { recordMqttReceived, recordMqttFailed } = require("./ingestMetrics");
 const { adaptMqttMessage, getInfraSubscribeTopics } = require("./infraMqttAdapter");
 
-function connectMQTT() {
+/**
+ * Berlangganan topik sensor dan menyerahkan tiap frame ke `onJob`.
+ *
+ * Modul ini sengaja tidak tahu apa-apa soal database: ia hidup di role
+ * `collector`, yang tugasnya cuma memindahkan pesan dari MQTT ke antrean.
+ * Parsing topik tetap di sini karena bentuk topik adalah urusan protokol, bukan
+ * urusan domain.
+ *
+ * CATATAN SKALA: jangan menjalankan lebih dari satu collector untuk broker yang
+ * sama. Subscriber MQTT biasa menerima SETIAP pesan pada topik yang cocok, jadi
+ * replica kedua menggandakan seluruh data. Kalau butuh lebih dari satu, pakai
+ * shared subscription MQTT v5 (`$share/grup/topik`) — bukan load balancer.
+ */
+function connectMQTT(onJob) {
   const client = getMqttClient();
   if (!client) {
     console.warn("[mqtt] MQTT_BROKER_URL not set — ingest disabled");
-    return;
+    return null;
   }
 
   const topics = [
@@ -20,11 +31,10 @@ function connectMQTT() {
   ];
 
   client.on("connect", () => {
-    const mode = isRabbitMqEnabled() ? "RabbitMQ queue" : "direct DB";
-    console.log(`Connected to MQTT Broker (ingest mode: ${mode})`);
+    console.log("[mqtt] tersambung ke broker — meneruskan ke q.ingest");
     topics.forEach((topic) => {
       client.subscribe(topic, (err) => {
-        if (!err) console.log("Subscribed:", topic);
+        if (!err) console.log("[mqtt] subscribed:", topic);
       });
     });
   });
@@ -34,13 +44,20 @@ function connectMQTT() {
     try {
       const rawData = JSON.parse(message.toString());
       const { data, parts, screenhouseIdFromTopic } = adaptMqttMessage(topic, rawData);
-      const ok = await handleMqttPayload(data, parts, screenhouseIdFromTopic);
-      if (ok === false) recordMqttFailed();
+      await onJob({
+        source: "mqtt",
+        data,
+        topicParts: parts,
+        screenhouseIdFromTopic,
+        receivedAt: new Date().toISOString(),
+      });
     } catch (err) {
       recordMqttFailed();
-      console.log("Error processing MQTT message:", err);
+      console.log("[mqtt] gagal memproses pesan:", err.message);
     }
   });
+
+  return client;
 }
 
 module.exports = connectMQTT;

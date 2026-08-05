@@ -12,7 +12,6 @@ const {
   upsertThresholdFromVarietas,
   fetchVarietasById,
 } = require("../../../shared/varietasThreshold");
-const { publishEvent } = require("../../../shared/events/publisher");
 const { buildEstimasiTanam } = require("../../../shared/estimasiTanamService");
 const { MIN_STALE_SECONDS } = require("../../../shared/nodeLiveness");
 

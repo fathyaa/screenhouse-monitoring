@@ -11,7 +11,36 @@ BibitLive — monitoring screenhouse pembibitan padi (sensor NPK, kelembapan, su
 - `frontend/` — React + Vite + Tailwind, semua role dalam satu app, routing berbasis role di `App.jsx`.
 - `services/app-service/` — identity (users, auth) + catalog (screenhouses, thresholds, semai_cycles, wilayah). DB `screenhouse_app` (port host 5434).
 - `services/monitoring-service/` — ingest sensor via MQTT, alerting, realtime (Socket.IO), stats. DB `screenhouse_monitoring` (port host 5433).
-- Kedua service komunikasi lewat Redis pub/sub (channel `alert-created`, `alert-resolved`, `sensor-update`) dan HTTP langsung (app-service → monitoring-service via `MONITORING_SERVICE_URL`).
+- Kedua service komunikasi lewat **RabbitMQ** (topic exchange `shms.events`) dan HTTP langsung (app-service → monitoring-service via `MONITORING_SERVICE_URL`). **Redis sudah dihapus** — di kode lama ia murni message bus (`redisClient` dibuat tapi tak pernah dipakai), jadi tidak ada cache/session yang perlu dipindahkan.
+
+## Satu artefak, banyak role
+
+`monitoring-service` bukan satu proses lagi. Image yang sama dijalankan sebagai tujuh proses, dipilih lewat env `ROLE` (dispatcher di `src/index.js`, entrypoint di `src/roles/`):
+
+| ROLE | Tugas | Replica |
+|---|---|---|
+| `collector` | MQTT → `q.ingest`; `q.device.command` → MQTT | **tepat 1** |
+| `processing` | `q.ingest` → resolusi node → `sensor.raw` | bebas |
+| `persistence` | `sensor.raw` → INSERT `sensor_data` → `sensor.persisted` | bebas |
+| `alert` | `sensor.persisted` → threshold → `alert.created` | **tepat 1** |
+| `realtime` | `sensor.persisted`/`alert.*` → Socket.IO | bebas |
+| `scheduler` | cron deteksi node offline | **tepat 1** |
+| `api` | HTTP `/sensor-data`, `/alerts`, `/stats` | bebas |
+
+app-service punya dua role: `api` dan `notifikasi` (Web Push, dulu `pushWorker` di dalam proses API).
+
+**Tiga role tidak boleh ditambah replica-nya**, dan alasannya berbeda-beda:
+1. `collector` — subscriber MQTT menerima *setiap* pesan pada topik yang cocok, jadi replica kedua menggandakan seluruh data sensor. Kalau butuh >1, pakai shared subscription MQTT v5 (`$share/grup/topik`), bukan load balancer.
+2. `alert` — histeresis membaca-lalu-menulis status alert, dan cache ambangnya lokal.
+3. `scheduler` — dua pemindaian bersamaan = alert offline ganda. Jalan yang benar kalau butuh HA: `pg_try_advisory_lock` di awal siklus.
+
+## Kenapa alert ada di hilir persistence, bukan sejajar
+
+`alerts.sensor_data_id` adalah foreign key ke `sensor_data(id)` (serial). Listener alert butuh id baris yang baru ada setelah `persistence` commit — makanya ia berlangganan `sensor.persisted`, bukan `sensor.raw`. Jangan "memperbaiki" ini jadi paralel tanpa lebih dulu mengganti PK `sensor_data` ke UUID yang dibuat di `processing`.
+
+## Queue realtime sengaja tidak durable
+
+`q.realtime.{instance}` non-durable + auto-delete + TTL 30 detik, berbeda dari semua queue lain. Kalau dibuat durable, gateway yang mati lima menit menumpuk ribuan pembacaan basi lalu memuntahkannya ke browser saat hidup lagi. Untuk aliran ini, membuang pesan yang tak ada penerimanya adalah perilaku yang **benar**.
 - **`screenhouse_id` disinkron manual antar 2 DB** — bukan foreign key sungguhan, cuma konvensi. Kalau bikin data seed/migrasi yang menyentuh screenhouse, wajib insert row yang konsisten di kedua DB dengan id yang sama.
 
 ## Sebelum menulis seed data / migrasi
@@ -24,7 +53,7 @@ Backend generate pesan alert dengan pola persis: `"{label} di bawah batas minimu
 
 ## Alert hysteresis
 
-`services/monitoring-service/src/modules/alerting/worker.js` pakai margin 5% (`HYSTERESIS_RATIO`) antara nilai pelanggaran dan nilai pemulihan supaya alert tidak flapping (create → resolve → create berulang) saat sensor berosilasi di sekitar threshold.
+`services/monitoring-service/src/modules/alerting/alertEngine.js` pakai margin 5% (`HYSTERESIS_RATIO`) antara nilai pelanggaran dan nilai pemulihan supaya alert tidak flapping (create → resolve → create berulang) saat sensor berosilasi di sekitar threshold.
 
 ## gh01: slot aktuator `fan` dipinjam untuk katup irigasi tray 2
 

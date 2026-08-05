@@ -1,5 +1,4 @@
 const pool = require("../../../config/db");
-const { isRabbitMqEnabled } = require("../../../config/rabbitmq");
 const {
   getIngestMetricsSnapshot,
   resetIngestMetrics,
@@ -155,25 +154,58 @@ async function getNodeCounts(req, res) {
   }
 }
 
+/**
+ * Kedalaman antrean per queue — satu-satunya ukuran throughput yang masih benar
+ * setelah arsitektur dipecah.
+ *
+ * PENTING untuk pengujian beban: counter di ingestMetrics sekarang bersifat
+ * PER PROSES. Endpoint ini dilayani role `api`, yang tidak mengonsumsi satu pun
+ * pesan sensor, jadi angka mqttProcessed di sini akan nol — itu benar, bukan
+ * bug. Ukuran agregat lintas replica harus diambil dari RabbitMQ (queue depth di
+ * bawah, atau HTTP management API di :15672 untuk laju publish/ack).
+ */
+async function getQueueDepths() {
+  const { getChannel, INGEST_QUEUE, COMMAND_QUEUE, DEAD_QUEUE } = require("../../../config/rabbitmq");
+  const names = {
+    ingest: INGEST_QUEUE,
+    command: COMMAND_QUEUE,
+    dead: DEAD_QUEUE,
+    persist: process.env.QUEUE_PERSIST || "q.persist",
+    alert: process.env.QUEUE_ALERT || "q.alert",
+    notif: process.env.QUEUE_NOTIF || "q.notif",
+  };
+
+  const depths = {};
+  for (const [label, queue] of Object.entries(names)) {
+    try {
+      const ch = await getChannel();
+      // assertQueue, BUKAN checkQueue. checkQueue pada queue yang belum ada
+      // membalas 404 dan AMQP menutup channel-nya — karena channel itu di-cache
+      // dan dipakai bersama, satu queue yang belum terbentuk akan mematikan
+      // seluruh pembacaan berikutnya. assertQueue idempoten untuk queue durable
+      // biasa: cocok kalau sudah ada, dibuat kosong kalau belum.
+      const info = await ch.assertQueue(queue, { durable: true });
+      depths[label] = info.messageCount;
+    } catch (err) {
+      console.warn(`[stats] gagal membaca queue ${queue}:`, err.message);
+      depths[label] = null;
+    }
+  }
+  return depths;
+}
+
 async function getIngestStats(req, res) {
   try {
-    let queueDepth = null;
-    if (isRabbitMqEnabled()) {
-      try {
-        const { getChannel, QUEUE_NAME } = require("../../../config/rabbitmq");
-        const ch = await getChannel();
-        const q = await ch.checkQueue(QUEUE_NAME);
-        queueDepth = q.messageCount;
-      } catch {
-        queueDepth = null;
-      }
-    }
+    const queues = await getQueueDepths();
+    const queueDepth = queues.ingest ?? null;
 
     appendTimeSeriesSample({ queueDepth });
     res.json({
-      ingestMode: isRabbitMqEnabled() ? "rabbitmq" : "direct",
+      ingestMode: "rabbitmq",
+      role: process.env.ROLE || "api",
       ...getIngestMetricsSnapshot(),
       queueDepth,
+      queues,
     });
   } catch (err) {
     console.log(err);

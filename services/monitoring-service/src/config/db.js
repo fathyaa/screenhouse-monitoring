@@ -12,6 +12,15 @@ const pool = new Pool({
   idleTimeoutMillis: Number(process.env.PG_POOL_IDLE_MS || 30000),
 });
 
+// Client idle yang diputus server (Postgres restart/shutdown, SQLSTATE 57P01)
+// mem-emit "error" di level pool. Tanpa listener ini, EventEmitter Node
+// menaikkannya jadi uncaught exception dan SELURUH service ikut mati — ingest
+// MQTT berhenti, dan pesan yang datang selama itu hilang permanen. Pool sendiri
+// sudah membuang client yang rusak; query berikutnya dapat koneksi baru.
+pool.on("error", (err) => {
+  console.error("[db] koneksi idle bermasalah (pool tetap jalan):", err.message);
+});
+
 pool.connect()
   .then((client) => {
     console.log("Connected to PostgreSQL");

@@ -1,0 +1,26 @@
+# Override: isolasi jalur telemetri selama pengambilan data uji beban.
+#
+#   cd docker
+#   docker compose -f docker-compose.yaml \
+#                  -f docker-compose.prod-sim.yaml \
+#                  -f docker-compose.loadtest.yaml up -d
+#
+# Kenapa perlu: counter ingest menghitung SEMUA pesan yang masuk, sedangkan
+# validasi jumlah baris DB dibatasi ke sensor node yang dipilih simulator. Selama
+# jembatan gh01 aktif, telemetri perangkat sungguhan ikut menaikkan hitungan
+# sehingga delivery rate menggelembung dan sebaran titik kehilangan tercemar
+# (terbukti pada run S1 4 Agustus 2026: processed 3001 dari 3000 pesan terkirim).
+#
+# Efek samping yang harus disadari: selama override ini aktif, data dari perangkat
+# gh01 TIDAK tercatat sama sekali — perangkat publish QoS 0, jadi frame yang lewat
+# saat jembatan mati hilang permanen. Balikkan ke konfigurasi normal segera setelah
+# seri pengujian selesai.
+#
+# Setelah arsitektur dipecah, jembatan perangkat hanya hidup di role collector —
+# jadi cukup satu service yang di-override, bukan seluruh monitoring-service.
+
+services:
+  collector:
+    environment:
+      DEVICE_BRIDGE_URL: ""
+      DEVICE_BRIDGE_MAP: ""

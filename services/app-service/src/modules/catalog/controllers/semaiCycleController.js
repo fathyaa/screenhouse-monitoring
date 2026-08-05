@@ -1,6 +1,6 @@
 const pool = require("../../../config/db");
 const { resolveVarietasId, upsertThresholdFromVarietas } = require("../../../shared/varietasThreshold");
-const { publishEvent } = require("../../../shared/events/publisher");
+const { publishEvent, RK } = require("../../../shared/events/publisher");
 const { buildEstimasiTanam } = require("../../../shared/estimasiTanamService");
 const {
   addCalendarDays,
@@ -140,7 +140,7 @@ async function startSemaiCycle(req, res) {
       const payload = await upsertThresholdFromVarietas(client, screenhouseId, varietas, {
         manualOverride: false,
       });
-      await publishEvent("threshold.updated", payload);
+      await publishEvent(RK.CONFIG_THRESHOLD, payload);
     }
 
     await syncScreenhouseFromCycle(client, screenhouseId, cycle, {
@@ -424,7 +424,7 @@ async function editSemaiCycle(req, res) {
         const payload = await upsertThresholdFromVarietas(client, screenhouseId, varietas, {
           manualOverride: false,
         });
-        await publishEvent("threshold.updated", payload);
+        await publishEvent(RK.CONFIG_THRESHOLD, payload);
       }
     }
 

@@ -1,11 +1,21 @@
 const { Server } = require("socket.io");
 const { buildClientCapabilities } = require("../../shared/actuatorCapabilities");
+const { RK } = require("../../shared/events/routingKeys");
 
 // Log broadcast per-pesan dimatikan default (hot path saat throughput tinggi);
 // set SOCKET_DEBUG=true untuk mengaktifkan lagi.
 const DEBUG = process.env.SOCKET_DEBUG === "true";
 
-function attachSocketServer(httpServer, subscriber) {
+/**
+ * Gateway realtime. Tidak menyentuh database sama sekali — ia hanya menerima
+ * peristiwa yang sudah lengkap dan meneruskannya ke room `user:{id}`.
+ *
+ * Bisa dijalankan berapa pun replica-nya tanpa adapter Socket.IO tambahan:
+ * tiap proses punya queue sendiri yang di-bind ke exchange, jadi semua replica
+ * menerima semua peristiwa dan masing-masing melayani koneksi miliknya. Yang
+ * dibutuhkan di depan hanyalah sticky session di load balancer.
+ */
+function attachSocketServer(httpServer) {
   const io = new Server(httpServer, {
     cors: { origin: "*" },
   });
@@ -36,10 +46,29 @@ function attachSocketServer(httpServer, subscriber) {
     });
   });
 
-  subscriber.subscribe("alert-created", (message) => {
-    try {
-      const alert = JSON.parse(message);
-      const ownerId = alert.user_id;
+  console.log("Socket.IO siap — menunggu peristiwa dari bus");
+  return io;
+}
+
+/** Arahkan satu peristiwa dari bus ke room pemiliknya. */
+function dispatchEvent(io, routingKey, payload) {
+  switch (routingKey) {
+    case RK.SENSOR_PERSISTED: {
+      // Payload realtime sudah dirakit listener persistence — gateway tidak
+      // perlu query apa pun untuk melengkapinya.
+      const data = payload.realtime;
+      const ownerId = data?.user_id;
+      if (!ownerId) {
+        console.warn("Sensor update tanpa user_id — tidak di-broadcast");
+        return;
+      }
+      io.to(`user:${ownerId}`).emit("sensor-update", data);
+      if (DEBUG) console.log(`Sensor update ke user:${ownerId} (SH ${data.screenhouse_id})`);
+      return;
+    }
+
+    case RK.ALERT_CREATED: {
+      const ownerId = payload.user_id;
       if (!ownerId) {
         console.warn("Alert tanpa user_id — tidak di-broadcast");
         return;
@@ -48,60 +77,35 @@ function attachSocketServer(httpServer, subscriber) {
       // supaya frontend bisa menilai "ditangani otomatis" dengan benar untuk alert
       // realtime juga — mis. gh01 yang aktuator otomatisnya dimatikan.
       io.to(`user:${ownerId}`).emit("alert-update", {
-        ...alert,
-        capabilities: buildClientCapabilities(alert.screenhouse_id),
+        ...payload,
+        capabilities: buildClientCapabilities(payload.screenhouse_id),
       });
       console.log(`Alert dikirim ke user:${ownerId}`);
-    } catch (err) {
-      console.error("[socket] alert-created:", err.message);
+      return;
     }
-  });
 
-  subscriber.subscribe("alert-resolved", (message) => {
-    try {
-      const alert = JSON.parse(message);
-      const ownerId = alert.user_id;
+    case RK.ALERT_RESOLVED: {
+      const ownerId = payload.user_id;
       if (!ownerId) return;
       io.to(`user:${ownerId}`).emit("alert-resolved", {
-        ...alert,
-        capabilities: buildClientCapabilities(alert.screenhouse_id),
+        ...payload,
+        capabilities: buildClientCapabilities(payload.screenhouse_id),
       });
       console.log(`Alert resolved ke user:${ownerId}`);
-    } catch (err) {
-      console.error("[socket] alert-resolved:", err.message);
+      return;
     }
-  });
 
-  subscriber.subscribe("actuator-updated", (message) => {
-    try {
-      const data = JSON.parse(message);
-      const ownerId = data.user_id;
-      if (ownerId) {
-        io.to(`user:${ownerId}`).emit("actuator-update", data);
-        console.log(`Actuator update ke user:${ownerId}`);
-      }
-    } catch (err) {
-      console.error("[socket] actuator-updated:", err.message);
+    case RK.ACTUATOR_UPDATED: {
+      const ownerId = payload.user_id;
+      if (!ownerId) return;
+      io.to(`user:${ownerId}`).emit("actuator-update", payload);
+      console.log(`Actuator update ke user:${ownerId}`);
+      return;
     }
-  });
 
-  subscriber.subscribe("sensor-update", (message) => {
-    try {
-      const data = JSON.parse(message);
-      const ownerId = data.user_id;
-      if (!ownerId) {
-        console.warn("Sensor update tanpa user_id — tidak di-broadcast");
-        return;
-      }
-      io.to(`user:${ownerId}`).emit("sensor-update", data);
-      if (DEBUG) console.log(`Sensor update ke user:${ownerId} (SH ${data.screenhouse_id})`);
-    } catch (err) {
-      console.error("[socket] sensor-update:", err.message);
-    }
-  });
-
-  console.log("Socket.IO attached — listening for alert-created, alert-resolved, actuator-updated, sensor-update");
-  return io;
+    default:
+      if (DEBUG) console.log("[socket] routing key tak dikenal:", routingKey);
+  }
 }
 
-module.exports = { attachSocketServer };
+module.exports = { attachSocketServer, dispatchEvent };

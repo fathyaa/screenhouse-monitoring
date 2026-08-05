@@ -1,0 +1,116 @@
+# Override: batasi resource lokal agar menyerupai anggaran komputasi deploy OCI.
+#
+#   cd docker
+#   docker compose -f docker-compose.yaml -f docker-compose.prod-sim.yaml up -d
+#
+# Kembali normal (tanpa batas): docker compose -f docker-compose.yaml up -d
+#
+# Sumber angka: spesifikasi instance OCI, semua VM.Standard.A1.Flex (ARM/Ampere):
+#
+#   Database Aplikasi    1 OCPU / 8 GB   postgres-app berbagi instance
+#   Database IoT         1 OCPU / 4 GB   postgres-monitoring sendirian
+#   MQTT                 1 OCPU / 4 GB   mosquitto
+#   Worker node OKE      1 OCPU / 8 GB   seluruh role monitoring-service
+#
+# CATATAN — tiga hal yang TIDAK ditiru di sini, sengaja:
+#
+# 1. Versi image dibiarkan sama dengan dev (postgres:16). Produksi memakai
+#    postgres:15-alpine, tapi direktori data PostgreSQL terikat versi mayor —
+#    menurunkan image ke 15 membuat container menolak start ("database files are
+#    incompatible with server"). Selisih versi ini efeknya kecil untuk uji beban
+#    ingest; cukup dicatat sebagai keterbatasan.
+#
+# 2. Kecepatan per-core. 1 OCPU Ampere A1 dan 1 core M1 Pro sama-sama ARM, tapi
+#    IPC M1 Pro jauh lebih tinggi. Jadi hasil di sini OPTIMISTIS — batas atas,
+#    bukan prediksi kapasitas OCI.
+#
+# 3. Anggaran 1 OCPU worker node dibagi manual ke tujuh role di bawah. Pembagian
+#    ini adalah TEBAKAN yang harus diperiksa ulang begitu ada data uji beban:
+#    porsi terbesar diberikan ke persistence karena di situlah INSERT terjadi.
+#    Kalau menaikkan --scale persistence, batas per-container ikut membagi
+#    anggaran yang sama — bukan menambahnya.
+
+services:
+
+  # === Database Aplikasi: 1 OCPU / 8 GB ===
+  postgres-app:
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 8G
+
+  # === Database IoT: 1 OCPU / 4 GB ===
+  postgres-monitoring:
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 4G
+
+  # === MQTT: 1 OCPU / 4 GB ===
+  mosquitto:
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 4G
+
+  # === Broker pesan: menempati anggaran yang dulu dipakai Redis + RabbitMQ ===
+  rabbitmq:
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 4G
+
+  # === Worker node OKE: 1 OCPU / 8 GB, dibagi ke seluruh role ===
+
+  collector:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.15"
+          memory: 1G
+
+  processing:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 1536M
+
+  persistence:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 1536M
+
+  alert:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.15"
+          memory: 1G
+
+  scheduler:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.05"
+          memory: 512M
+
+  realtime:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: 1G
+
+  monitoring-api:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.05"
+          memory: 512M

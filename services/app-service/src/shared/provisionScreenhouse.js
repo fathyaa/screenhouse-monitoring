@@ -1,6 +1,6 @@
 const pool = require("../config/db");
 const monitoringPool = require("../config/monitoringDb");
-const { publishEvent } = require("./events/publisher");
+const { publishEvent, RK } = require("./events/publisher");
 const { DEFAULT_THRESHOLD, THRESHOLD_COLS } = require("./thresholdDefaults");
 const {
   fetchVarietasById,
@@ -184,7 +184,7 @@ async function provisionMonitoringInfrastructure(screenhouse) {
     console.warn("[provision] monitoringPool unavailable — hanya publish event Redis");
   }
 
-  await publishEvent("screenhouse.registry", {
+  await publishEvent(RK.CONFIG_REGISTRY, {
     screenhouse_id: screenhouseId,
     owner_user_id: screenhouse.owner_user_id ?? null,
     screenhouse_name: screenhouse.name ?? `Screenhouse ${screenhouseId}`,
@@ -195,7 +195,7 @@ async function provisionMonitoringInfrastructure(screenhouse) {
   THRESHOLD_COLS.forEach((col, i) => {
     thresholdPayload[col] = thresholdValues[i];
   });
-  await publishEvent("threshold.updated", thresholdPayload);
+  await publishEvent(RK.CONFIG_THRESHOLD, thresholdPayload);
 }
 
 async function postActivationProvisioning(screenhouses) {
@@ -230,7 +230,7 @@ async function syncScreenhouseRegistryName(screenhouse) {
     );
   }
 
-  await publishEvent("screenhouse.registry", {
+  await publishEvent(RK.CONFIG_REGISTRY, {
     screenhouse_id: screenhouseId,
     owner_user_id: ownerUserId,
     screenhouse_name: name,

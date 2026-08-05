@@ -17,7 +17,7 @@ const roleMiddleware = require("./shared/middlewares/roleMiddleware");
 const { setScreenhouseActuators } = require("./modules/catalog/controllers/actuatorController");
 const { patchSensorNodeName } = require("./modules/catalog/controllers/sensorNodeController");
 const pushRoutes = require("./modules/push/routes/pushRoutes");
-const { connectRedis, subscriber } = require("./config/redis");
+const { connectRabbitMq, connectRabbitMqInBackground } = require("./config/rabbitmq");
 const { startPushWorker } = require("./modules/push/pushWorker");
 
 const MONITORING_SERVICE =
@@ -92,17 +92,48 @@ app.use(
 
 const PORT = process.env.PORT || 8000;
 
+/**
+ * Dua peran dari satu artefak:
+ *
+ *   api        — REST + proxy ke monitoring-service. Stateless, boleh N replica
+ *                di belakang load balancer.
+ *   notifikasi — listener Web Push. Tidak membuka port HTTP sama sekali; ia
+ *                hanya menunggu peristiwa alert.created di antrean.
+ *
+ * Sebelumnya keduanya jalan dalam satu proses, sehingga tiap deploy API ikut
+ * memutus pengiriman notifikasi.
+ */
+const ROLE = process.env.ROLE || "api";
+
 async function bootstrap() {
-  try {
-    await connectRedis();
-    await startPushWorker(subscriber);
-  } catch (err) {
-    console.warn("[push] Redis worker tidak aktif:", err.message);
+  if (ROLE === "notifikasi") {
+    // Listener tidak punya alasan untuk hidup tanpa antrean.
+    await connectRabbitMq();
+    startPushWorker();
+    console.log("App Service | ROLE=notifikasi — menunggu alert.created");
+    return;
   }
+
+  if (ROLE !== "api") {
+    console.error(`ROLE "${ROLE}" tidak dikenal. Pilihan: api, notifikasi`);
+    process.exit(1);
+  }
+
+  // API sengaja TIDAK menunggu broker. Sebagian besar endpoint hanya membaca
+  // database; menolak login hanya karena RabbitMQ belum siap akan menukar satu
+  // kegagalan kecil dengan pemadaman total.
+  connectRabbitMqInBackground();
 
   app.listen(PORT, () => {
     console.log(`App Service running on port ${PORT} (REST + gateway proxy)`);
   });
 }
 
-bootstrap();
+bootstrap().catch((err) => {
+  console.error(`[app-service:${ROLE}] gagal start:`, err);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (err) => {
+  console.error(`[app-service:${ROLE}] unhandled rejection:`, err);
+});
