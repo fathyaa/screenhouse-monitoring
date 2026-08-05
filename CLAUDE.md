@@ -38,6 +38,22 @@ app-service punya dua role: `api` dan `notifikasi` (Web Push, dulu `pushWorker` 
 
 `alerts.sensor_data_id` adalah foreign key ke `sensor_data(id)` (serial). Listener alert butuh id baris yang baru ada setelah `persistence` commit — makanya ia berlangganan `sensor.persisted`, bukan `sensor.raw`. Jangan "memperbaiki" ini jadi paralel tanpa lebih dulu mengganti PK `sensor_data` ke UUID yang dibuat di `processing`.
 
+## Trade-off performa arsitektur listener (baca sebelum menjanjikan "lebih cepat")
+
+Arsitektur ini **lebih lambat per pesan** daripada jalur direct yang lama, dan itu bukan bug yang bisa dituning habis. Direct dulu: MQTT → panggil fungsi → INSERT. Sekarang: MQTT → publish `q.ingest` → consume → publish `sensor.raw` → consume → INSERT → publish `sensor.persisted` → consume. **Tiga round-trip broker + tiga tulisan durable** menggantikan nol.
+
+Konsekuensinya:
+
+- **Beban rendah: arsitektur lama menang**, selalu. Tidak ada yang jenuh, jadi hop tambahan murni jadi latency tambahan tanpa imbalan.
+- **Beban tinggi: menang HANYA kalau leher botolnya CPU aplikasi, bukan Postgres.** Kalau `persistence` ditambah replica tapi Postgres sudah jenuh, tidak ada yang bertambah — direct tetap unggul di setiap tingkat beban. Di `prod-sim`, postgres-monitoring cuma dapat 1 OCPU; besar kemungkinan dialah leher botolnya.
+- Dengan `--scale persistence=1`, arsitektur ini **pasti kalah**. Ia baru impas sekitar 2 replica dan baru untung di 3+.
+
+Keunggulan yang tidak bersyarat ada di tempat lain, dan semuanya soal keandalan, bukan kecepatan: burst diserap antrean alih-alih menggelembungkan memori proses; Postgres restart tidak menghilangkan pesan; kegagalan alert tidak menghentikan ingest; deploy satu role tidak memutus WebSocket petani.
+
+**Jangan menjual arsitektur ini sebagai "lebih cepat".** Klaim yang bisa dipertahankan adalah **Acceptance Rate** (`Accepted/Sent`) — metrik utama di `docs/evaluasi-kualitas/stress-test-matriks.md`. Burst 15–30 detik diserap habis oleh antrean, jadi acceptance tetap ~100% pada laju yang sudah membuat direct menolak pesan.
+
+**Jebakan pengukuran:** hitung `COUNT(sensor_data)` **setelah `q.persist` kosong**, bukan tepat saat burst berakhir. Kalau tidak, baris yang masih mengantre terbaca sebagai pesan hilang, dan arsitektur ini akan terlihat jauh lebih buruk daripada kenyataannya. Cek dengan `docker exec screenhouse-rabbitmq rabbitmqctl -q list_queues name messages`.
+
 ## Queue realtime sengaja tidak durable
 
 `q.realtime.{instance}` non-durable + auto-delete + TTL 30 detik, berbeda dari semua queue lain. Kalau dibuat durable, gateway yang mati lima menit menumpuk ribuan pembacaan basi lalu memuntahkannya ke browser saat hidup lagi. Untuk aliran ini, membuang pesan yang tak ada penerimanya adalah perilaku yang **benar**.
@@ -98,6 +114,29 @@ npm run build                      # full production build sebagai smoke test
 ```
 
 Build sukses + lint bersih dianggap "selesai" untuk perubahan frontend murni — tidak ada browser testing otomatis, jadi untuk perubahan visual besar sebaiknya diminta dicek manual di `npm run dev` (port 5173/5174).
+
+## Verifikasi setelah edit backend
+
+Tidak ada test suite. Cara paling cepat membuktikan pipeline masih utuh: jalankan role sebagai **proses host** terhadap container infrastruktur yang sudah hidup (postgres 5433, rabbitmq 5672, mosquitto 1883) — jauh lebih cepat daripada menunggu `docker compose build`, dan menguji kodenya, bukan Dockerfile-nya.
+
+```bash
+cd services/monitoring-service
+for r in collector processing persistence alert; do
+  ROLE=$r node src/index.js > /tmp/role-$r.log 2>&1 &
+done
+# publish ke screenhouse/93/sensor dengan node_code SH93-T01, lalu:
+psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring \
+  -c "SELECT id, nitrogen, created_at FROM sensor_data WHERE sensor_node_id=93 ORDER BY id DESC LIMIT 5;"
+```
+
+Cek topologi antrean sekaligus: `docker exec screenhouse-rabbitmq rabbitmqctl -q list_bindings source_name routing_key destination_name`.
+
+Dua jebakan yang sudah pernah menghabiskan waktu:
+
+1. **`.env` lokal menimpa env yang di-export.** Kalau queue yang terbentuk bernama aneh (mis. `sensor-ingest` alih-alih `q.ingest`), curigai `.env` dulu. Salinan sebelum redesign ada di `.env.bak-pra-redesign`.
+2. **Container RabbitMQ bisa "Up" padahal node Erlang di dalamnya mati** (terjadi setelah Docker Desktop me-resume container lama). `docker compose ps` tetap hijau; yang jujur adalah `docker exec screenhouse-rabbitmq rabbitmq-diagnostics -q check_running`. Gejalanya `ECONNRESET` saat connect, bukan pesan auth.
+
+Bersihkan data sintetis setelah selesai — hapus `alerts` yang menunjuk baris uji **sebelum** `sensor_data` (ada FK `alerts.sensor_data_id`).
 
 ## PWA / Service Worker (dev)
 
