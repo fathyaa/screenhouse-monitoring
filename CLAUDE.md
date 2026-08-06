@@ -38,19 +38,24 @@ app-service punya dua role: `api` dan `notifikasi` (Web Push, dulu `pushWorker` 
 
 `alerts.sensor_data_id` adalah foreign key ke `sensor_data(id)` (serial). Listener alert butuh id baris yang baru ada setelah `persistence` commit — makanya ia berlangganan `sensor.persisted`, bukan `sensor.raw`. Jangan "memperbaiki" ini jadi paralel tanpa lebih dulu mengganti PK `sensor_data` ke UUID yang dibuat di `processing`.
 
-## Trade-off performa arsitektur listener (baca sebelum menjanjikan "lebih cepat")
+## Performa arsitektur listener — TERUKUR (6 Agustus 2026)
 
-Arsitektur ini **lebih lambat per pesan** daripada jalur direct yang lama, dan itu bukan bug yang bisa dituning habis. Direct dulu: MQTT → panggil fungsi → INSERT. Sekarang: MQTT → publish `q.ingest` → consume → publish `sensor.raw` → consume → INSERT → publish `sensor.persisted` → consume. **Tiga round-trip broker + tiga tulisan durable** menggantikan nol.
+Bagian ini dulu berisi dugaan bahwa arsitektur listener lebih lambat karena hop tambahan. **Dugaan itu terbantah pengukuran.** Angka di bawah dari 12 run pada anggaran identik (`prod-sim`, seluruh role berbagi 1 core), n=3 per sel, median:
 
-Konsekuensinya:
+| Beban | Arsitektur | Delivery | Laju | p95 | RSS | Kuras |
+|---|---|---|---|---|---|---|
+| S6 250/s | direct | 100% | 217,0/s | 36.504 ms | 860 MB | 41 s |
+| S6 250/s | listener | 100% | **242,9/s** | **32 ms** | **507 MB** | **0 s** |
+| S7 400/s | direct | 100% | 328,3/s | 90.381 ms | 1.367 MB | 61 s |
+| S7 400/s | listener | 100% | **388,8/s** | **27 ms** | **510 MB** | **0 s** |
 
-- **Beban rendah: arsitektur lama menang**, selalu. Tidak ada yang jenuh, jadi hop tambahan murni jadi latency tambahan tanpa imbalan.
-- **Beban tinggi: menang HANYA kalau leher botolnya CPU aplikasi, bukan Postgres.** Kalau `persistence` ditambah replica tapi Postgres sudah jenuh, tidak ada yang bertambah — direct tetap unggul di setiap tingkat beban. Di `prod-sim`, postgres-monitoring cuma dapat 1 OCPU; besar kemungkinan dialah leher botolnya.
-- Dengan `--scale persistence=1`, arsitektur ini **pasti kalah**. Ia baru impas sekitar 2 replica dan baru untung di 3+.
+Listener menang di **semua** sumbu: throughput +11,9% (S6) dan +18,4% (S7), p95 1.141× dan 3.347× lebih rendah, memori 41% dan 63% lebih hemat.
 
-Keunggulan yang tidak bersyarat ada di tempat lain, dan semuanya soal keandalan, bukan kecepatan: burst diserap antrean alih-alih menggelembungkan memori proses; Postgres restart tidak menghilangkan pesan; kegagalan alert tidak menghentikan ingest; deploy satu role tidak memutus WebSocket petani.
+Mekanismenya terbaca dari kolom RSS: direct tertinggal dari laju kedatangan lalu menumpuk backlog **di heap Node** (860 → 1.367 MB seiring beban), dan tumpukan itulah yang jadi p95 90 detik. Listener menaruh antrean di RabbitMQ sehingga memori prosesnya datar (507 → 510 MB).
 
-**Jangan menjual arsitektur ini sebagai "lebih cepat".** Klaim yang bisa dipertahankan adalah **Acceptance Rate** (`Accepted/Sent`) — metrik utama di `docs/evaluasi-kualitas/stress-test-matriks.md`. Burst 15–30 detik diserap habis oleh antrean, jadi acceptance tetap ~100% pada laju yang sudah membuat direct menolak pesan.
+**Kedua arsitektur mengantarkan 100% data.** Angka 88,5% pada data 4 Agustus adalah artefak jendela pengukuran yang berakhir sebelum antrean tuntas — jangan mengklaim "arsitektur lama menolak pesan".
+
+Plafon satu proses listener ≈ **1.900 pesan/detik** (S11, tanpa batas resource): 600/s dan 1.200/s diserap penuh, 2.400/s baru membuatnya tertinggal.
 
 **Jebakan alokasi CPU (sudah pernah memakan waktu):** `docker-compose.prod-sim.yaml` memakai `cpuset` — seluruh role monitoring dipatok ke core 0 dan berbagi dinamis. **Jangan** menggantinya dengan plafon `cpus:` per role. Versi pertama membagi 1 OCPU jadi tujuh plafon terpisah (persistence 0,25 dst), dan hasilnya S6 cuma 23,4 pesan/detik dengan delivery 37,8% — sepuluh kali lebih buruk dari direct. Yang terukur bukan arsitektur, melainkan plafon buatan: peran yang jadi leher botol tidak boleh melewati 25% CPU sekalipun enam peran lain menganggur. Worker node sungguhan berbagi core.
 
