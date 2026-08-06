@@ -154,7 +154,20 @@ Dua laporan, jangan tertukar:
 
 Konsekuensinya: **jangan membandingkan median antar kelompok** yang dijalankan berurutan — bandingkan run pada posisi yang sama (ulangan 1 lawan ulangan 1). Kalau butuh median yang sah, sisipkan jeda tetap atau `VACUUM` antar run supaya tiap run mulai dari keadaan database yang setara.
 
-**Leher botol pada arsitektur listener adalah PostgreSQL, bukan aplikasi.** Terukur langsung lewat `docker stats` saat beban puncak: postgres-monitoring 199% CPU, rabbitmq 162%, sementara tiap replica persistence hanya 37%. Karena itu `--scale persistence` tidak menaikkan throughput — konsumennya sudah menganggur menunggu database. Saran kapasitas yang benar adalah menambah OCPU database, bukan menambah pod.
+**Leher botol pada arsitektur listener adalah PostgreSQL, bukan aplikasi.** Dari 54 sampel `docker stats` selama fase kerja pada S11 (2.400 pesan/detik, 4 replica):
+
+| Komponen | Median | p90 | Maks |
+|---|---|---|---|
+| postgres-monitoring | **213%** | 248% | 274% |
+| rabbitmq | 128% | 165% | 194% |
+| persistence (4 replica, total) | 76% | 103% | 108% |
+| processing | 11% | 17% | 34% |
+
+Empat replica persistence bersama hanya memakai 76% — sekitar 19% per replica. Mereka menganggur menunggu database.
+
+**Jangan menyimpulkan mekanisme dari satu sampel `docker stats`.** Snapshot yang diambil di menit pertama run menunjukkan Postgres cuma 79% dan sempat membalik kesimpulan; sistem baru masuk keadaan tunak setelah backlog terbentuk. Rekam berkala, lalu ambil median.
+
+**Menambah replica di luar titik jenuh database MERUGIKAN**, bukan sekadar tidak menolong. Pada posisi ulangan yang sama: `@1` 2.057/s, `@2` 2.038/s, `@4` 1.436/s — empat replica 30% lebih lambat dengan p95 lima kali lipat. Saran kapasitas yang benar adalah menambah OCPU database, bukan menambah pod.
 
 Metrik yang selamat dari perubahan arsitektur adalah `databaseDeliveryRatePct` (`dbRows/sent`) — ia menghitung baris database langsung, bukan counter internal. Sisanya (`processRatePerSec`, `latencyP95Ms`, `rssMbMax`) bergantung pada agregasi `metrics.report`; kalau nol, curigai role `api` tidak menerima laporan, bukan pipeline yang mati.
 
