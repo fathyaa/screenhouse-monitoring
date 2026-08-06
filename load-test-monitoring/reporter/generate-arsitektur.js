@@ -147,13 +147,6 @@ function comparabilityIssues(runs) {
         `sebagian tidak. Angkanya tidak sebanding dengan run mana pun dan harus diulang.`,
     });
   }
-  const known = [...profiles.keys()].filter((p) => p !== "unknown" && p !== "mixed");
-  if (known.length > 1) {
-    issues.push({
-      level: "kritis",
-      text: `Run tercampur antara profil ${known.join(" dan ")}. Pisahkan atau ulangi salah satunya.`,
-    });
-  }
 
   const thin = [];
   for (const scenario of groupRuns(runs)) {
@@ -280,14 +273,55 @@ function lineChart({ scenarios, configs, metric, title, unit, log = false }) {
 
 // --- Halaman -----------------------------------------------------------------
 
-function buildHtml(runs) {
+/**
+ * Profil resource menentukan pertanyaan yang dijawab satu kelompok run, jadi
+ * kelompoknya dipisah secara struktural — bukan digabung lalu ditandai.
+ *
+ *   prod-sim   anggaran produksi (1 OCPU worker node). Ini hasil utama:
+ *              apakah redesign menolong deployment yang benar-benar dipakai.
+ *   unlimited  tanpa batas. Dipakai khusus untuk sweep replica, karena batas
+ *              prod-sim berlaku per container — `--scale persistence=4` di sana
+ *              justru memberi 4× anggaran dan tidak lagi meniru worker node.
+ *              Menjawab "apakah arsitekturnya bisa menskala", bukan "berapa
+ *              kapasitas produksi".
+ *   unknown    run sebelum pencatatan kondisi ada. Data pendahuluan saja.
+ *   mixed      sebagian container dibatasi, sebagian tidak. Harus diulang.
+ */
+const PROFILE_SECTIONS = [
+  {
+    key: "prod-sim",
+    title: "Anggaran produksi — hasil utama",
+    blurb:
+      "Seluruh container dibatasi meniru instance OCI; total anggaran role monitoring 1,00 OCPU. " +
+      "Inilah angka yang menjawab apakah redesign menolong deployment yang sekarang dipakai.",
+  },
+  {
+    key: "unlimited",
+    title: "Tanpa batas — pengujian mekanisme (sweep replica)",
+    blurb:
+      "Tanpa batas resource, dipakai khusus untuk menaikkan jumlah replica persistence. " +
+      "Angka di sini TIDAK boleh dibaca sebagai kapasitas produksi; ia hanya menjawab apakah " +
+      "menambah konsumen benar-benar menaikkan laju proses, atau leher botolnya ada di database.",
+  },
+  {
+    key: "mixed",
+    title: "Profil campuran — harus diulang",
+    blurb:
+      "Sebagian container dibatasi dan sebagian tidak. Tidak sebanding dengan apa pun; " +
+      "ditampilkan hanya supaya keberadaannya tidak luput.",
+  },
+  {
+    key: "unknown",
+    title: "Tanpa catatan kondisi — data pendahuluan",
+    blurb:
+      "Dijalankan sebelum pencatatan kondisi ditambahkan, sehingga batas resource-nya tidak " +
+      "bisa dibuktikan. Jangan dikutip sebagai hasil final.",
+  },
+];
+
+function buildSection(runs, meta) {
   const scenarios = groupRuns(runs);
-  const configs = [...new Set(runs.map((r) => r.config))].sort((a, b) => {
-    const order = { direct: 0, rabbitmq: 1 };
-    const oa = order[a] ?? 2 + Number(a.split("@")[1] ?? 0);
-    const ob = order[b] ?? 2 + Number(b.split("@")[1] ?? 0);
-    return oa - ob;
-  });
+  const configs = sortConfigs([...new Set(runs.map((r) => r.config))]);
   const issues = comparabilityIssues(runs);
 
   const metrics = [
@@ -318,21 +352,50 @@ function buildHtml(runs) {
           <thead><tr><th>Skenario</th>${configs.map((c) => `<th>${escapeHtml(configLabel(c))}</th>`).join("")}</tr></thead>
           <tbody>${rows}</tbody>
         </table></div>
-        <p class="note">Angka besar = median. Angka kecil = rentang min–max dan jumlah run.</p>
       </section>`;
     })
     .join("");
 
   const issueHtml = issues.length
-    ? `<div class="issues">${issues
+    ? issues
         .map(
           (i) =>
             `<div class="issue ${i.level === "kritis" ? "crit" : "warn"}"><strong>${i.level.toUpperCase()}</strong> ${escapeHtml(i.text)}</div>`
         )
-        .join("")}</div>`
-    : `<div class="issues"><div class="issue ok"><strong>OK</strong> Semua run berada pada profil resource yang sama dengan minimal 3 pengulangan.</div></div>`;
+        .join("")
+    : `<div class="issue ok"><strong>OK</strong> Semua run pada profil ini memakai batas yang sama dengan minimal 3 pengulangan.</div>`;
 
-  const profiles = [...new Set(runs.map((r) => r.profile))].join(", ");
+  return `
+  <section class="profile">
+    <h2>${escapeHtml(meta.title)} <span class="n">${runs.length} run</span></h2>
+    <p class="note">${escapeHtml(meta.blurb)}</p>
+    <div class="issues">${issueHtml}</div>
+    ${tables}
+    <p class="note">Angka besar = median. Angka kecil = rentang min–max dan jumlah run.</p>
+    ${lineChart({ scenarios, configs, metric: "procRate", title: "Laju proses vs beban", unit: "pesan/detik" })}
+    ${lineChart({ scenarios, configs, metric: "deliveryPct", title: "Delivery rate vs beban", unit: "%" })}
+    ${lineChart({ scenarios, configs, metric: "p95Ms", title: "Latency p95 vs beban", unit: "ms", log: true })}
+    ${lineChart({ scenarios, configs, metric: "rssMb", title: "Memori puncak vs beban", unit: "MB" })}
+  </section>`;
+}
+
+function sortConfigs(keys) {
+  return keys.sort((a, b) => {
+    const order = { direct: 0, rabbitmq: 1 };
+    const oa = order[a] ?? 2 + Number(a.split("@")[1] ?? 0);
+    const ob = order[b] ?? 2 + Number(b.split("@")[1] ?? 0);
+    return oa - ob;
+  });
+}
+
+function buildHtml(runs) {
+  const bySection = PROFILE_SECTIONS.map((meta) => ({
+    meta,
+    runs: runs.filter((r) => r.profile === meta.key),
+  })).filter((s) => s.runs.length);
+
+  const sections = bySection.map(({ meta, runs: group }) => buildSection(group, meta)).join("");
+  const profiles = bySection.map((s) => `${s.meta.key} (${s.runs.length})`).join(", ");
 
   return `<!doctype html>
 <html lang="id"><head><meta charset="utf-8">
@@ -372,6 +435,8 @@ function buildHtml(runs) {
   .ax, .lg { fill:var(--muted); font-size:11px; font-family:ui-monospace,Menlo,monospace; }
   .empty { color:var(--muted); }
   section { display:flex; flex-direction:column; gap:.5rem; }
+  .profile { border:1px solid var(--rule); border-radius:10px; padding:1.25rem; background:color-mix(in srgb, var(--card) 60%, transparent); gap:1rem; }
+  .profile > h2 { display:flex; align-items:baseline; gap:.6rem; }
 </style></head>
 <body><div class="wrap">
   <header>
@@ -380,22 +445,13 @@ function buildHtml(runs) {
   </header>
 
   <section>
-    <h2>Kesebandingan</h2>
-    ${issueHtml}
+    <h2>Kenapa dipisah per profil</h2>
+    <p class="note">Profil resource menentukan pertanyaan yang dijawab sekelompok run, jadi kelompoknya
+    dipisah secara struktural alih-alih digabung lalu ditandai. Angka lintas profil <strong>tidak boleh
+    dibandingkan langsung</strong>: yang satu berjalan pada anggaran 1 OCPU, yang lain tanpa batas.</p>
   </section>
 
-  <section>
-    <h2>Ringkasan per metrik</h2>
-    ${tables}
-  </section>
-
-  <section>
-    <h2>Grafik</h2>
-    ${lineChart({ scenarios, configs, metric: "procRate", title: "Laju proses vs beban", unit: "pesan/detik" })}
-    ${lineChart({ scenarios, configs, metric: "deliveryPct", title: "Delivery rate vs beban", unit: "%" })}
-    ${lineChart({ scenarios, configs, metric: "p95Ms", title: "Latency p95 vs beban", unit: "ms", log: true })}
-    ${lineChart({ scenarios, configs, metric: "rssMb", title: "Memori puncak vs beban", unit: "MB" })}
-  </section>
+  ${sections}
 
   <section>
     <h2>Cara membaca</h2>

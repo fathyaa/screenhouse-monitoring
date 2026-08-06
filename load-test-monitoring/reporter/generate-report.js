@@ -4,10 +4,7 @@
 
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, "..");
+import { ROOT, loadResults, activeSensors } from "./results-loader.js";
 
 function parseArgs() {
   const args = { input: path.join(ROOT, "results"), mode: null };
@@ -16,71 +13,6 @@ function parseArgs() {
     if (raw.startsWith("--mode=")) args.mode = raw.slice(7);
   }
   return args;
-}
-
-function loadScenarioDefinitions() {
-  const configPath = path.join(ROOT, "config/scenarios.json");
-  const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-  return new Map(config.scenarios.map((scenario) => [scenario.id, scenario]));
-}
-
-function loadReportSelection() {
-  const selectionPath = path.join(ROOT, "config/report-selection.json");
-  if (!fs.existsSync(selectionPath)) return { pinnedRuns: {} };
-  return JSON.parse(fs.readFileSync(selectionPath, "utf8"));
-}
-
-function loadResults(dir, { mode } = {}) {
-  if (!fs.existsSync(dir)) return [];
-
-  const scenarioDefinitions = loadScenarioDefinitions();
-  const pinnedRuns = loadReportSelection().pinnedRuns ?? {};
-  const entries = fs
-    .readdirSync(dir)
-    .filter((file) => file.endsWith(".json"))
-    .map((file) => ({ file, data: JSON.parse(fs.readFileSync(path.join(dir, file), "utf8")) }))
-    .filter(({ data }) => matchesCurrentScenarioDesign(data, scenarioDefinitions))
-    .filter(({ data }) => !mode || (data.backend?.ingestMode ?? "rabbitmq") === mode);
-
-  const byScenario = groupBy(entries, ({ data }) => data.scenario.id);
-  const picked = [];
-
-  for (const [scenarioId, scenarioEntries] of byScenario) {
-    const pinned = pinnedRuns[scenarioId];
-    const selected =
-      scenarioEntries.find((entry) => entry.file === pinned) ||
-      scenarioEntries.sort((a, b) => new Date(b.data.timing.startedAt) - new Date(a.data.timing.startedAt))[0];
-
-    picked.push({ ...selected.data, _sourceFile: selected.file });
-  }
-
-  return picked.sort((a, b) => activeSensors(a) - activeSensors(b));
-}
-
-function matchesCurrentScenarioDesign(result, scenarioDefinitions) {
-  const id = result.scenario?.id;
-  const expected = scenarioDefinitions.get(id);
-  if (!expected) return false;
-
-  return (
-    activeSensors(result) === expected.sensors &&
-    Number(result.scenario?.intervalSec) === expected.intervalSec &&
-    Number(result.scenario?.durationSec) === expected.durationSec
-  );
-}
-
-function groupBy(items, keyFn) {
-  const map = new Map();
-  for (const item of items) {
-    const key = keyFn(item);
-    if (!map.has(key)) map.set(key, []);
-    map.get(key).push(item);
-  }
-  return map;
-}
-
-function activeSensors(result) {
-  return Number(result.scenario?.activeSensors ?? result.scenario?.sensors ?? 0);
 }
 
 function deliveryRate(result) {
