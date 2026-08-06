@@ -24,11 +24,18 @@
 #    IPC M1 Pro jauh lebih tinggi. Jadi hasil di sini OPTIMISTIS — batas atas,
 #    bukan prediksi kapasitas OCI.
 #
-# 3. Anggaran 1 OCPU worker node dibagi manual ke tujuh role di bawah. Pembagian
-#    ini adalah TEBAKAN yang harus diperiksa ulang begitu ada data uji beban:
-#    porsi terbesar diberikan ke persistence karena di situlah INSERT terjadi.
-#    Kalau menaikkan --scale persistence, batas per-container ikut membagi
-#    anggaran yang sama — bukan menambahnya.
+# 3. Anggaran 1 OCPU worker node dibagi manual ke tujuh role di bawah, dan
+#    jumlahnya tepat 1,00 CPU. Pembagiannya tebakan yang harus diperiksa ulang
+#    begitu ada data: porsi terbesar ke processing & persistence karena di
+#    situlah resolusi node dan INSERT terjadi.
+#
+#    PENTING UNTUK SWEEP REPLICA: batas ini berlaku PER CONTAINER, jadi
+#    `--scale persistence=4` memberi 4 × 0,25 = 1,0 CPU untuk persistence saja
+#    dan total stack menjadi 1,75 CPU — melebihi anggaran worker node yang
+#    sedang ditiru. Karena itu sweep replica TIDAK boleh dijalankan dengan
+#    override ini kalau hasilnya mau disebut "pada anggaran produksi". Jalankan
+#    sweep tanpa override (profil `unlimited`) dan laporkan terpisah sebagai
+#    pengujian mekanisme, bukan pengujian kapasitas produksi.
 
 services:
 
@@ -113,4 +120,31 @@ services:
       resources:
         limits:
           cpus: "0.05"
+          memory: 512M
+
+  # === Sisa stack ===
+  #
+  # Dibatasi juga, bukan karena ikut diukur, melainkan supaya SELURUH container
+  # punya batas. Kalau sebagian saja yang dibatasi, pencatat kondisi menandai
+  # run sebagai "mixed" — dan run campuran memang tidak sebanding dengan apa pun.
+
+  app-service:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 2G
+
+  notifikasi:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: 512M
+
+  loadbalancer:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
           memory: 512M
