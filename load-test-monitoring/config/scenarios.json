@@ -3,6 +3,8 @@
     "topicPattern": "screenhouse/{screenhouseId}/sink/{sinkCode}/sensor",
     "cooldownSec": 60,
     "cooldownPollSec": 5,
+    "cooldownStallSec": 30,
+    "resetBeforeRun": true,
     "preDrainMaxSec": 60,
     "directPreflightMaxSec": 180,
     "directPreflightIdleSec": 15,
@@ -13,43 +15,61 @@
   "scenarios": [
     {
       "id": "S1",
-      "name": "50 Active Sensors",
-      "description": "50 active sensors, 1 message/second, 5 minutes",
-      "sensors": 50,
+      "name": "10 Active Sensors",
+      "description": "10 sensor node aktif (1 sensor = 1 sink node), 1 pesan/detik, 5 menit",
+      "sensors": 10,
       "intervalSec": 1,
       "durationSec": 300
     },
     {
       "id": "S2",
-      "name": "100 Active Sensors",
-      "description": "100 active sensors, 1 message/second, 5 minutes",
-      "sensors": 100,
+      "name": "25 Active Sensors",
+      "description": "25 sensor node aktif (1 sensor = 1 sink node), 1 pesan/detik, 5 menit",
+      "sensors": 25,
       "intervalSec": 1,
       "durationSec": 300
     },
     {
       "id": "S3",
-      "name": "150 Active Sensors",
-      "description": "150 active sensors, 1 message/second, 5 minutes",
-      "sensors": 150,
+      "name": "50 Active Sensors",
+      "description": "50 sensor node aktif (1 sensor = 1 sink node), 1 pesan/detik, 5 menit",
+      "sensors": 50,
       "intervalSec": 1,
       "durationSec": 300
     },
     {
       "id": "S4",
-      "name": "200 Active Sensors",
-      "description": "200 active sensors, 1 message/second, 5 minutes",
-      "sensors": 200,
+      "name": "75 Active Sensors",
+      "description": "75 sensor node aktif (1 sensor = 1 sink node), 1 pesan/detik, 5 menit",
+      "sensors": 75,
       "intervalSec": 1,
       "durationSec": 300
     },
     {
       "id": "S5",
-      "name": "250 Active Sensors",
-      "description": "250 active sensors, 1 message/second, 5 minutes",
-      "sensors": 250,
+      "name": "100 Active Sensors",
+      "description": "100 sensor node aktif (1 sensor = 1 sink node), 1 pesan/detik, 5 menit",
+      "sensors": 100,
       "intervalSec": 1,
       "durationSec": 300
+    },
+    {
+      "id": "S6",
+      "name": "250 Active Sensors",
+      "description": "250 sensor node aktif (1 sensor = 1 sink node), 1 pesan/detik, 5 menit",
+      "sensors": 250,
+      "intervalSec": 1,
+      "durationSec": 300,
+      "cooldownSec": 900
+    },
+    {
+      "id": "S7",
+      "name": "400 Active Sensors",
+      "description": "400 sensor node aktif (1 sensor = 1 sink node), 1 pesan/detik, 5 menit",
+      "sensors": 400,
+      "intervalSec": 1,
+      "durationSec": 300,
+      "cooldownSec": 1500
     }
   ]
 }

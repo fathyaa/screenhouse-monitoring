@@ -42,14 +42,22 @@ function containerLimits() {
       "inspect",
       name,
       "--format",
-      "{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}|{{index .Config.Labels \"com.docker.compose.service\"}}",
+      "{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}|{{.HostConfig.CpusetCpus}}|{{index .Config.Labels \"com.docker.compose.service\"}}",
     ]);
     if (!inspected) continue;
-    const [nanoCpus, memory, service] = inspected.split("|");
+    const [nanoCpus, memory, cpuset, service] = inspected.split("|");
+
+    // Dua cara membatasi CPU, dan keduanya harus dikenali. `cpus:` memberi
+    // plafon waktu CPU per container; `cpuset:` memaku container ke core
+    // tertentu sehingga beberapa container bisa BERBAGI satu core secara
+    // dinamis. Model kedua yang dipakai untuk meniru worker node — kalau hanya
+    // NanoCpus yang diperiksa, seluruh stack akan terbaca "unlimited" padahal
+    // justru sedang dibatasi paling ketat.
     limits[name] = {
       service: service || null,
       // 0 berarti tidak dibatasi — dibedakan dari "tidak diketahui" (null).
       cpus: Number(nanoCpus) > 0 ? Number(nanoCpus) / 1e9 : 0,
+      cpuset: cpuset || null,
       memoryMb: Number(memory) > 0 ? Math.round(Number(memory) / 1024 / 1024) : 0,
     };
   }
@@ -86,7 +94,7 @@ export function captureEnvironment({ ingestMode, topology = null } = {}) {
   // mana pun dan harus diulang — jadi keadaannya wajib terlihat, bukan
   // dibulatkan ke salah satu profil.
   const values = Object.values(limits ?? {});
-  const limitedCount = values.filter((l) => l.cpus > 0).length;
+  const limitedCount = values.filter((l) => l.cpus > 0 || l.cpuset).length;
   const resourceProfile =
     limits == null
       ? "unknown"

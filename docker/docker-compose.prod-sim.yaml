@@ -7,12 +7,38 @@
 #
 # Sumber angka: spesifikasi instance OCI, semua VM.Standard.A1.Flex (ARM/Ampere):
 #
-#   Database Aplikasi    1 OCPU / 8 GB   postgres-app berbagi instance
+#   Database Aplikasi    1 OCPU / 8 GB   postgres-app + app-service
 #   Database IoT         1 OCPU / 4 GB   postgres-monitoring sendirian
 #   MQTT                 1 OCPU / 4 GB   mosquitto
-#   Worker node OKE      1 OCPU / 8 GB   seluruh role monitoring-service
+#   Broker pesan         1 OCPU / 4 GB   rabbitmq
+#   Worker node OKE      1 OCPU / 8 GB   SELURUH role monitoring-service
 #
-# CATATAN — tiga hal yang TIDAK ditiru di sini, sengaja:
+# === KENAPA cpuset, BUKAN batas cpus per container ===
+#
+# Versi pertama file ini membagi anggaran 1 OCPU worker node jadi tujuh plafon
+# terpisah (persistence 0,25, processing 0,25, dst). Itu SALAH, dan uji beban
+# langsung membuktikannya: S6 pada arsitektur baru cuma mencapai 23,4 pesan/detik
+# dengan delivery 37,8%, sementara arsitektur lama — yang prosesnya tunggal dan
+# mendapat `cpus: "1"` penuh — mencapai 230/detik.
+#
+# Yang terukur di situ bukan arsitektur, melainkan plafon buatan: peran yang jadi
+# leher botol (persistence) tidak boleh melewati 25% CPU sekalipun enam peran
+# lain sedang menganggur. Worker node sungguhan tidak bekerja begitu — tujuh pod
+# di satu node berbagi core yang sama, dan penjadwal kernel memberikan waktu ke
+# yang sedang sibuk.
+#
+# `cpuset` memodelkan itu dengan benar: semua role monitoring dipatok ke core 0
+# dan berbagi secara dinamis. Totalnya tetap tepat 1 OCPU — sebanding dengan
+# `cpus: "1"` yang dipegang monitoring-service tunggal di arsitektur lama —
+# tanpa memaksakan pembagian internal yang tidak ada padanannya di produksi.
+#
+# Efek sampingnya juga benar: `--scale persistence=4` TIDAK lagi menambah
+# anggaran. Empat replica tetap berbagi core 0, persis seperti menambah pod di
+# node yang sama. Sweep replica yang ingin menunjukkan skala horizontal karena
+# itu harus dijalankan TANPA override ini (profil `unlimited`) dan dilaporkan
+# terpisah sebagai pengujian mekanisme.
+#
+# CATATAN — dua hal yang TIDAK ditiru di sini, sengaja:
 #
 # 1. Versi image dibiarkan sama dengan dev (postgres:16). Produksi memakai
 #    postgres:15-alpine, tapi direktori data PostgreSQL terikat versi mayor —
@@ -24,127 +50,113 @@
 #    IPC M1 Pro jauh lebih tinggi. Jadi hasil di sini OPTIMISTIS — batas atas,
 #    bukan prediksi kapasitas OCI.
 #
-# 3. Anggaran 1 OCPU worker node dibagi manual ke tujuh role di bawah, dan
-#    jumlahnya tepat 1,00 CPU. Pembagiannya tebakan yang harus diperiksa ulang
-#    begitu ada data: porsi terbesar ke processing & persistence karena di
-#    situlah resolusi node dan INSERT terjadi.
-#
-#    PENTING UNTUK SWEEP REPLICA: batas ini berlaku PER CONTAINER, jadi
-#    `--scale persistence=4` memberi 4 × 0,25 = 1,0 CPU untuk persistence saja
-#    dan total stack menjadi 1,75 CPU — melebihi anggaran worker node yang
-#    sedang ditiru. Karena itu sweep replica TIDAK boleh dijalankan dengan
-#    override ini kalau hasilnya mau disebut "pada anggaran produksi". Jalankan
-#    sweep tanpa override (profil `unlimited`) dan laporkan terpisah sebagai
-#    pengujian mekanisme, bukan pengujian kapasitas produksi.
+# VM Docker punya 8 core; core 6–7 sengaja dibiarkan bebas untuk simulator MQTT
+# dan proses host, supaya beban pengukur tidak berebut dengan yang diukur.
 
 services:
 
-  # === Database Aplikasi: 1 OCPU / 8 GB ===
-  postgres-app:
-    deploy:
-      resources:
-        limits:
-          cpus: "1"
-          memory: 8G
-
-  # === Database IoT: 1 OCPU / 4 GB ===
-  postgres-monitoring:
-    deploy:
-      resources:
-        limits:
-          cpus: "1"
-          memory: 4G
-
-  # === MQTT: 1 OCPU / 4 GB ===
-  mosquitto:
-    deploy:
-      resources:
-        limits:
-          cpus: "1"
-          memory: 4G
-
-  # === Broker pesan: menempati anggaran yang dulu dipakai Redis + RabbitMQ ===
-  rabbitmq:
-    deploy:
-      resources:
-        limits:
-          cpus: "1"
-          memory: 4G
-
-  # === Worker node OKE: 1 OCPU / 8 GB, dibagi ke seluruh role ===
+  # === Worker node OKE: 1 OCPU / 8 GB, dibagi dinamis ke SELURUH role ===
+  # Semua dipatok ke core 0. Penjadwal kernel yang membagi, bukan file ini.
 
   collector:
+    cpuset: "0"
     deploy:
       resources:
         limits:
-          cpus: "0.15"
           memory: 1G
 
   processing:
+    cpuset: "0"
     deploy:
       resources:
         limits:
-          cpus: "0.25"
-          memory: 1536M
+          memory: 2G
 
   persistence:
+    cpuset: "0"
     deploy:
       resources:
         limits:
-          cpus: "0.25"
-          memory: 1536M
+          memory: 2G
 
   alert:
+    cpuset: "0"
     deploy:
       resources:
         limits:
-          cpus: "0.15"
           memory: 1G
 
   scheduler:
+    cpuset: "0"
     deploy:
       resources:
         limits:
-          cpus: "0.05"
           memory: 512M
 
   realtime:
+    cpuset: "0"
     deploy:
       resources:
         limits:
-          cpus: "0.1"
           memory: 1G
 
   monitoring-api:
+    cpuset: "0"
     deploy:
       resources:
         limits:
-          cpus: "0.05"
           memory: 512M
 
-  # === Sisa stack ===
-  #
-  # Dibatasi juga, bukan karena ikut diukur, melainkan supaya SELURUH container
-  # punya batas. Kalau sebagian saja yang dibatasi, pencatat kondisi menandai
-  # run sebagai "mixed" — dan run campuran memang tidak sebanding dengan apa pun.
-
-  app-service:
+  # === Database IoT: 1 OCPU / 4 GB ===
+  postgres-monitoring:
+    cpuset: "1"
     deploy:
       resources:
         limits:
-          cpus: "0.5"
+          memory: 4G
+
+  # === Database Aplikasi: 1 OCPU / 8 GB, dibagi postgres-app + app-service ===
+  postgres-app:
+    cpuset: "2"
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+
+  app-service:
+    cpuset: "2"
+    deploy:
+      resources:
+        limits:
           memory: 2G
 
   notifikasi:
+    cpuset: "2"
     deploy:
       resources:
         limits:
-          cpus: "0.1"
           memory: 512M
 
-  loadbalancer:
+  # === MQTT: 1 OCPU / 4 GB ===
+  mosquitto:
+    cpuset: "3"
     deploy:
       resources:
         limits:
-          cpus: "0.25"
+          memory: 4G
+
+  # === Broker pesan: 1 OCPU / 4 GB ===
+  rabbitmq:
+    cpuset: "4"
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+  # === Load balancer: menumpang core 5 ===
+  loadbalancer:
+    cpuset: "5"
+    deploy:
+      resources:
+        limits:
           memory: 512M

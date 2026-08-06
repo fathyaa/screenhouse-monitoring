@@ -44,17 +44,18 @@ else
   git -C "$WORKTREE" pull --ff-only 2>/dev/null || true
 fi
 
-# 3. Naikkan stack lama dengan batas resource yang SAMA.
-#    prod-sim milik main hanya membatasi monitoring-service, redis, dan kedua
-#    Postgres — profilnya akan terbaca "mixed" oleh pencatat kondisi. Itu
-#    memang benar dan harus terlihat: anggaran per-role di arsitektur baru
-#    tidak punya padanan persis di arsitektur lama, dan laporan wajib
-#    menyebutkan perbedaan itu alih-alih menyamarkannya.
-echo "-> membangun & menaikkan stack arsitektur lama (prod-sim)"
+# 3. Naikkan stack lama dengan alokasi core yang IDENTIK dengan arsitektur baru.
+#    Override ketiga memaku tiap service ke core yang sama persis seperti
+#    prod-sim di branch redesign — tanpa itu, arsitektur lama memakai `cpus: 1`
+#    yang boleh berpindah core sementara yang baru terkurung di core 0, dan
+#    selisih mekanisme itu ikut terukur sebagai selisih arsitektur.
+CPUSET_OVERRIDE="${HARNESS}/config/compose-arsitektur-lama-cpuset.yaml"
+echo "-> membangun & menaikkan stack arsitektur lama (prod-sim + cpuset selaras)"
 (cd "${WORKTREE}/docker" && docker compose \
   -f docker-compose.yaml \
   -f docker-compose.prod-sim.yaml \
   -f docker-compose.rabbitmq.yaml \
+  -f "$CPUSET_OVERRIDE" \
   up -d --build --remove-orphans)
 
 echo "-> menunggu backend siap"

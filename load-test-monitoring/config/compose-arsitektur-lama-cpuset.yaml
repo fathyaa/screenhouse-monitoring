@@ -1,0 +1,52 @@
+# Override tambahan untuk seri uji beban ARSITEKTUR LAMA (branch main).
+#
+# Dipakai bertumpuk di atas docker-compose.yaml + docker-compose.prod-sim.yaml
+# milik main; lihat scripts/jalankan-seri-arsitektur-lama.sh.
+#
+# KENAPA PERLU
+#
+# prod-sim di main membatasi monitoring-service dengan `cpus: "1"` — plafon waktu
+# CPU, bebas berpindah core. prod-sim di branch redesign memakai `cpuset: "0"` —
+# semua role monitoring dipatok berbagi satu core.
+#
+# Untuk beban satu proses keduanya hampir setara, tapi "hampir" tidak cukup
+# ketika seluruh kesimpulan skripsi bergantung pada perbandingan ini: `cpus: 1`
+# boleh berpindah-pindah core dan menikmati cache yang masih hangat di beberapa
+# core sekaligus, sedangkan `cpuset: 0` terkurung di satu core. Menyamakan
+# mekanismenya menghapus satu variabel pengganggu yang tidak perlu ada.
+#
+# Alokasi core dibuat identik dengan prod-sim arsitektur baru:
+#   core 0  seluruh proses pipeline monitoring
+#   core 1  postgres-monitoring
+#   core 2  postgres-app + app-service
+#   core 3  mosquitto
+#   core 4  rabbitmq
+#   core 5  frontend
+#   core 6-7 dibiarkan bebas untuk simulator & proses host
+
+services:
+  monitoring-service:
+    cpuset: "0"
+
+  postgres-monitoring:
+    cpuset: "1"
+
+  postgres-app:
+    cpuset: "2"
+
+  app-service:
+    cpuset: "2"
+
+  mosquitto:
+    cpuset: "3"
+
+  rabbitmq:
+    cpuset: "4"
+
+  # Arsitektur lama masih memakai Redis sebagai message bus. Ia menumpang core
+  # broker pesan, sepadan dengan RabbitMQ di arsitektur baru.
+  redis:
+    cpuset: "4"
+
+  frontend:
+    cpuset: "5"
