@@ -150,9 +150,7 @@ Dua laporan, jangan tertukar:
 - `report-compare.html` — dua mode ingest dalam satu arsitektur, satu run per skenario
 - `report-arsitektur.html` — lintas arsitektur (`direct`, `rabbitmq`, `listener@N`), beberapa run per konfigurasi dengan median + rentang, dan **dipisah per profil resource** supaya angka 1 OCPU tidak pernah sekolom dengan angka tanpa batas
 
-**Efek posisi dalam satu rangkaian run.** Run yang dijalankan berdempetan melambat secara berurutan — pada S11 (2.400 pesan/detik) throughput turun 2.057 → 1.874 → 1.716 per detik dari ulangan 1 ke 3, lalu **kembali ke ~2.040 begitu kelompok baru dimulai**. Penyebabnya Postgres tidak ikut di-restart antar run (ia bukan bagian pipeline), jadi ia menumpuk pekerjaan checkpoint/vacuum; jeda lebih panjang antar kelompok memberinya waktu mengejar.
-
-Konsekuensinya: **jangan membandingkan median antar kelompok** yang dijalankan berurutan — bandingkan run pada posisi yang sama (ulangan 1 lawan ulangan 1). Kalau butuh median yang sah, sisipkan jeda tetap atau `VACUUM` antar run supaya tiap run mulai dari keadaan database yang setara.
+**Varians tinggi pada beban jenuh, tapi tidak ada drift.** Pada S11 (2.400 pesan/detik) tujuh ulangan satu replica tersebar 1.715–2.177/s — rentang 27%. Sempat terlihat seperti "efek posisi" (run berdempetan makin lambat), tapi run kontrol di akhir sesi justru menaik (1.814 → 1.965 → 2.177) dengan median lebih tinggi daripada kelompok di awal. Jadi itu derau, bukan tren, dan mesin tidak melambat sepanjang pengujian. **Selalu jalankan run kontrol di akhir** saat kelompok diuji berurutan — tanpa itu, kelompok terakhir selalu bisa disanggah.
 
 **Leher botol pada arsitektur listener adalah PostgreSQL, bukan aplikasi.** Dari 54 sampel `docker stats` selama fase kerja pada S11 (2.400 pesan/detik, 4 replica):
 
@@ -167,7 +165,7 @@ Empat replica persistence bersama hanya memakai 76% — sekitar 19% per replica.
 
 **Jangan menyimpulkan mekanisme dari satu sampel `docker stats`.** Snapshot yang diambil di menit pertama run menunjukkan Postgres cuma 79% dan sempat membalik kesimpulan; sistem baru masuk keadaan tunak setelah backlog terbentuk. Rekam berkala, lalu ambil median.
 
-**Menambah replica di luar titik jenuh database MERUGIKAN**, bukan sekadar tidak menolong. Pada posisi ulangan yang sama: `@1` 2.057/s, `@2` 2.038/s, `@4` 1.436/s — empat replica 30% lebih lambat dengan p95 lima kali lipat. Saran kapasitas yang benar adalah menambah OCPU database, bukan menambah pod.
+**Menambah replica di luar titik jenuh database MERUGIKAN.** Median: `@1` 1.938/s (n=7), `@2` 1.714/s (n=3), `@4` 1.436/s (n=3). Hanya selisih `@4` yang tegas — rentangnya (1.400–1.612) tidak beririsan dengan `@1` (1.715–2.177). Rentang `@2` masih tumpang tindih, jadi jangan mengklaim dua replica lebih buruk. Saran kapasitas yang benar adalah menambah OCPU database, bukan menambah pod.
 
 Metrik yang selamat dari perubahan arsitektur adalah `databaseDeliveryRatePct` (`dbRows/sent`) — ia menghitung baris database langsung, bukan counter internal. Sisanya (`processRatePerSec`, `latencyP95Ms`, `rssMbMax`) bergantung pada agregasi `metrics.report`; kalau nol, curigai role `api` tidak menerima laporan, bukan pipeline yang mati.
 
