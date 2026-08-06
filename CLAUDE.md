@@ -150,6 +150,12 @@ Dua laporan, jangan tertukar:
 - `report-compare.html` — dua mode ingest dalam satu arsitektur, satu run per skenario
 - `report-arsitektur.html` — lintas arsitektur (`direct`, `rabbitmq`, `listener@N`), beberapa run per konfigurasi dengan median + rentang, dan **dipisah per profil resource** supaya angka 1 OCPU tidak pernah sekolom dengan angka tanpa batas
 
+**Efek posisi dalam satu rangkaian run.** Run yang dijalankan berdempetan melambat secara berurutan — pada S11 (2.400 pesan/detik) throughput turun 2.057 → 1.874 → 1.716 per detik dari ulangan 1 ke 3, lalu **kembali ke ~2.040 begitu kelompok baru dimulai**. Penyebabnya Postgres tidak ikut di-restart antar run (ia bukan bagian pipeline), jadi ia menumpuk pekerjaan checkpoint/vacuum; jeda lebih panjang antar kelompok memberinya waktu mengejar.
+
+Konsekuensinya: **jangan membandingkan median antar kelompok** yang dijalankan berurutan — bandingkan run pada posisi yang sama (ulangan 1 lawan ulangan 1). Kalau butuh median yang sah, sisipkan jeda tetap atau `VACUUM` antar run supaya tiap run mulai dari keadaan database yang setara.
+
+**Leher botol pada arsitektur listener adalah PostgreSQL, bukan aplikasi.** Terukur langsung lewat `docker stats` saat beban puncak: postgres-monitoring 199% CPU, rabbitmq 162%, sementara tiap replica persistence hanya 37%. Karena itu `--scale persistence` tidak menaikkan throughput — konsumennya sudah menganggur menunggu database. Saran kapasitas yang benar adalah menambah OCPU database, bukan menambah pod.
+
 Metrik yang selamat dari perubahan arsitektur adalah `databaseDeliveryRatePct` (`dbRows/sent`) — ia menghitung baris database langsung, bukan counter internal. Sisanya (`processRatePerSec`, `latencyP95Ms`, `rssMbMax`) bergantung pada agregasi `metrics.report`; kalau nol, curigai role `api` tidak menerima laporan, bukan pipeline yang mati.
 
 ## PWA / Service Worker (dev)
