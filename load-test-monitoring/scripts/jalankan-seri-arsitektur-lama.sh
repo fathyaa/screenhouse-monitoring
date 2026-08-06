@@ -20,6 +20,9 @@
 
 set -euo pipefail
 
+# MODE=direct (bawaan) atau MODE=rabbitmq
+MODE="${MODE:-direct}"
+
 REPEATS="${1:?jumlah pengulangan}"
 shift
 SCENARIOS=("$@")
@@ -45,18 +48,21 @@ else
 fi
 
 # 3. Naikkan stack lama dengan alokasi core yang IDENTIK dengan arsitektur baru.
-#    Override ketiga memaku tiap service ke core yang sama persis seperti
-#    prod-sim di branch redesign — tanpa itu, arsitektur lama memakai `cpus: 1`
-#    yang boleh berpindah core sementara yang baru terkurung di core 0, dan
-#    selisih mekanisme itu ikut terukur sebagai selisih arsitektur.
+#
+#    PENTING: `main` tidak menyimpan docker-compose.prod-sim.yaml sama sekali —
+#    file itu dulu hanya berkas lokal tak terlacak. Jadi pembatasnya disediakan
+#    dari sini, dibuat sebangun dengan prod-sim arsitektur baru supaya
+#    satu-satunya perbedaan antar seri adalah arsitekturnya.
 CPUSET_OVERRIDE="${HARNESS}/config/compose-arsitektur-lama-cpuset.yaml"
-echo "-> membangun & menaikkan stack arsitektur lama (prod-sim + cpuset selaras)"
-(cd "${WORKTREE}/docker" && docker compose \
-  -f docker-compose.yaml \
-  -f docker-compose.prod-sim.yaml \
-  -f docker-compose.rabbitmq.yaml \
-  -f "$CPUSET_OVERRIDE" \
-  up -d --build --remove-orphans)
+MODE_OVERRIDE="${HARNESS}/config/compose-arsitektur-lama-mode.yaml"
+
+COMPOSE_ARGS=(-f docker-compose.yaml -f "$CPUSET_OVERRIDE")
+if [ "$MODE" = "rabbitmq" ]; then
+  COMPOSE_ARGS+=(-f "$MODE_OVERRIDE")
+fi
+
+echo "-> membangun & menaikkan stack arsitektur lama (mode ${MODE})"
+(cd "${WORKTREE}/docker" && docker compose "${COMPOSE_ARGS[@]}" up -d --build --remove-orphans)
 
 echo "-> menunggu backend siap"
 for _ in $(seq 1 60); do

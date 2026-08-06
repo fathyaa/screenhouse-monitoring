@@ -1,0 +1,20 @@
+# Pemilih mode ingest untuk seri uji beban ARSITEKTUR LAMA.
+#
+# docker-compose.yaml di main menyetel USE_RABBITMQ="false" (mode direct).
+# File ini menyalakannya, dipakai untuk seri mode rabbitmq:
+#
+#   docker compose -f docker-compose.yaml \
+#                  -f <cpuset.yaml> \
+#                  -f <file ini> up -d
+#
+# Untuk seri mode direct, cukup JANGAN sertakan file ini.
+#
+# Nama antrean sengaja dibiarkan default `sensor-ingest` (bawaan kode lama).
+# Harness sudah menghitung antrean lama maupun baru sekaligus dan mengabaikan
+# yang tidak ada, jadi tidak perlu disamakan — dan menyamakannya justru berisiko
+# membuat dua arsitektur berebut antrean yang sama kalau keduanya sempat hidup.
+
+services:
+  monitoring-service:
+    environment:
+      USE_RABBITMQ: "true"

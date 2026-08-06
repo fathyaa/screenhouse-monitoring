@@ -1,52 +1,93 @@
-# Override tambahan untuk seri uji beban ARSITEKTUR LAMA (branch main).
+# Batas resource untuk seri uji beban ARSITEKTUR LAMA (branch main).
 #
-# Dipakai bertumpuk di atas docker-compose.yaml + docker-compose.prod-sim.yaml
-# milik main; lihat scripts/jalankan-seri-arsitektur-lama.sh.
+# Dipakai bertumpuk di atas docker-compose.yaml milik main:
+#   docker compose -f docker-compose.yaml -f <file ini> up -d
+# Lihat scripts/jalankan-seri-arsitektur-lama.sh.
 #
-# KENAPA PERLU
+# KENAPA FILE INI ADA DI SINI, BUKAN DI main
 #
-# prod-sim di main membatasi monitoring-service dengan `cpus: "1"` — plafon waktu
-# CPU, bebas berpindah core. prod-sim di branch redesign memakai `cpuset: "0"` —
-# semua role monitoring dipatok berbagi satu core.
+# `main` sama sekali tidak menyimpan docker-compose.prod-sim.yaml — file itu
+# dulu hanya ada sebagai berkas lokal tak terlacak. Konsekuensinya konfigurasi
+# resource run 4 Agustus 2026 memang tidak bisa direkonstruksi dari repositori,
+# dan itulah alasan seluruh seri lama harus dijalankan ulang alih-alih dikutip.
 #
-# Untuk beban satu proses keduanya hampir setara, tapi "hampir" tidak cukup
-# ketika seluruh kesimpulan skripsi bergantung pada perbandingan ini: `cpus: 1`
-# boleh berpindah-pindah core dan menikmati cache yang masih hangat di beberapa
-# core sekaligus, sedangkan `cpuset: 0` terkurung di satu core. Menyamakan
-# mekanismenya menghapus satu variabel pengganggu yang tidak perlu ada.
+# Karena file pembatas untuk arsitektur lama harus dibuat baru, ia dibuat
+# SEBANGUN dengan prod-sim arsitektur baru — alokasi core dan anggaran memori
+# identik — supaya satu-satunya perbedaan antar seri adalah arsitekturnya.
 #
-# Alokasi core dibuat identik dengan prod-sim arsitektur baru:
-#   core 0  seluruh proses pipeline monitoring
-#   core 1  postgres-monitoring
-#   core 2  postgres-app + app-service
-#   core 3  mosquitto
-#   core 4  rabbitmq
-#   core 5  frontend
+# ALOKASI (identik dengan docker/docker-compose.prod-sim.yaml di branch redesign)
+#
+#   core 0  seluruh proses pipeline monitoring          8 GB
+#           lama: monitoring-service (satu proses)
+#           baru: tujuh role berbagi core yang sama
+#   core 1  postgres-monitoring                          4 GB
+#   core 2  postgres-app + app-service                   6 GB + 2 GB
+#   core 3  mosquitto                                    4 GB
+#   core 4  broker pesan (rabbitmq, dan redis di lama)   4 GB + 2 GB
+#   core 5  frontend                                   512 MB
 #   core 6-7 dibiarkan bebas untuk simulator & proses host
+#
+# `cpus:` sengaja TIDAK dipakai. Plafon waktu CPU per container membebani
+# arsitektur baru secara tidak adil: tujuh proses masing-masing berplafon kecil
+# tidak bisa saling meminjam kapasitas, sedangkan satu proses berplafon 1 CPU
+# bisa memakai seluruhnya. cpuset menyamakan mekanismenya — keduanya mendapat
+# tepat satu core dan penjadwal kernel yang membagi di dalamnya.
 
 services:
   monitoring-service:
     cpuset: "0"
+    deploy:
+      resources:
+        limits:
+          memory: 8G
 
   postgres-monitoring:
     cpuset: "1"
+    deploy:
+      resources:
+        limits:
+          memory: 4G
 
   postgres-app:
     cpuset: "2"
+    deploy:
+      resources:
+        limits:
+          memory: 6G
 
   app-service:
     cpuset: "2"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
 
   mosquitto:
     cpuset: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 4G
 
   rabbitmq:
     cpuset: "4"
+    deploy:
+      resources:
+        limits:
+          memory: 4G
 
-  # Arsitektur lama masih memakai Redis sebagai message bus. Ia menumpang core
-  # broker pesan, sepadan dengan RabbitMQ di arsitektur baru.
+  # Arsitektur lama memakai Redis sebagai message bus. Ia menumpang core broker,
+  # sepadan dengan RabbitMQ di arsitektur baru.
   redis:
     cpuset: "4"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
 
   frontend:
     cpuset: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
