@@ -212,8 +212,15 @@ export async function restartMonitoringService({ env = process.env } = {}) {
 export async function resetEnvironment({ env = process.env, purgeAll = false } = {}) {
   const queue = await purgeLeftoverQueue({ env });
   const restart = await restartMonitoringService({ env });
+
+  // Pengosongan KEDUA, setelah restart. Pesan yang belum di-ack saat consumer
+  // mati otomatis kembali jadi ready — jadi pengosongan sebelum restart saja
+  // tidak cukup: begitu proses hidup lagi ia menemukan pekerjaan yang sama dan
+  // mulai menulis alert baru tepat ketika tabel sedang dibersihkan.
+  const queueAfterRestart = await purgeLeftoverQueue({ env });
+
   const purge = await purgeMeasurementTables({ env, purgeAll });
-  return { queue, restart, purge };
+  return { queue, queueAfterRestart, restart, purge };
 }
 
 async function purgeLeftoverQueue({ env }) {

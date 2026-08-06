@@ -78,12 +78,32 @@ export async function fetchQueueDepth(env) {
   return { messages, messagesReady, messagesUnacked, perQueue };
 }
 
+/**
+ * Antrean yang harus DIKOSONGKAN sebelum run, lebih luas daripada yang dihitung
+ * untuk deteksi drain.
+ *
+ * `q.alert` wajib ada di sini walau tidak ikut dihitung: listener alert
+ * menyisipkan baris ke tabel `alerts` yang menunjuk `sensor_data`. Kalau
+ * backlog-nya dibiarkan, ia akan terus menulis alert baru tepat ketika reset
+ * sedang menghapus sensor_data — dan DELETE gagal dengan
+ * alerts_sensor_data_id_fkey. Persis itu yang menggagalkan S7 pada 6 Agustus.
+ *
+ * `q.config` sengaja TIDAK dikosongkan: isinya perubahan ambang & registry yang
+ * merupakan state sungguhan, bukan sisa pengukuran.
+ */
+function queueNamesForPurge(env) {
+  if (env.RABBITMQ_PURGE_QUEUES) {
+    return env.RABBITMQ_PURGE_QUEUES.split(",").map((s) => s.trim()).filter(Boolean);
+  }
+  return [...new Set([...queueNames(env), "q.alert", "q.notif"])];
+}
+
 export async function purgeQueue(env) {
   const { url, auth } = mgmtConfig(env);
   const vhost = encodeURIComponent("/");
   let purged = 0;
 
-  for (const queue of queueNames(env)) {
+  for (const queue of queueNamesForPurge(env)) {
     const name = encodeURIComponent(queue);
     const res = await fetch(`${url}/api/queues/${vhost}/${name}/contents`, {
       method: "DELETE",
