@@ -276,20 +276,37 @@ export function PushNotificationProvider({ children }) {
     }
   }, []);
 
+  /**
+   * Satu-satunya sumber kebenaran untuk posisi sakelar di UI.
+   *
+   * `muted` saja TIDAK cukup: ia default `false` di database, jadi petani yang
+   * belum pernah mengizinkan notifikasi akan melihat sakelar menyala padahal
+   * tidak ada subscription push sama sekali — dan klik pertamanya justru masuk
+   * ke cabang "matikan". Sakelar baru boleh ON kalau notifikasi benar-benar
+   * akan sampai.
+   *
+   * Pengecualian `!supported`: di browser tanpa Push API, bunyi + toast in-app
+   * sudah merupakan pengiriman penuh yang bisa diberikan aplikasi ini, jadi
+   * `muted` sendirian sudah menggambarkan keadaan dengan jujur.
+   */
+  const active = !muted && (enabled || !supported);
+
   const toggle = useCallback(async () => {
     if (loading) return;
 
-    if (muted) {
+    if (!active) {
       // Menyalakan notifikasi — aktifkan flag akun dulu, lalu coba daftar push di device ini.
+      // Di browser tanpa Push API, `enable()` dilewati supaya petani tidak dapat
+      // toast error padahal notifikasi in-app-nya berhasil dinyalakan.
       await setNotificationsMuted(false);
-      if (!enabled) await enable();
+      if (supported && !enabled) await enable();
     } else {
       // Mematikan notifikasi — flag akun mati duluan (langsung membisukan suara/toast
       // di semua device untuk akun ini), baru bereskan subscription push device ini.
       await setNotificationsMuted(true);
       if (enabled) await disable();
     }
-  }, [loading, muted, enabled, enable, disable, setNotificationsMuted]);
+  }, [loading, active, supported, enabled, enable, disable, setNotificationsMuted]);
 
   return (
     <PushNotificationContext.Provider
@@ -297,6 +314,7 @@ export function PushNotificationProvider({ children }) {
         permission,
         enabled,
         muted,
+        active,
         loading,
         supported,
         supportReason,
@@ -315,8 +333,10 @@ const defaultPushContext = {
   permission: "default",
   enabled: false,
   muted: false,
+  active: false,
   loading: false,
   supported: false,
+  getUnsupportedMessage: () => getPushUnsupportedMessage(null),
   enable: async () => ({ ok: false }),
   disable: async () => ({ ok: false }),
   toggle: async () => {},

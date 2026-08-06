@@ -60,8 +60,11 @@ function Sidebar({ isOpen, onClose, role = "operator", user: userProp }) {
   });
   const user = profileUser ?? userProp;
   const { unreadCount } = useAlerts();
-  const { muted: notifMuted, loading: pushLoading, toggle: togglePush, supported: pushSupported, getUnsupportedMessage } = usePushNotifications();
-  const notifEnabled = !notifMuted;
+  const { muted: notifMuted, active: notifEnabled, loading: pushLoading, toggle: togglePush, supported: pushSupported, getUnsupportedMessage } = usePushNotifications();
+  // Sakelar mati sementara akun tidak dibisukan = device ini belum pernah
+  // diizinkan. Bedanya penting: yang satu perlu dinyalakan lagi, yang satu
+  // perlu izin browser — dan kalimatnya di bawah harus menyebutkan yang mana.
+  const notifNeedsPermission = !notifEnabled && !notifMuted;
   const [pendingApprovals, setPendingApprovals] = useState(0);
 
   const fetchPendingApprovals = useCallback(() => {
@@ -204,7 +207,9 @@ function Sidebar({ isOpen, onClose, role = "operator", user: userProp }) {
                   <div className="text-[10px] text-white/40 mt-0.5 leading-snug">
                     {notifEnabled
                       ? "Aktif — bunyi & peringatan menyala di semua perangkat"
-                      : "Nonaktif — bunyi & peringatan dimatikan di semua perangkat"}
+                      : notifNeedsPermission
+                        ? "Belum aktif di HP ini — ketuk untuk mengizinkan"
+                        : "Nonaktif — bunyi & peringatan dimatikan di semua perangkat"}
                   </div>
                 </div>
                 <button
