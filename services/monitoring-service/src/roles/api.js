@@ -5,6 +5,7 @@ const { connectRabbitMqInBackground } = require("../config/rabbitmq");
 const sensorRoutes = require("../modules/ingest/routes/sensorRoutes");
 const alertRoutes = require("../modules/alerting/routes/alertRoutes");
 const statsRoutes = require("../modules/stats/routes/statsRoutes");
+const { startMetricsAggregator } = require("../shared/metricsAggregator");
 
 /**
  * API — permukaan HTTP monitoring-service.
@@ -19,12 +20,19 @@ async function start() {
   // kegagalan kecil dengan pemadaman total.
   connectRabbitMqInBackground();
 
+  // Kumpulkan counter dari seluruh role. Tanpa ini /stats/ingest hanya
+  // melaporkan proses ini sendiri — yang tidak menyentuh satu pun pesan sensor.
+  startMetricsAggregator();
+
   const app = express();
   app.use(cors());
   app.use(express.json());
 
   app.get("/", (req, res) => {
-    res.json({ service: "monitoring-service", role: "api", ingestMode: "rabbitmq" });
+    // Dibaca harness uji beban untuk menentukan mode pengukuran. "listener"
+    // membedakannya dari "direct" dan "rabbitmq" milik arsitektur lama, supaya
+    // ketiganya bisa dipisahkan di laporan pembanding.
+    res.json({ service: "monitoring-service", role: "api", ingestMode: "listener" });
   });
 
   app.use("/sensor-data", sensorRoutes);

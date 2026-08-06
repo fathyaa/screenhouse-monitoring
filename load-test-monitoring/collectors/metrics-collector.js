@@ -51,6 +51,14 @@ export class MetricsCollector {
   }
 
   async finalize() {
+    // Urutan penting: counter backend dan hitungan DB diambil sesudah cooldown
+    // selesai, supaya keduanya menggambarkan keadaan akhir yang sama.
+    try {
+      await this.backend.captureFinal();
+    } catch (err) {
+      console.warn(`  Peringatan: gagal ambil counter backend final (${err.message})`);
+    }
+
     const dbFinal = await this.database.getFinalCount();
     return {
       backend: this.backend.getSummary(),

@@ -7,6 +7,7 @@ const {
   upsertScreenhouseRegistry,
 } = require("../modules/alerting/alertEngine");
 const { startHealthServer } = require("../shared/healthServer");
+const { startMetricsReporter } = require("../shared/metricsReporter");
 
 /**
  * LISTENER ALERT — evaluasi ambang, histeresis, dan aktuator otomatis.
@@ -42,6 +43,7 @@ async function start() {
     },
   });
 
+  startMetricsReporter("alert");
   startHealthServer("alert", process.env.HEALTH_PORT || 3013);
   console.log("[alert] siap — sensor.persisted → alerts → alert.created");
 }

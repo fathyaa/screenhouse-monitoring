@@ -1,9 +1,6 @@
 const pool = require("../../../config/db");
-const {
-  getIngestMetricsSnapshot,
-  resetIngestMetrics,
-  appendTimeSeriesSample,
-} = require("../../ingest/ingestMetrics");
+const { resetIngestMetrics } = require("../../ingest/ingestMetrics");
+const { aggregateSnapshot, broadcastReset } = require("../../../shared/metricsAggregator");
 const { MIN_STALE_SECONDS } = require("../../../shared/nodeLiveness");
 
 // Sink dianggap online bila ada tray aktif yang masih kirim telemetri
@@ -194,18 +191,59 @@ async function getQueueDepths() {
   return depths;
 }
 
+/**
+ * Bentuk respons SENGAJA identik dengan arsitektur lama (mqttReceived,
+ * mqttProcessed, latency, memory.rssMb, queueDepth, timeSeries) supaya harness
+ * uji beban bisa mengukur kedua arsitektur dengan kode yang sama — syarat mutlak
+ * agar hasilnya bisa dibandingkan.
+ *
+ * Bedanya cuma sumber angkanya: dulu dari state proses ini sendiri, sekarang
+ * dijumlahkan dari laporan seluruh role lewat `metrics.report`.
+ */
 async function getIngestStats(req, res) {
   try {
     const queues = await getQueueDepths();
-    const queueDepth = queues.ingest ?? null;
+    // Antrean yang menahan pekerjaan sebelum baris masuk DB. Kalau salah satu
+    // masih berisi, run belum tuntas — inilah yang dipantau harness saat
+    // menunggu drain.
+    const queueDepth =
+      queues.ingest == null && queues.persist == null
+        ? null
+        : (queues.ingest ?? 0) + (queues.persist ?? 0);
 
-    appendTimeSeriesSample({ queueDepth });
+    const agg = aggregateSnapshot(queueDepth);
+    const elapsedSec = Math.max((Date.now() - agg.startedAt) / 1000, 0.001);
+    const t = agg.totals;
+    const successCount = t.mqttProcessed;
+    // Requeue tidak dihitung error: pesannya masih di antrean dan akan diproses
+    // lagi begitu infrastruktur pulih.
+    const errorCount = t.mqttFailed + t.mqttDeadLettered;
+    const totalHandled = successCount + errorCount;
+
     res.json({
-      ingestMode: "rabbitmq",
+      ingestMode: "listener",
       role: process.env.ROLE || "api",
-      ...getIngestMetricsSnapshot(),
+      runId: agg.runId,
+      uptimeSec: elapsedSec,
+      mqttReceived: t.mqttReceived,
+      mqttProcessed: successCount,
+      mqttEnqueued: t.mqttEnqueued,
+      mqttFailed: t.mqttFailed,
+      mqttNacked: t.mqttDeadLettered,
+      mqttDeadLettered: t.mqttDeadLettered,
+      mqttRequeued: t.mqttRequeued,
+      successRatePct: totalHandled ? (successCount / totalHandled) * 100 : null,
+      errorRatePct: totalHandled ? (errorCount / totalHandled) * 100 : null,
+      receiveRatePerSec: t.mqttReceived / elapsedSec,
+      processRatePerSec: successCount / elapsedSec,
+      latency: agg.latency,
+      timeSeries: agg.timeSeries,
+      memory: { rssMb: agg.rssMb, heapUsedMb: agg.heapUsedMb },
       queueDepth,
       queues,
+      // Khusus arsitektur baru — memungkinkan laporan memecah kontribusi
+      // per role dan mencatat berapa replica yang benar-benar hidup.
+      topology: { instanceCount: agg.instanceCount, roles: agg.roles },
     });
   } catch (err) {
     console.log(err);
@@ -217,6 +255,10 @@ async function resetIngestStats(req, res) {
   try {
     const runId = req.body?.runId ?? req.query?.runId ?? null;
     resetIngestMetrics(runId);
+    // Reset harus sampai ke SEMUA proses, bukan cuma yang melayani request ini.
+    // Kalau tidak, run berikutnya mewarisi counter run sebelumnya dari role
+    // collector/persistence dan delivery rate-nya jadi >100%.
+    await broadcastReset(runId);
     res.json({ ok: true, runId });
   } catch (err) {
     console.log(err);

@@ -25,6 +25,46 @@ export class BackendMetricsCollector {
     return res.json();
   }
 
+  /**
+   * Ambil counter final langsung dari backend, bukan dari sampel polling
+   * terakhir yang bisa basi sampai satu interval penuh. Tanpa ini,
+   * mqttReceived/mqttProcessed selalu tampak lebih kecil dari messagesSent
+   * walaupun tidak ada satu pesan pun yang hilang.
+   *
+   * Sengaja tidak mendorong sampel baru ke this.samples: deret waktu itu dipakai
+   * untuk box plot distribusi selama beban berjalan, dan sampel pasca-run akan
+   * mencemarinya.
+   */
+  async captureFinal({ settleMaxSec = 20, pollMs = 2000 } = {}) {
+    // Di arsitektur listener, counter tiba di role `api` lewat laporan berkala
+    // (default tiap 5 detik), jadi pembacaan tepat setelah beban berhenti selalu
+    // tertinggal satu interval. Tanpa penantian ini, run yang sebenarnya utuh
+    // terbaca 99,5% padahal hitungan database sudah 100%.
+    //
+    // Berhenti begitu angkanya tidak bergerak lagi — bukan tidur selama durasi
+    // tetap — supaya arsitektur lama (counter in-process, langsung final) tidak
+    // ikut membayar penundaan.
+    const start = Date.now();
+    let previous = null;
+    let stableCount = 0;
+
+    while ((Date.now() - start) / 1000 < settleMaxSec) {
+      const snap = await this.fetchOnce();
+      this._last = snap;
+
+      const total = Number(snap.mqttProcessed ?? 0) + Number(snap.mqttReceived ?? 0);
+      if (previous != null && total === previous) {
+        if (++stableCount >= 2) return snap;
+      } else {
+        stableCount = 0;
+      }
+      previous = total;
+      await new Promise((r) => setTimeout(r, pollMs));
+    }
+
+    return this._last ?? (await this.fetchOnce());
+  }
+
   start() {
     this._timer = setInterval(async () => {
       try {
@@ -69,6 +109,11 @@ export class BackendMetricsCollector {
       mqttEnqueued: last?.mqttEnqueued ?? 0,
       mqttFailed: last?.mqttFailed ?? 0,
       mqttNacked: last?.mqttNacked ?? 0,
+      // Dipisah sejak consumer berhenti membuang pesan: dead-letter = gagal
+      // permanen (tersimpan, bisa di-replay), requeue = percobaan ulang saat
+      // infrastruktur down, bukan kegagalan.
+      mqttDeadLettered: last?.mqttDeadLettered ?? last?.mqttNacked ?? 0,
+      mqttRequeued: last?.mqttRequeued ?? 0,
       successRatePct: last?.successRatePct,
       errorRatePct: last?.errorRatePct,
       receiveRatePerSec: last?.receiveRatePerSec,

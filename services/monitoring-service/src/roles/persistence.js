@@ -3,6 +3,7 @@ const { consume } = require("../shared/events/eventBus");
 const { BINDINGS } = require("../shared/events/routingKeys");
 const { saveSensorReading } = require("../modules/ingest/ingestPipeline");
 const { startHealthServer } = require("../shared/healthServer");
+const { startMetricsReporter } = require("../shared/metricsReporter");
 
 /**
  * LISTENER PERSISTENCE — satu-satunya penulis tabel sensor_data.
@@ -26,6 +27,7 @@ async function start() {
     },
   });
 
+  startMetricsReporter("persistence");
   startHealthServer("persistence", process.env.HEALTH_PORT || 3012);
   console.log("[persistence] siap — sensor.raw → sensor_data → sensor.persisted");
 }

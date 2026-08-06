@@ -5,6 +5,7 @@ const connectMQTT = require("../modules/ingest/mqttService");
 const { connectDeviceBridge, publishValveControl } = require("../modules/ingest/deviceBridge");
 const { recordMqttEnqueued, recordMqttFailed } = require("../modules/ingest/ingestMetrics");
 const { startHealthServer } = require("../shared/healthServer");
+const { startMetricsReporter } = require("../shared/metricsReporter");
 
 /**
  * COLLECTOR — satu-satunya pemegang koneksi MQTT.
@@ -60,6 +61,7 @@ async function start() {
     },
   });
 
+  startMetricsReporter("collector");
   startHealthServer("collector", process.env.HEALTH_PORT || 3010);
   console.log("[collector] siap — MQTT → q.ingest, q.device.command → MQTT");
 }

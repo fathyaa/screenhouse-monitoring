@@ -3,6 +3,7 @@ const { consume } = require("../shared/events/eventBus");
 const { processIngestJob } = require("../modules/ingest/ingestPipeline");
 const { recordMqttFailed } = require("../modules/ingest/ingestMetrics");
 const { startHealthServer } = require("../shared/healthServer");
+const { startMetricsReporter } = require("../shared/metricsReporter");
 
 /**
  * PROCESSING LAYER — mengubah frame mentah jadi peristiwa yang bermakna.
@@ -29,6 +30,7 @@ async function start() {
     },
   });
 
+  startMetricsReporter("processing");
   startHealthServer("processing", process.env.HEALTH_PORT || 3011);
   console.log("[processing] siap — q.ingest → sensor.raw");
 }

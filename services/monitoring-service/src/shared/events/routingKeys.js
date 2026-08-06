@@ -26,6 +26,15 @@ const RK = {
   // screenhouse_registry) supaya evaluasi ambang tidak perlu lintas database.
   CONFIG_THRESHOLD: "config.threshold",
   CONFIG_REGISTRY: "config.registry",
+
+  // Telemetri internal untuk uji beban. Tiap proses melaporkan counter-nya
+  // sendiri ke role `api`, yang menjumlahkannya. Tanpa ini, /stats/ingest hanya
+  // melihat proses yang kebetulan melayaninya — dan role api tidak mengonsumsi
+  // satu pun pesan sensor, jadi angkanya akan selalu nol.
+  METRICS_REPORT: "metrics.report",
+  // Perintah reset dari /stats/ingest/reset, disiarkan ke semua proses supaya
+  // satu run pengujian punya titik nol yang sama.
+  METRICS_RESET: "metrics.reset",
 };
 
 const BINDINGS = {

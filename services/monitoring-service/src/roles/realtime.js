@@ -5,6 +5,7 @@ const { connectRabbitMq } = require("../config/rabbitmq");
 const { consume } = require("../shared/events/eventBus");
 const { BINDINGS } = require("../shared/events/routingKeys");
 const { attachSocketServer, dispatchEvent } = require("../modules/realtime/socketServer");
+const { startMetricsReporter } = require("../shared/metricsReporter");
 
 // Umur maksimum peristiwa realtime di antrean. Lewat dari ini, isinya sudah
 // tidak menggambarkan keadaan sekarang.
@@ -44,6 +45,8 @@ async function start() {
       dispatchEvent(io, msg.fields.routingKey, payload);
     },
   });
+
+  startMetricsReporter("realtime");
 
   const port = Number(process.env.PORT || 3002);
   server.listen(port, () => console.log(`[realtime] Socket.IO di :${port} (TTL ${REALTIME_TTL_MS}ms)`));

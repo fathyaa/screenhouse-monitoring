@@ -1,19 +1,49 @@
 /**
  * RabbitMQ Management API helpers — queue depth, purge, wait for drain.
+ *
+ * Menangani DUA topologi sekaligus:
+ *   arsitektur lama  → satu antrean `sensor-ingest`
+ *   arsitektur baru  → `q.ingest` (tugas) + `q.persist` (menunggu INSERT)
+ *
+ * Daftar default memuat keduanya dan antrean yang tidak ada diabaikan (404 →
+ * 0). Itu disengaja: harness yang sama harus bisa mengukur kedua arsitektur
+ * tanpa perubahan konfigurasi, karena begitu konfigurasinya berbeda hasilnya
+ * tidak lagi bisa dibandingkan.
+ *
+ * `q.alert` TIDAK dihitung: alert berjalan di hilir INSERT, jadi antreannya
+ * boleh belum kosong saat seluruh baris sudah mendarat di sensor_data.
  */
 
-export async function fetchQueueDepth(env) {
-  const mgmtUrl = (env.RABBITMQ_MGMT_URL || "http://localhost:15672").replace(/\/$/, "");
-  const user = env.RABBITMQ_USER || "screenhouse";
-  const password = env.RABBITMQ_PASSWORD || "screenhouse";
-  const queue = env.RABBITMQ_QUEUE || "sensor-ingest";
-  const auth = Buffer.from(`${user}:${password}`).toString("base64");
+const DEFAULT_QUEUES = ["sensor-ingest", "q.ingest", "q.persist"];
+
+function mgmtConfig(env) {
+  return {
+    url: (env.RABBITMQ_MGMT_URL || "http://localhost:15672").replace(/\/$/, ""),
+    auth: Buffer.from(
+      `${env.RABBITMQ_USER || "screenhouse"}:${env.RABBITMQ_PASSWORD || "screenhouse"}`
+    ).toString("base64"),
+  };
+}
+
+function queueNames(env) {
+  const raw = env.RABBITMQ_QUEUES || env.RABBITMQ_QUEUE;
+  if (!raw) return DEFAULT_QUEUES;
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** Kedalaman satu antrean; null bila antreannya tidak ada di broker. */
+async function fetchOneQueue(env, queue) {
+  const { url, auth } = mgmtConfig(env);
   const vhost = encodeURIComponent("/");
   const name = encodeURIComponent(queue);
 
-  const res = await fetch(`${mgmtUrl}/api/queues/${vhost}/${name}`, {
+  const res = await fetch(`${url}/api/queues/${vhost}/${name}`, {
     headers: { Authorization: `Basic ${auth}` },
   });
+  if (res.status === 404) return null;
   if (!res.ok) throw new Error(`RabbitMQ mgmt HTTP ${res.status}`);
   const q = await res.json();
   return {
@@ -23,22 +53,49 @@ export async function fetchQueueDepth(env) {
   };
 }
 
-export async function purgeQueue(env) {
-  const mgmtUrl = (env.RABBITMQ_MGMT_URL || "http://localhost:15672").replace(/\/$/, "");
-  const user = env.RABBITMQ_USER || "screenhouse";
-  const password = env.RABBITMQ_PASSWORD || "screenhouse";
-  const queue = env.RABBITMQ_QUEUE || "sensor-ingest";
-  const auth = Buffer.from(`${user}:${password}`).toString("base64");
-  const vhost = encodeURIComponent("/");
-  const name = encodeURIComponent(queue);
+/** Total kedalaman seluruh antrean yang menahan pekerjaan sebelum INSERT. */
+export async function fetchQueueDepth(env) {
+  let messages = 0;
+  let messagesReady = 0;
+  let messagesUnacked = 0;
+  let found = 0;
+  const perQueue = {};
 
-  const res = await fetch(`${mgmtUrl}/api/queues/${vhost}/${name}/contents`, {
-    method: "DELETE",
-    headers: { Authorization: `Basic ${auth}` },
-  });
-  if (!res.ok) throw new Error(`RabbitMQ purge HTTP ${res.status}`);
-  const body = await res.json();
-  return body.messages_purged ?? 0;
+  for (const queue of queueNames(env)) {
+    const q = await fetchOneQueue(env, queue);
+    if (!q) continue;
+    found += 1;
+    perQueue[queue] = q.messages;
+    messages += q.messages;
+    messagesReady += q.messagesReady;
+    messagesUnacked += q.messagesUnacked;
+  }
+
+  if (found === 0) {
+    throw new Error(`tidak ada antrean yang cocok: ${queueNames(env).join(", ")}`);
+  }
+
+  return { messages, messagesReady, messagesUnacked, perQueue };
+}
+
+export async function purgeQueue(env) {
+  const { url, auth } = mgmtConfig(env);
+  const vhost = encodeURIComponent("/");
+  let purged = 0;
+
+  for (const queue of queueNames(env)) {
+    const name = encodeURIComponent(queue);
+    const res = await fetch(`${url}/api/queues/${vhost}/${name}/contents`, {
+      method: "DELETE",
+      headers: { Authorization: `Basic ${auth}` },
+    });
+    if (res.status === 404) continue;
+    if (!res.ok) throw new Error(`RabbitMQ purge HTTP ${res.status} (${queue})`);
+    const body = await res.json().catch(() => ({}));
+    purged += body.messages_purged ?? 0;
+  }
+
+  return purged;
 }
 
 export async function waitForEmptyQueue(env, { maxSec = 120, pollSec = 5, label = "pre-run" } = {}) {
@@ -46,7 +103,7 @@ export async function waitForEmptyQueue(env, { maxSec = 120, pollSec = 5, label 
   let lastDepth = null;
 
   while ((Date.now() - start) / 1000 < maxSec) {
-    const { messages } = await fetchQueueDepth(env);
+    const { messages, perQueue } = await fetchQueueDepth(env);
     lastDepth = messages;
     if (messages === 0) {
       console.log(`  ✓ Antrian kosong (${label})`);
@@ -54,7 +111,10 @@ export async function waitForEmptyQueue(env, { maxSec = 120, pollSec = 5, label 
     }
     const elapsed = Math.floor((Date.now() - start) / 1000);
     if (elapsed % 30 === 0 && elapsed > 0) {
-      console.log(`  [${label} ${elapsed}s/${maxSec}s] queue=${messages}`);
+      const detail = Object.entries(perQueue)
+        .map(([q, n]) => `${q}=${n}`)
+        .join(" ");
+      console.log(`  [${label} ${elapsed}s/${maxSec}s] ${detail}`);
     }
     await new Promise((r) => setTimeout(r, pollSec * 1000));
   }

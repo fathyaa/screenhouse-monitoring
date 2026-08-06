@@ -5,6 +5,7 @@ const {
   consolidateAllOfflineDuplicates,
 } = require("../modules/alerting/alertEngine");
 const { startHealthServer } = require("../shared/healthServer");
+const { startMetricsReporter } = require("../shared/metricsReporter");
 
 /**
  * SCHEDULER OFFLINE — deteksi node yang berhenti mengirim data.
@@ -43,6 +44,7 @@ async function start() {
   setTimeout(run, 15_000);
   setInterval(run, intervalMs);
 
+  startMetricsReporter("scheduler");
   startHealthServer("scheduler", process.env.HEALTH_PORT || 3014);
   console.log(`[scheduler] siap — pemeriksaan node offline tiap ${intervalMs / 1000}s`);
 }

@@ -126,6 +126,37 @@ function getIngestMetricsSnapshot() {
   };
 }
 
+/**
+ * Ambil counter mentah + sampel latency yang belum dilaporkan, lalu kosongkan
+ * sampelnya. Dipakai metricsReporter untuk mengirim kontribusi proses ini ke
+ * role `api`.
+ *
+ * Sampel dikuras (bukan disalin) supaya tiap pengukuran latency dilaporkan
+ * tepat satu kali — kalau tidak, agregator akan menghitung sampel yang sama
+ * berulang kali dan persentilnya condong ke pesan-pesan awal.
+ */
+function drainMetricsReport() {
+  const mem = process.memoryUsage();
+  const samples = state.latencyMs;
+  state.latencyMs = [];
+
+  return {
+    runId: state.runId,
+    startedAt: state.startedAt,
+    counters: {
+      mqttReceived: state.mqttReceived,
+      mqttProcessed: state.mqttProcessed,
+      mqttEnqueued: state.mqttEnqueued,
+      mqttFailed: state.mqttFailed,
+      mqttDeadLettered: state.mqttDeadLettered,
+      mqttRequeued: state.mqttRequeued,
+    },
+    latencySamples: samples,
+    rssMb: Math.round((mem.rss / 1024 / 1024) * 10) / 10,
+    heapUsedMb: Math.round((mem.heapUsed / 1024 / 1024) * 10) / 10,
+  };
+}
+
 function resetIngestMetrics(runId = null) {
   state.runId = runId;
   state.startedAt = Date.now();
@@ -148,5 +179,6 @@ module.exports = {
   recordMqttRequeued,
   appendTimeSeriesSample,
   getIngestMetricsSnapshot,
+  drainMetricsReport,
   resetIngestMetrics,
 };

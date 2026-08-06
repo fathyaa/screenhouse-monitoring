@@ -12,6 +12,8 @@ import dotenv from "dotenv";
 import { MqttSimulator } from "../simulator/mqtt-simulator.js";
 import { MetricsCollector } from "../collectors/metrics-collector.js";
 import { ensureCleanQueue } from "../collectors/rabbitmq-utils.js";
+import { captureEnvironment } from "../collectors/environment.js";
+import { resetEnvironment } from "../scripts/reset-environment.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -62,36 +64,68 @@ function createSimulator({ env, defaults, runId }) {
   });
 }
 
-async function waitForBackendCatchUp({ metrics, maxSec, pollSec, published, direct }) {
-  if (maxSec <= 0) return { elapsedSec: 0, drained: false };
+/**
+ * Tunggu sampai SELURUH pesan yang terbit sudah jadi row di database.
+ *
+ * Ambang lama 99% membuat cooldown selesai di polling pertama saat pipeline
+ * masih punya backlog satu-dua detik, dan sisanya tercatat sebagai "missing"
+ * padahal cuma belum sempat masuk. Sekarang ada tiga cara berhenti:
+ *
+ *   complete — dbRows >= published (dan antrian kosong): tidak ada yang hilang
+ *   stalled  — hitungan DB tidak bergerak selama stallSec padahal antrian sudah
+ *              kosong: sisanya memang tidak akan datang, itu kehilangan nyata
+ *   timeout  — melewati maxSec sementara masih ada pergerakan/antrian
+ *
+ * Alasan berhenti ikut disimpan ke hasil supaya laporan bisa membedakan
+ * "kehilangan data" dari "jendela pengukuran kependekan".
+ */
+async function waitForBackendCatchUp({ metrics, maxSec, pollSec, stallSec, published, direct }) {
+  if (maxSec <= 0) return { elapsedSec: 0, drained: false, reason: "disabled" };
 
   console.log(
     direct
-      ? `Cooldown ${maxSec}s — waiting for direct inserts to settle...`
-      : `Cooldown ${maxSec}s — waiting for RabbitMQ queue and DB inserts...`
+      ? `Cooldown maks ${maxSec}s — menunggu direct insert tuntas...`
+      : `Cooldown maks ${maxSec}s — menunggu antrian RabbitMQ dan insert DB tuntas...`
   );
 
   const start = Date.now();
   let lastLogSec = -30;
+  let lastDbRows = null;
+  let unchangedSince = null;
 
   while ((Date.now() - start) / 1000 < maxSec) {
     const elapsedSec = Math.floor((Date.now() - start) / 1000);
     const snapshot = await readCooldownSnapshot(metrics);
     const queueOk = direct || snapshot.queueDepth == null || snapshot.queueDepth === 0;
-    const dbOk = published > 0 && snapshot.dbRows != null && snapshot.dbRows >= published * 0.99;
+    const dbRows = snapshot.dbRows;
 
-    if (queueOk && dbOk) {
+    if (queueOk && published > 0 && dbRows != null && dbRows >= published) {
       console.log(
-        `  ok after ${elapsedSec}s (processed=${snapshot.processed ?? "?"}, db=${snapshot.dbRows}/${published})`
+        `  tuntas setelah ${elapsedSec}s (processed=${snapshot.processed ?? "?"}, db=${dbRows}/${published})`
       );
-      return { elapsedSec, drained: true, ...snapshot };
+      return { elapsedSec, drained: true, reason: "complete", ...snapshot };
+    }
+
+    if (dbRows != null && dbRows === lastDbRows) {
+      unchangedSince ??= Date.now();
+      const stalledSec = (Date.now() - unchangedSince) / 1000;
+      if (queueOk && stalledSec >= stallSec) {
+        console.warn(
+          `  hitungan DB berhenti di ${dbRows}/${published} selama ${Math.floor(stalledSec)}s ` +
+            `dengan antrian kosong — sisanya dihitung sebagai kehilangan nyata`
+        );
+        return { elapsedSec, drained: false, reason: "stalled", ...snapshot };
+      }
+    } else {
+      unchangedSince = null;
+      lastDbRows = dbRows;
     }
 
     if (elapsedSec - lastLogSec >= 30) {
       lastLogSec = elapsedSec;
       console.log(
         `  [cooldown ${elapsedSec}s/${maxSec}s] queue=${snapshot.queueDepth ?? "?"} ` +
-          `processed=${snapshot.processed ?? "?"} db=${snapshot.dbRows ?? "?"}/${published}`
+          `processed=${snapshot.processed ?? "?"} db=${dbRows ?? "?"}/${published}`
       );
     }
 
@@ -99,8 +133,11 @@ async function waitForBackendCatchUp({ metrics, maxSec, pollSec, published, dire
   }
 
   const elapsedSec = Math.floor((Date.now() - start) / 1000);
-  console.log(`  cooldown finished after ${elapsedSec}s; backend may still be catching up`);
-  return { elapsedSec, drained: false };
+  console.warn(
+    `  cooldown habis setelah ${elapsedSec}s — backend masih bergerak, ` +
+      `angka "missing" pada run ini belum tentu kehilangan nyata`
+  );
+  return { elapsedSec, drained: false, reason: "timeout" };
 }
 
 async function readCooldownSnapshot(metrics) {
@@ -197,8 +234,26 @@ async function waitForDirectBackendIdle({ backend, runId, defaults }) {
   return { idle: false };
 }
 
-function summarizeResult({ scenario, runId, selectedSensors, simulatorStats, metrics, startedAt, finishedAt }) {
+function summarizeResult({
+  scenario,
+  runId,
+  selectedSensors,
+  simulatorStats,
+  metrics,
+  cooldown,
+  startedAt,
+  finishedAt,
+  environment = null,
+}) {
   const sent = simulatorStats.published;
+  const received = metrics.backend.mqttReceived;
+  // Simulator menjadwalkan pengiriman dengan jam dinding. Kalau mesin tidur di
+  // tengah run, saat bangun Date.now() sudah melewati batas akhir dan loop
+  // menutup diri lebih awal — hasilnya run 5 menit yang isinya cuma 1 menit
+  // beban. Bandingkan realisasi dengan target supaya run pincang seperti itu
+  // ditandai dan tidak ikut ke laporan.
+  const expectedSent = Math.floor((scenario.durationSec / scenario.intervalSec) * scenario.sensors);
+  const loadPhaseComplete = expectedSent > 0 ? sent >= expectedSent * 0.98 : true;
   const processed = metrics.backend.mqttProcessed;
   const dbRows = metrics.database.dbRowsFinal;
   const failed = metrics.backend.mqttFailed + metrics.backend.mqttNacked + simulatorStats.publishErrors;
@@ -222,6 +277,7 @@ function summarizeResult({ scenario, runId, selectedSensors, simulatorStats, met
     },
     mqtt: {
       messagesSent: sent,
+      messagesExpected: expectedSent,
       publishErrors: simulatorStats.publishErrors,
       publishRatePerSec: simulatorStats.publishRatePerSec,
     },
@@ -232,6 +288,8 @@ function summarizeResult({ scenario, runId, selectedSensors, simulatorStats, met
       messagesEnqueued: metrics.backend.mqttEnqueued,
       messagesFailed: metrics.backend.mqttFailed,
       messagesNacked: metrics.backend.mqttNacked,
+      messagesDeadLettered: metrics.backend.mqttDeadLettered ?? metrics.backend.mqttNacked,
+      messagesRequeued: metrics.backend.mqttRequeued ?? 0,
       receiveRatePerSec: metrics.backend.receiveRatePerSec,
       processRatePerSec: metrics.backend.processRatePerSec,
       successRatePct: metrics.backend.successRatePct,
@@ -254,7 +312,7 @@ function summarizeResult({ scenario, runId, selectedSensors, simulatorStats, met
       insertRateMax: metrics.database.insertRateMax,
     },
     validation: {
-      publishVsReceived: sent - metrics.backend.mqttReceived,
+      publishVsReceived: sent - received,
       publishVsProcessed: sent - processed,
       publishVsDb: sent - dbRows,
       deliveryRatePct: sent > 0 ? (processed / sent) * 100 : null,
@@ -262,7 +320,33 @@ function summarizeResult({ scenario, runId, selectedSensors, simulatorStats, met
       errorRatePct: sent > 0 ? (failed / sent) * 100 : null,
       missingMessages: missing,
       missingPct: sent > 0 ? (missing / sent) * 100 : 0,
-      allProcessed: missing === 0 && processed >= sent * 0.99,
+      allProcessed: missing === 0,
+      // Di titik mana pesan menguap. Baru bermakna sejak counter backend diambil
+      // sesudah cooldown; sebelumnya selisih di sini didominasi sampel basi.
+      lossBreakdown: {
+        atBroker: Math.max(sent - received, 0),
+        inApp: Math.max(received - processed, 0),
+        atDatabase: Math.max(processed - dbRows, 0),
+      },
+      // Counter backend menghitung SEMUA ingest, sedangkan hitungan DB dibatasi
+      // ke sensor node yang dipilih simulator. Selisih positif berarti ada
+      // sumber lain yang ikut masuk selama run (mis. device-bridge gh01) dan
+      // mencemari delivery rate serta lossBreakdown.
+      foreignProcessed: Math.max(processed - sent, 0),
+      // Pembeda "data hilang" vs "pengukuran keburu berhenti".
+      cooldown: {
+        elapsedSec: cooldown?.elapsedSec ?? 0,
+        drained: cooldown?.drained ?? false,
+        reason: cooldown?.reason ?? "unknown",
+      },
+      // Hanya angka dari run yang tuntas (complete) atau macet (stalled) yang
+      // layak dikutip sebagai kehilangan; "timeout" berarti run harus diulang
+      // dengan cooldownSec lebih panjang.
+      missingIsConclusive:
+        loadPhaseComplete && (cooldown?.reason === "complete" || cooldown?.reason === "stalled"),
+      // false = fase beban tidak utuh (mesin tidur / run dihentikan di tengah).
+      // Loader laporan membuang run seperti ini.
+      loadPhaseComplete,
     },
     selectedSensors: selectedSensors.map((sensor) => ({
       sensorNodeId: sensor.sensorNodeId,
@@ -275,6 +359,9 @@ function summarizeResult({ scenario, runId, selectedSensors, simulatorStats, met
       rabbitmq: metrics.rabbitmq.samples,
       database: metrics.database.samples,
     },
+    // Kondisi pengujian: batas CPU/memori tiap container, jumlah replica per
+    // role, branch & commit. Tanpa ini dua seri tidak bisa dinyatakan sebanding.
+    environment,
   };
 }
 
@@ -312,10 +399,11 @@ async function runScenario({ scenario, defaults, env, runId }) {
       onTick: createProgressLogger(scenario.id),
     });
 
-    await waitForBackendCatchUp({
+    const cooldown = await waitForBackendCatchUp({
       metrics,
       maxSec: resolveCooldownSec(scenario, defaults),
       pollSec: Number(defaults.cooldownPollSec || 5),
+      stallSec: Number(defaults.cooldownStallSec ?? 30),
       published: simulatorStats.published,
       direct,
     });
@@ -330,8 +418,13 @@ async function runScenario({ scenario, defaults, env, runId }) {
       selectedSensors,
       simulatorStats,
       metrics: metricsResult,
+      cooldown,
       startedAt,
       finishedAt,
+      environment: captureEnvironment({
+        ingestMode,
+        topology: metricsResult.backend?.topology ?? null,
+      }),
     });
   } finally {
     metrics.stop();
@@ -375,6 +468,32 @@ function printSummaryTable(result) {
       `${formatMs(p95)} | ${formatRate(throughput)} | ${formatMb(rssMax)} | ` +
       `${result.validation.missingMessages} |`
   );
+
+  const { lossBreakdown, cooldown, missingIsConclusive } = result.validation;
+  console.log(
+    `\nCooldown: ${cooldown.reason} setelah ${cooldown.elapsedSec}s` +
+      (missingIsConclusive ? "" : "  ← angka missing BELUM konklusif, ulangi dengan cooldownSec lebih panjang")
+  );
+  console.log(
+    `Sebaran kehilangan: broker→subscriber ${lossBreakdown.atBroker}, ` +
+      `subscriber→pipeline ${lossBreakdown.inApp}, pipeline→DB ${lossBreakdown.atDatabase}`
+  );
+
+  if (result.validation.loadPhaseComplete === false) {
+    console.error(
+      `\nRUN TIDAK SAH: simulator cuma mengirim ${result.mqtt.messagesSent} dari ` +
+        `${result.mqtt.messagesExpected} pesan yang dijadwalkan. Fase beban terpotong ` +
+        "(mesin tidur atau run dihentikan). Hasil ini otomatis diabaikan laporan — jalankan ulang."
+    );
+  }
+
+  if (result.validation.foreignProcessed > 0) {
+    console.warn(
+      `\nPERINGATAN: ${result.validation.foreignProcessed} pesan dari sumber lain ikut terhitung ` +
+        "(kemungkinan device-bridge gh01). Delivery rate dan sebaran kehilangan run ini tercemar — " +
+        "kosongkan DEVICE_BRIDGE_MAP di monitoring-service saat mengambil data skripsi."
+    );
+  }
 }
 
 function formatPct(value) {
@@ -406,6 +525,27 @@ async function main() {
   if (!scenario) {
     console.error(`Scenario "${scenarioId}" not found. Available: ${config.scenarios.map((s) => s.id).join(", ")}`);
     process.exit(1);
+  }
+
+  // Protokol titik-awal-sama: kosongkan tabel ukur lalu restart service, supaya
+  // skenario terakhir tidak menulis ke tabel yang jauh lebih besar daripada
+  // skenario pertama. Data screenhouse perangkat asli disisakan (lihat
+  // scripts/reset-environment.js). Lewati dengan --no-reset.
+  const resetEnabled = (config.defaults?.resetBeforeRun ?? true) && !args["no-reset"];
+  if (resetEnabled) {
+    console.log("Reset lingkungan sebelum skenario...");
+    const { queue, purge, restart } = await resetEnvironment({ env: process.env });
+    if (queue.purged) console.log(`  Queue: ${queue.purged} pesan sisa skenario sebelumnya dibuang`);
+    if (purge.mode === "all") {
+      console.log("  Purge: seluruh tabel ukur dikosongkan");
+    } else {
+      console.log(
+        `  Purge: ${purge.deleted.sensorData} sensor_data, ${purge.deleted.alerts} alerts, ` +
+          `${purge.deleted.actuatorLogs} actuator_logs dihapus ` +
+          `(screenhouse ${purge.protectedIds.join(", ")} disisakan)`
+      );
+    }
+    console.log(`  Restart: ${restart.container} siap dalam ${restart.readySec}s`);
   }
 
   const result = await runScenario({
