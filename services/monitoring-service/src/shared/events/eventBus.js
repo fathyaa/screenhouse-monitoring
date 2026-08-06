@@ -3,6 +3,7 @@ const {
   EXCHANGE,
   DEAD_QUEUE,
   getChannel,
+  createChannel,
   registerChannelHook,
 } = require("../../config/rabbitmq");
 const { isTransientError } = require("../../modules/ingest/transientError");
@@ -152,7 +153,14 @@ function consume({
 }) {
   const queueName = queue.replace("{instance}", instanceTag());
 
-  registerChannelHook(async (ch) => {
+  // Hook dipicu tiap koneksi/channel bersama terbentuk ulang, tapi channel yang
+  // dikirimkannya sengaja TIDAK dipakai: tiap consumer butuh channel sendiri
+  // karena prefetch berlaku per channel. Berbagi channel membuat consumer
+  // dengan prefetch kecil mencekik consumer lain di proses yang sama.
+  registerChannelHook(async () => {
+    const ch = await createChannel();
+    ch.on("error", (err) => console.error(`[bus] channel "${queueName}" error:`, err.message));
+
     const args = {};
     if (messageTtl) args["x-message-ttl"] = messageTtl;
 

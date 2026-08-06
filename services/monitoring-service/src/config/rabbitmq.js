@@ -143,6 +143,21 @@ async function getChannel() {
   return connectRabbitMq();
 }
 
+/**
+ * Channel BARU di atas koneksi yang sama.
+ *
+ * Wajib dipakai tiap consumer, karena `prefetch` di AMQP berlaku PER CHANNEL,
+ * bukan per consumer. Dua consumer yang berbagi satu channel berarti panggilan
+ * `prefetch()` terakhir menentukan keduanya — dan itu pernah menurunkan
+ * throughput pipeline dari ~250 ke 23 pesan/detik, karena consumer reset metrik
+ * (prefetch 1) didaftarkan setelah consumer persistence (prefetch 20) dan
+ * mencekik channel yang sama.
+ */
+async function createChannel() {
+  if (!connection) await connectRabbitMq();
+  return connection.createChannel();
+}
+
 async function closeRabbitMq() {
   closing = true;
   try {
@@ -165,6 +180,7 @@ module.exports = {
   connectRabbitMq,
   connectRabbitMqInBackground,
   getChannel,
+  createChannel,
   closeRabbitMq,
   registerChannelHook,
 };
