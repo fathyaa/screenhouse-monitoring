@@ -252,6 +252,13 @@ services:
       # Harus sama persis dengan role monitoring-service, supaya laporan wilayah
       # & analytics siklus tidak menghitung slot `fan` pinjaman gh01 sebagai kipas.
       ACTUATOR_CAPABILITIES: 700:irrigation=Irigasi Tray 1|fan=Irigasi Tray 2
+      # Web Push. Nilainya dari `docker/.env` (lihat .env.example) — harus sama
+      # persis dengan service `notifikasi`, kalau tidak browser menolak kiriman
+      # dengan 403 VapidPkHashMismatch. Kosong = push nonaktif, service tetap
+      # jalan normal.
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@bibitlive.local}
     depends_on:
       postgres-app:
         condition: service_healthy
@@ -276,6 +283,10 @@ services:
       DB_NAME: screenhouse_app
       RABBITMQ_URL: amqp://screenhouse:screenhouse@rabbitmq:5672
       RABBITMQ_EXCHANGE: shms.events
+      # Sama persis dengan app-service — inilah proses yang benar-benar mengirim.
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@bibitlive.local}
     depends_on:
       postgres-app:
         condition: service_healthy
