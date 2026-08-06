@@ -52,6 +52,10 @@ Keunggulan yang tidak bersyarat ada di tempat lain, dan semuanya soal keandalan,
 
 **Jangan menjual arsitektur ini sebagai "lebih cepat".** Klaim yang bisa dipertahankan adalah **Acceptance Rate** (`Accepted/Sent`) — metrik utama di `docs/evaluasi-kualitas/stress-test-matriks.md`. Burst 15–30 detik diserap habis oleh antrean, jadi acceptance tetap ~100% pada laju yang sudah membuat direct menolak pesan.
 
+**Jebakan alokasi CPU (sudah pernah memakan waktu):** `docker-compose.prod-sim.yaml` memakai `cpuset` — seluruh role monitoring dipatok ke core 0 dan berbagi dinamis. **Jangan** menggantinya dengan plafon `cpus:` per role. Versi pertama membagi 1 OCPU jadi tujuh plafon terpisah (persistence 0,25 dst), dan hasilnya S6 cuma 23,4 pesan/detik dengan delivery 37,8% — sepuluh kali lebih buruk dari direct. Yang terukur bukan arsitektur, melainkan plafon buatan: peran yang jadi leher botol tidak boleh melewati 25% CPU sekalipun enam peran lain menganggur. Worker node sungguhan berbagi core.
+
+Konsekuensi yang disengaja: dengan `cpuset`, `--scale persistence=4` **tidak menambah anggaran**. Sweep replica yang ingin menunjukkan skala horizontal harus dijalankan **tanpa** override prod-sim, dan dilaporkan terpisah sebagai pengujian mekanisme — bukan kapasitas produksi.
+
 **Jebakan pengukuran:** hitung `COUNT(sensor_data)` **setelah `q.persist` kosong**, bukan tepat saat burst berakhir. Kalau tidak, baris yang masih mengantre terbaca sebagai pesan hilang, dan arsitektur ini akan terlihat jauh lebih buruk daripada kenyataannya. Cek dengan `docker exec screenhouse-rabbitmq rabbitmqctl -q list_queues name messages`.
 
 ## Queue realtime sengaja tidak durable
@@ -137,6 +141,16 @@ Dua jebakan yang sudah pernah menghabiskan waktu:
 2. **Container RabbitMQ bisa "Up" padahal node Erlang di dalamnya mati** (terjadi setelah Docker Desktop me-resume container lama). `docker compose ps` tetap hijau; yang jujur adalah `docker exec screenhouse-rabbitmq rabbitmq-diagnostics -q check_running`. Gejalanya `ECONNRESET` saat connect, bukan pesan auth.
 
 Bersihkan data sintetis setelah selesai — hapus `alerts` yang menunjuk baris uji **sebelum** `sensor_data` (ada FK `alerts.sensor_data_id`).
+
+## Uji beban: kondisi wajib dicatat, dan run lama tidak memilikinya
+
+Tiap file di `load-test-monitoring/results/` sekarang menyimpan blok `environment` (batas CPU/memori per container, jumlah replica, branch, commit). **Seluruh hasil sebelum 6 Agustus 2026 tidak memilikinya**, jadi tidak bisa dibuktikan memakai batas yang sama — `reporter/generate-arsitektur.js` menandainya `unknown` dan memperlakukannya sebagai data pendahuluan. Jangan mengutipnya sebagai hasil final.
+
+Dua laporan, jangan tertukar:
+- `report-compare.html` — dua mode ingest dalam satu arsitektur, satu run per skenario
+- `report-arsitektur.html` — lintas arsitektur (`direct`, `rabbitmq`, `listener@N`), beberapa run per konfigurasi dengan median + rentang, dan **dipisah per profil resource** supaya angka 1 OCPU tidak pernah sekolom dengan angka tanpa batas
+
+Metrik yang selamat dari perubahan arsitektur adalah `databaseDeliveryRatePct` (`dbRows/sent`) — ia menghitung baris database langsung, bukan counter internal. Sisanya (`processRatePerSec`, `latencyP95Ms`, `rssMbMax`) bergantung pada agregasi `metrics.report`; kalau nol, curigai role `api` tidak menerima laporan, bukan pipeline yang mati.
 
 ## PWA / Service Worker (dev)
 
