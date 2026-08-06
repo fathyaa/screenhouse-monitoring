@@ -70,6 +70,33 @@
       "intervalSec": 1,
       "durationSec": 300,
       "cooldownSec": 1500
+    },
+    {
+      "id": "S8",
+      "name": "600 Active Sensors",
+      "description": "600 sensor node aktif (1 sensor = 1 sink node), 1 pesan/detik, 5 menit",
+      "sensors": 600,
+      "intervalSec": 1,
+      "durationSec": 300,
+      "cooldownSec": 1800
+    },
+    {
+      "id": "S10",
+      "name": "600 Sensors @ 2 msg/s",
+      "description": "600 sensor node, 2 pesan/detik per sensor (1200/s total), 5 menit — probe titik jenuh",
+      "sensors": 600,
+      "intervalSec": 0.5,
+      "durationSec": 300,
+      "cooldownSec": 1800
+    },
+    {
+      "id": "S11",
+      "name": "600 Sensors @ 4 msg/s",
+      "description": "600 sensor node, 4 pesan/detik per sensor (2400/s total), 5 menit — probe titik jenuh",
+      "sensors": 600,
+      "intervalSec": 0.25,
+      "durationSec": 300,
+      "cooldownSec": 1800
     }
   ]
 }
