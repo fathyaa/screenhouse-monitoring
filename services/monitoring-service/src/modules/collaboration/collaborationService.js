@@ -18,9 +18,9 @@ const { sinkCodeOf, toIsoOrNull, num, idempKey } = require("./collabTopics");
  *    terlewat): baris misi dibuat minimal lalu dilengkapi saat command terlihat.
  */
 
-const TERMINAL = new Set(["COMPLETED", "FAILED", "REJECTED"]);
+const TERMINAL = new Set(["COMPLETED", "FAILED", "REJECTED", "CANCELLED"]);
 const VALID_STATUS = new Set(["ACCEPTED", "IN_PROGRESS", "COMPLETED", "FAILED", "REJECTED",
-  "BUFFERED_OFFLINE"]);
+  "BUFFERED_OFFLINE", "CANCELLED"]);
 const VALID_LABEL = new Set(["BAGUS", "TIDAK_BAGUS"]);
 
 const cache = { sink: new Map(), owner: new Map() };
@@ -94,6 +94,20 @@ async function ensureMission(missionCode, defaults = {}) {
 // --- mission/command --------------------------------------------------------
 async function handleCommand(msg) {
   if (!msg?.m_id || !msg?.h_id) return invalid("command", "m_id/h_id kosong", msg);
+  if (String(msg.cmd).toUpperCase() === "ABORT") {
+    // Pembatalan (dari API /cancel atau pihak lain): misi non-terminal → CANCELLED.
+    const r = await pool.query(
+      `UPDATE robot_missions SET status = 'CANCELLED', completed_at = COALESCE(completed_at, NOW()),
+              updated_at = NOW()
+        WHERE mission_code = $1 AND NOT (status = ANY($2::text[]))
+        RETURNING ${MISSION_COLUMNS}`,
+      [msg.m_id, [...TERMINAL]]
+    );
+    if (r.rows[0]) {
+      await emit(RK.MISSION_UPDATED, { mission: r.rows[0], user_id: await ownerOf(r.rows[0].screenhouse_id) });
+    }
+    return { ok: true, cancelled: Boolean(r.rows[0]) };
+  }
   const house = await resolveHouse(msg.h_id);
   const trays = Array.isArray(msg.trays) ? msg.trays.map(Number).filter(Number.isFinite) : [];
   const r = await pool.query(
@@ -154,6 +168,7 @@ async function handleStatus(msg) {
       WHERE id = $1
         AND (last_seq IS NULL OR last_seq < $7)
         AND NOT (status = ANY($9::text[]) AND NOT ($2 = ANY($9::text[])))
+        AND status <> 'CANCELLED'
       RETURNING ${MISSION_COLUMNS}`,
     [m.id, msg.st, num(msg.pct), num(msg.cur_tray), num(msg.bat), msg.r_id ?? null,
       num(msg.seq), eventTs, [...TERMINAL]]

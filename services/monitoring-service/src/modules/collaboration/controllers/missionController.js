@@ -190,4 +190,40 @@ async function listActuations(req, res) {
   }
 }
 
-module.exports = { createMission, listMissions, getMission, latestInspections, listActuations };
+// POST /missions/:missionCode/cancel — batalkan misi yang belum selesai.
+// Ringkasan misi ditandai CANCELLED (terminal, sehingga robot dianggap tersedia lagi)
+// dan perintah ABORT diterbitkan ke robot lewat sink node.
+async function cancelMission(req, res) {
+  try {
+    const m = await pool.query(
+      `SELECT ${MISSION_COLUMNS} FROM robot_missions WHERE mission_code = $1`,
+      [req.params.missionCode]
+    );
+    const mission = m.rows[0];
+    if (!mission) return res.status(404).json({ message: "Misi tidak ditemukan" });
+    if (mission.screenhouse_id != null && !(await assertAccess(req, res, mission.screenhouse_id))) return;
+    if (TERMINAL.has(mission.status)) {
+      return res.status(409).json({ message: `Misi sudah berakhir (${mission.status})` });
+    }
+    const upd = await pool.query(
+      `UPDATE robot_missions SET status = 'CANCELLED', completed_at = NOW(), updated_at = NOW()
+        WHERE id = $1 RETURNING ${MISSION_COLUMNS}`,
+      [mission.id]
+    );
+    const payload = { m_id: mission.mission_code, h_id: mission.house_code, cmd: "ABORT",
+      trays: [], crit_lvl: mission.crit_lvl ?? 1, ts: Date.now() };
+    await sendToQueue(COMMAND_QUEUE, {
+      screenhouseId: mission.screenhouse_id, topics: [TOPICS.command], payload,
+    });
+    try {
+      await publishEvent(RK.MISSION_UPDATED, { mission: upd.rows[0], user_id: req.user?.id ?? null });
+    } catch (_) { /* dashboard memuat ulang lewat REST */ }
+    return res.json({ mission: upd.rows[0], command: payload });
+  } catch (err) {
+    return res.status(503).json({ message: "Gagal membatalkan misi", detail: err.message });
+  }
+}
+
+module.exports = {
+  createMission, listMissions, getMission, latestInspections, listActuations, cancelMission,
+};

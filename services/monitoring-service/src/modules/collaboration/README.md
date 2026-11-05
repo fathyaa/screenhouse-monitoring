@@ -28,7 +28,9 @@ Collaboration Agent ─Wi-Fi──┤ Sink node ── MQTT (Mosquitto) ──�
 
 Ketentuan kontrak:
 - `ts` adalah epoch milidetik (detik juga diterima).
-- `st` bernilai `ACCEPTED | IN_PROGRESS | COMPLETED | FAILED | REJECTED | BUFFERED_OFFLINE`.
+- `st` bernilai `ACCEPTED | IN_PROGRESS | COMPLETED | FAILED | REJECTED | BUFFERED_OFFLINE`;
+  status misi di cloud dapat juga `CANCELLED` (dibatalkan operator, terminal — status robot
+  yang datang belakangan tidak menimpanya).
 - `label` bernilai `BAGUS | TIDAK_BAGUS`.
 - Nama topik dapat diganti lewat env `COLLAB_TOPIC_*`; seluruh modul dimatikan dengan
   `COLLAB_ENABLED=false`.
@@ -66,6 +68,7 @@ Kolomnya UNIQUE, sehingga replay store-and-forward dari sink node tidak menggand
 | Metode & path | Fungsi |
 |---|---|
 | `POST /missions/screenhouse/:id` `{trays?, crit_lvl?, force?}` | Terbitkan misi. `trays` default = semua tray ber-node `<h_id>-Tnn`. Mengembalikan 409 bila robot masih punya misi aktif (< `COLLAB_MISSION_STALE_MIN`, default 60 menit) |
+| `POST /missions/:missionCode/cancel` | Batalkan misi non-terminal: status → `CANCELLED`, kirim `{m_id, cmd:"ABORT"}` lewat `q.device.command` ke sink node/robot (robot berhenti, misi berikutnya dapat diterbitkan). 409 bila misi sudah terminal |
 | `GET /missions/screenhouse/:id?limit=20` | Riwayat misi + jumlah tray terinspeksi/bermasalah |
 | `GET /missions/:missionCode` | Detail misi + riwayat status + hasil per tray |
 | `GET /missions/screenhouse/:id/inspections/latest` | Hasil terbaru per tray |
