@@ -1,4 +1,5 @@
-const { connectRabbitMq, INGEST_QUEUE, COMMAND_QUEUE } = require("../config/rabbitmq");
+const { connectRabbitMq, INGEST_QUEUE, COMMAND_QUEUE, COLLAB_QUEUE } = require("../config/rabbitmq");
+const { connectCollabMqtt } = require("../modules/collaboration/collabMqtt");
 const { sendToQueue, consume } = require("../shared/events/eventBus");
 const { publishTopic } = require("../config/mqttClient");
 const connectMQTT = require("../modules/ingest/mqttService");
@@ -36,6 +37,9 @@ async function start() {
 
   connectMQTT(enqueue);
   connectDeviceBridge(enqueue);
+  // Kontrak kolaborasi robot (Tabel 3.3 proposal): telemetri → q.ingest,
+  // misi & aktuasi lokal → q.collab.
+  connectCollabMqtt(enqueue, (job) => sendToQueue(COLLAB_QUEUE, job));
 
   // Perintah aktuator datang dari role lain (api untuk kendali manual, alert
   // untuk kendali otomatis) yang tidak punya koneksi MQTT. Perintah menunggu di

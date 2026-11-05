@@ -90,6 +90,14 @@ app.use(
   })
 );
 
+// Kolaborasi robot: misi inspeksi & hasil penilaian mutu bibit per tray.
+app.use(
+  "/missions",
+  proxy(MONITORING_SERVICE, {
+    proxyReqPathResolver: (req) => `/missions${req.url}`,
+  })
+);
+
 const PORT = process.env.PORT || 8000;
 
 /**

@@ -88,6 +88,9 @@ CREATE TABLE sensor_data (
     air_temperature  NUMERIC(5,2),
     air_humidity     NUMERIC(5,2),
     light_intensity  NUMERIC(10,2),
+    nutrient         NUMERIC(8,2),   -- kandungan nutrisi (WSN kolaborasi robot, field sn)
+    uv_index         NUMERIC(6,2),   -- indeks UV (WSN kolaborasi robot, field uv)
+    idemp_key        VARCHAR(160),   -- kunci idempotensi store-and-forward (opsional)
     -- Diisi dari timestamp payload perangkat bila valid, jika tidak fallback ke
     -- waktu terima server (CURRENT_TIMESTAMP). Lihat saveSensorReading.
     created_at       TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -129,5 +132,91 @@ CREATE TABLE alerts (
 CREATE UNIQUE INDEX idx_alerts_active_dedup
     ON alerts (screenhouse_id, sensor_node_id, message)
     WHERE status = 'active';
+
+-- =============================================================================
+-- Bounded context kolaborasi robot (misi, status, hasil inspeksi, aktuasi lokal).
+-- Isi sama dengan migrations_kolaborasi.sql (dipakai untuk DB yang sudah berjalan);
+-- ditulis langsung di sini agar schema.sql bisa dijalankan dari stdin/docker exec.
+-- =============================================================================
+ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS nutrient  NUMERIC(8,2);
+ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS uv_index  NUMERIC(6,2);
+ALTER TABLE sensor_data ADD COLUMN IF NOT EXISTS idemp_key VARCHAR(160);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sensor_data_idemp
+    ON sensor_data (idemp_key) WHERE idemp_key IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS robot_missions (
+    id              SERIAL PRIMARY KEY,
+    mission_code    VARCHAR(64) NOT NULL UNIQUE,          -- m_id
+    screenhouse_id  INTEGER REFERENCES screenhouse_registry(screenhouse_id),
+    house_code      VARCHAR(32),                          -- h_id (prefix kode sink: <h_id>-SINK)
+    robot_code      VARCHAR(32),                          -- r_id
+    cmd             VARCHAR(32) DEFAULT 'INSPECT',
+    trays           INTEGER[] NOT NULL DEFAULT '{}',
+    crit_lvl        INTEGER DEFAULT 1,
+    source          VARCHAR(20) DEFAULT 'mqtt',           -- api | mqtt (diterbitkan pihak lain)
+    requested_by    INTEGER,                              -- user id (bila lewat API)
+    status          VARCHAR(20) NOT NULL DEFAULT 'ISSUED',
+    progress_pct    INTEGER DEFAULT 0,
+    current_tray    INTEGER,
+    battery         INTEGER,
+    last_seq        INTEGER,
+    issued_at       TIMESTAMP WITH TIME ZONE,
+    accepted_at     TIMESTAMP WITH TIME ZONE,
+    completed_at    TIMESTAMP WITH TIME ZONE,
+    last_event_at   TIMESTAMP WITH TIME ZONE,
+    created_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_robot_missions_sh_created
+    ON robot_missions (screenhouse_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS robot_mission_events (
+    id            SERIAL PRIMARY KEY,
+    mission_id    INTEGER NOT NULL REFERENCES robot_missions(id) ON DELETE CASCADE,
+    idemp_key     VARCHAR(160) NOT NULL UNIQUE,
+    status        VARCHAR(20) NOT NULL,
+    progress_pct  INTEGER,
+    current_tray  INTEGER,
+    battery       INTEGER,
+    seq           INTEGER,
+    event_ts      TIMESTAMP WITH TIME ZONE,               -- waktu kejadian di robot
+    received_at   TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_mission_events_mission
+    ON robot_mission_events (mission_id, seq);
+
+CREATE TABLE IF NOT EXISTS tray_inspections (
+    id               SERIAL PRIMARY KEY,
+    mission_id       INTEGER NOT NULL REFERENCES robot_missions(id) ON DELETE CASCADE,
+    screenhouse_id   INTEGER REFERENCES screenhouse_registry(screenhouse_id),
+    sensor_node_id   INTEGER REFERENCES sensor_nodes(id),  -- node WSN tray yang sama (bila ada)
+    tray_no          INTEGER NOT NULL,
+    label            VARCHAR(20) NOT NULL,                 -- BAGUS | TIDAK_BAGUS
+    confidence       NUMERIC(5,3),
+    plant_height_cm  NUMERIC(6,2),
+    anomaly          INTEGER DEFAULT 0,
+    seq              INTEGER,
+    idemp_key        VARCHAR(160) NOT NULL UNIQUE,
+    event_ts         TIMESTAMP WITH TIME ZONE,
+    received_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_tray_inspections_sh_tray
+    ON tray_inspections (screenhouse_id, tray_no, event_ts DESC);
+
+CREATE TABLE IF NOT EXISTS actuation_events (
+    id              SERIAL PRIMARY KEY,
+    screenhouse_id  INTEGER REFERENCES screenhouse_registry(screenhouse_id),
+    house_code      VARCHAR(32),
+    actuator_code   VARCHAR(32) NOT NULL,                  -- act_id, mis. PUMP_3
+    action          VARCHAR(8) NOT NULL,                   -- ON | OFF
+    duration_s      INTEGER,
+    trigger         VARCHAR(64),
+    seq             INTEGER,
+    idemp_key       VARCHAR(160) NOT NULL UNIQUE,
+    event_ts        TIMESTAMP WITH TIME ZONE,
+    received_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_actuation_events_sh
+    ON actuation_events (screenhouse_id, event_ts DESC);
 
 COMMIT;

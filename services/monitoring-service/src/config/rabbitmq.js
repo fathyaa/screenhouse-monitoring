@@ -20,6 +20,10 @@ const COMMAND_QUEUE = process.env.RABBITMQ_COMMAND_QUEUE || "q.device.command";
 // dihapus. Consumer mem-publish ke sini secara eksplisit.
 const DEAD_QUEUE = process.env.RABBITMQ_DEAD_QUEUE || "q.dead";
 
+// Tugas kolaborasi robot (mission/command|status|result, actuator/control) dari
+// collector ke role `collaboration`. Antrean kerja durable seperti q.ingest.
+const COLLAB_QUEUE = process.env.RABBITMQ_COLLAB_QUEUE || "q.collab";
+
 const RECONNECT_MS = Number(process.env.RABBITMQ_RECONNECT_MS || 3000);
 
 function brokerUrl() {
@@ -56,6 +60,7 @@ async function declareBaseTopology(ch) {
   await ch.assertQueue(INGEST_QUEUE, { durable: true });
   await ch.assertQueue(COMMAND_QUEUE, { durable: true });
   await ch.assertQueue(DEAD_QUEUE, { durable: true });
+  await ch.assertQueue(COLLAB_QUEUE, { durable: true });
 }
 
 function scheduleReconnect() {
@@ -177,6 +182,7 @@ module.exports = {
   INGEST_QUEUE,
   COMMAND_QUEUE,
   DEAD_QUEUE,
+  COLLAB_QUEUE,
   connectRabbitMq,
   connectRabbitMqInBackground,
   getChannel,

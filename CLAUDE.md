@@ -15,7 +15,7 @@ BibitLive — monitoring screenhouse pembibitan padi (sensor NPK, kelembapan, su
 
 ## Satu artefak, banyak role
 
-`monitoring-service` bukan satu proses lagi. Image yang sama dijalankan sebagai tujuh proses, dipilih lewat env `ROLE` (dispatcher di `src/index.js`, entrypoint di `src/roles/`):
+`monitoring-service` bukan satu proses lagi. Image yang sama dijalankan sebagai delapan proses, dipilih lewat env `ROLE` (dispatcher di `src/index.js`, entrypoint di `src/roles/`):
 
 | ROLE | Tugas | Replica |
 |---|---|---|
@@ -25,7 +25,8 @@ BibitLive — monitoring screenhouse pembibitan padi (sensor NPK, kelembapan, su
 | `alert` | `sensor.persisted` → threshold → `alert.created` | **tepat 1** |
 | `realtime` | `sensor.persisted`/`alert.*` → Socket.IO | bebas |
 | `scheduler` | cron deteksi node offline | **tepat 1** |
-| `api` | HTTP `/sensor-data`, `/alerts`, `/stats` | bebas |
+| `api` | HTTP `/sensor-data`, `/alerts`, `/stats`, `/missions` | bebas |
+| `collaboration` | `q.collab` → misi robot, hasil inspeksi per tray, aktuasi lokal → `mission.updated`/`inspection.recorded`/`actuation.recorded` | bebas (idempoten) |
 
 app-service punya dua role: `api` dan `notifikasi` (Web Push, dulu `pushWorker` di dalam proses API).
 
@@ -191,3 +192,23 @@ Form pendaftaran screenhouse (saat register akun baru vs pengajuan tambahan oleh
 ## Login demo
 
 Password semua user demo: `123456`. Lihat `README.md` untuk nomor HP demo operator/petani. `database/app/seed_pak_eko_demo.sql` + `database/monitoring/seed_pak_eko_demo.sql` berisi user petani demo "Pak Eko" (screenhouse id 93-95) dengan data siklus semai & alert lengkap, khusus untuk testing tampilan UI tanpa perlu hardware/simulator.
+
+## Kolaborasi robot (bounded context `collaboration`)
+
+Kontrak MQTT dari model kolaborasi robot ↔ sink node (proposal tesis Tabel 3.3) — lihat
+`services/monitoring-service/src/modules/collaboration/README.md`. Hal yang tidak kelihatan dari kode:
+
+- **Collector membuka koneksi MQTT kedua** (`collabMqtt.js`) khusus topik kolaborasi.
+  Jangan dipindah ke klien `mqttService`: handler pesan klien itu memperlakukan setiap
+  topik yang diterimanya sebagai frame sensor.
+- `telemetry/env` **tidak** lewat `q.collab` — diterjemahkan (`adaptTelemetry`) lalu masuk
+  `q.ingest` biasa, jadi alert/realtime/stats sensor tetap berlaku. Pemetaan: `sn→nutrient`,
+  `sm→soil_moisture`, `ah→air_humidity`, `t→air_temperature`, `uv→uv_index`,
+  `h_id→<h_id>-SINK`, `n_id` = `node_code`.
+- **Idempotensi**: `sensor_data.idemp_key` (UNIQUE parsial) dan `idemp_key` UNIQUE di tabel
+  kolaborasi. Replay store-and-forward dari sink node berakhir `ON CONFLICT DO NOTHING`;
+  `saveSensorReading` mengembalikan `null` untuk duplikat dan tidak menerbitkan event.
+- Ringkasan `robot_missions` **hanya maju menurut `seq`** dan status terminal tidak ditimpa
+  status non-terminal yang tiba terlambat. Riwayat lengkap ada di `robot_mission_events`.
+- Format `idemp_key` sengaja identik dengan program uji `spsbench` (repo tesis) supaya
+  pengujian keutuhan data bisa mencocokkan pesan terkirim ↔ baris DB.

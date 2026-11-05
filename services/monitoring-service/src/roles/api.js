@@ -5,6 +5,7 @@ const { connectRabbitMqInBackground } = require("../config/rabbitmq");
 const sensorRoutes = require("../modules/ingest/routes/sensorRoutes");
 const alertRoutes = require("../modules/alerting/routes/alertRoutes");
 const statsRoutes = require("../modules/stats/routes/statsRoutes");
+const missionRoutes = require("../modules/collaboration/routes/missionRoutes");
 const { startMetricsAggregator } = require("../shared/metricsAggregator");
 
 /**
@@ -38,6 +39,7 @@ async function start() {
   app.use("/sensor-data", sensorRoutes);
   app.use("/alerts", alertRoutes);
   app.use("/stats", statsRoutes);
+  app.use("/missions", missionRoutes);
 
   const server = http.createServer(app);
   const port = Number(process.env.PORT || 3001);

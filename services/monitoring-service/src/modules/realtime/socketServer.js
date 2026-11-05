@@ -103,6 +103,22 @@ function dispatchEvent(io, routingKey, payload) {
       return;
     }
 
+    // --- Kolaborasi robot: status misi, hasil inspeksi per tray, aktuasi lokal ---
+    case RK.MISSION_UPDATED:
+    case RK.INSPECTION_RECORDED:
+    case RK.ACTUATION_RECORDED: {
+      const ownerId = payload.user_id;
+      if (!ownerId) return;
+      const event = {
+        [RK.MISSION_UPDATED]: "mission-update",
+        [RK.INSPECTION_RECORDED]: "inspection-update",
+        [RK.ACTUATION_RECORDED]: "actuation-update",
+      }[routingKey];
+      io.to(`user:${ownerId}`).emit(event, payload);
+      if (DEBUG) console.log(`${event} ke user:${ownerId}`);
+      return;
+    }
+
     default:
       if (DEBUG) console.log("[socket] routing key tak dikenal:", routingKey);
   }

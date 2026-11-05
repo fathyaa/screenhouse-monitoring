@@ -33,6 +33,7 @@ import ParamHealthCards from "../components/ParamHealthCards";
 import EstimasiTanamPanel from "../components/EstimasiTanamPanel";
 import { ScreenhouseDetailSkeleton } from "../components/LoadingUI";
 import ActuatorControls from "../components/ActuatorControls";
+import RobotInspectionPanel from "../components/RobotInspectionPanel";
 import {
   SemaiCycleEndButton,
   SemaiCycleStartButton,
@@ -1068,6 +1069,15 @@ function ScreenhouseDetailPage({ basePath = "/operator", screenhouseId, single =
                 onUpdated={patchSinkActuators}
               />
             </div>
+          )}
+
+          {/* Kolaborasi robot: misi inspeksi & mutu bibit per tray */}
+          {dashboard?.sinkNode && (
+            <RobotInspectionPanel
+              screenhouseId={Number(id)}
+              headers={headers}
+              readOnly={!isPetani}
+            />
           )}
 
           <button

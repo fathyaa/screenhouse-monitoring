@@ -166,6 +166,19 @@ services:
       HEALTH_PORT: 3012
     depends_on: *monitoring-deps
 
+  # Kolaborasi robot: q.collab (mission/command|status|result, actuator/control
+  # dari sink node) → robot_missions, robot_mission_events, tray_inspections,
+  # actuation_events. Boleh >1 replica: semua tulisan idempoten (idemp_key UNIQUE)
+  # dan ringkasan misi hanya maju menurut seq.
+  collaboration:
+    <<: *monitoring-build
+    restart: unless-stopped
+    environment:
+      <<: *monitoring-env
+      ROLE: collaboration
+      HEALTH_PORT: 3016
+    depends_on: *monitoring-deps
+
   # TEPAT SATU INSTANCE. Histeresis membaca status alert lalu menulisnya, dan
   # cache ambangnya lokal — dua consumer paralel bisa saling mendahului.
   alert:

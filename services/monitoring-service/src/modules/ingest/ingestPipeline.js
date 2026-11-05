@@ -91,6 +91,9 @@ const SENSOR_READING_KEYS = [
   "air_temperature",
   "air_humidity",
   "light_intensity",
+  // WSN model kolaborasi robot (telemetry/env): sn → nutrient, uv → uv_index
+  "nutrient",
+  "uv_index",
 ];
 
 function pick(data, key, fallback = null) {
@@ -232,9 +235,12 @@ async function saveSensorReading({ sensorNode, sinkNode, data }) {
       nitrogen, phosphorus, potassium,
       soil_temperature, soil_moisture, soil_ph, conductivity,
       air_temperature, air_humidity, light_intensity,
+      nutrient, uv_index, idemp_key,
       created_at
     )
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, COALESCE($13, NOW()))
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$14,$15,$16, COALESCE($13, NOW()))
+    -- idemp_key (opsional) menolak replay store-and-forward yang sudah tersimpan.
+    ON CONFLICT (idemp_key) WHERE idemp_key IS NOT NULL DO NOTHING
     RETURNING *
     `,
     [
@@ -253,10 +259,18 @@ async function saveSensorReading({ sensorNode, sinkNode, data }) {
       // Waktu ukur dari payload bila ada & valid → jadi created_at.
       // null (simulator / timestamp ngawur) → COALESCE pakai NOW() waktu terima.
       pick(data, "measured_at", null),
+      pick(data, "nutrient"),
+      pick(data, "uv_index"),
+      pick(data, "idemp_key"),
     ]
   );
 
   const row = saved.rows[0];
+  if (!row) {
+    // Duplikat (idemp_key sudah ada) — bukan galat; jangan terbitkan event kedua.
+    if (DEBUG) console.log("Sensor data duplikat diabaikan:", pick(data, "idemp_key"));
+    return null;
+  }
 
   // Baris sudah commit — sejak titik ini pesan TIDAK BOLEH gagal ke pemanggil.
   // Consumer mengembalikan pesan yang error ke queue, jadi melempar di sini

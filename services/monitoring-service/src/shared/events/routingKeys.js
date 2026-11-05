@@ -21,6 +21,12 @@ const RK = {
 
   ACTUATOR_UPDATED: "actuator.updated",
 
+  // Bounded context kolaborasi robot (role `collaboration`). Diterbitkan setelah
+  // baris misi/hasil inspeksi/aktuasi lokal commit.
+  MISSION_UPDATED: "mission.updated",
+  INSPECTION_RECORDED: "inspection.recorded",
+  ACTUATION_RECORDED: "actuation.recorded",
+
   // Diterbitkan app-service saat katalog berubah. Konsumennya listener alert,
   // yang menyimpan salinannya di DB monitoring (threshold_snapshots,
   // screenhouse_registry) supaya evaluasi ambang tidak perlu lintas database.
@@ -45,7 +51,8 @@ const BINDINGS = {
   // Gateway realtime menonton semua yang tampil di layar petani. Ia sengaja
   // menumpang `sensor.persisted` (bukan `sensor.raw`) karena payload dashboard
   // memakai kolom hasil INSERT — id dan created_at final.
-  REALTIME: [RK.SENSOR_PERSISTED, RK.ALERT_CREATED, RK.ALERT_RESOLVED, RK.ACTUATOR_UPDATED],
+  REALTIME: [RK.SENSOR_PERSISTED, RK.ALERT_CREATED, RK.ALERT_RESOLVED, RK.ACTUATOR_UPDATED,
+    RK.MISSION_UPDATED, RK.INSPECTION_RECORDED, RK.ACTUATION_RECORDED],
 };
 
 module.exports = { RK, BINDINGS };

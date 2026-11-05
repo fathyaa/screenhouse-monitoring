@@ -20,6 +20,7 @@ const ROLES = {
   realtime: "./roles/realtime",
   scheduler: "./roles/scheduler",
   api: "./roles/api",
+  collaboration: "./roles/collaboration",
 };
 
 const role = process.env.ROLE || "api";

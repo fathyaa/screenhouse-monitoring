@@ -19,6 +19,15 @@ psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring -f database/moni
 psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring -f database/monitoring/seed.sql
 ```
 
+Kolaborasi robot (DB yang sudah berjalan — instalasi baru sudah termasuk di `schema.sql`):
+
+```bash
+psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring -f database/monitoring/migrations_kolaborasi.sql
+# screenhouse simulasi SPS (id 90, SH90-SINK, SH90-T01..T04) — cek MAX(id) dulu
+psql -h localhost -p 5434 -U postgres -d screenhouse_app -f database/app/seed_sps_sim.sql
+psql -h localhost -p 5433 -U postgres -d screenhouse_monitoring -f database/monitoring/seed_sps_sim.sql
+```
+
 Opsional (wilayah lengkap + peta):
 
 ```bash
@@ -43,7 +52,7 @@ Password demo: `123456`
 | Folder | DB (port) | Isi |
 |--------|-----------|-----|
 | `database/app/` | `screenhouse_app` (5434) | users, wilayah, screenhouses (`tray_count`), thresholds, `push_subscriptions` |
-| `database/monitoring/` | `screenhouse_monitoring` (5433) | screenhouse_registry, threshold_snapshots, sink_nodes, sensor_nodes, sensor_data, actuator_logs, alerts |
+| `database/monitoring/` | `screenhouse_monitoring` (5433) | screenhouse_registry, threshold_snapshots, sink_nodes, sensor_nodes, sensor_data, actuator_logs, alerts, robot_missions, robot_mission_events, tray_inspections, actuation_events |
 | `database/scripts/` | App + Monitoring | import wilayah, sync registry, seed peta |
 
 ## Model
